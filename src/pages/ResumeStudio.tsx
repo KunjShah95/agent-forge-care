@@ -1,0 +1,141 @@
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Upload, Sparkles, FileText, Download, CheckCircle2, AlertCircle } from "lucide-react";
+
+const resumes = [
+  { id: "r1", name: "Alex_Kim_SWE_v4.pdf", role: "Software Engineering", updated: "2d ago", ats: 92 },
+  { id: "r2", name: "Alex_Kim_ML_Research.pdf", role: "ML Research", updated: "5d ago", ats: 88 },
+  { id: "r3", name: "Alex_Kim_Frontend.pdf", role: "Frontend / Design Eng", updated: "1w ago", ats: 95 },
+];
+
+const keywordGap = [
+  { keyword: "Distributed Systems", inJob: true, inResume: false, weight: "High" },
+  { keyword: "Kubernetes", inJob: true, inResume: true, weight: "Medium" },
+  { keyword: "Go", inJob: true, inResume: false, weight: "Medium" },
+  { keyword: "React", inJob: true, inResume: true, weight: "High" },
+  { keyword: "Postgres", inJob: true, inResume: true, weight: "Low" },
+  { keyword: "GraphQL", inJob: true, inResume: false, weight: "Low" },
+];
+
+export default function ResumeStudio() {
+  return (
+    <div className="space-y-6 max-w-[1400px]">
+      <div className="flex items-end justify-between flex-wrap gap-4">
+        <div>
+          <h1 className="font-display text-3xl font-bold">Resume Studio</h1>
+          <p className="text-muted-foreground mt-1">ATS analysis, keyword gaps, and AI tailoring per role.</p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" className="gap-2"><Upload className="h-4 w-4" /> Upload</Button>
+          <Button className="bg-gradient-primary shadow-glow gap-2"><Sparkles className="h-4 w-4" /> Tailor with AI</Button>
+        </div>
+      </div>
+
+      <div className="grid lg:grid-cols-3 gap-6">
+        {resumes.map((r) => (
+          <Card key={r.id} className="glass p-5 hover:shadow-glow transition">
+            <div className="flex items-start gap-3 mb-4">
+              <div className="h-12 w-12 rounded-xl bg-gradient-primary/10 border border-primary/20 flex items-center justify-center">
+                <FileText className="h-6 w-6 text-primary" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="font-medium truncate">{r.name}</div>
+                <div className="text-xs text-muted-foreground">{r.role} · {r.updated}</div>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">ATS Score</span>
+                <span className="font-display font-semibold gradient-text">{r.ats}/100</span>
+              </div>
+              <Progress value={r.ats} className="h-1.5" />
+            </div>
+            <div className="flex gap-2 mt-4">
+              <Button variant="outline" size="sm" className="flex-1">Edit</Button>
+              <Button variant="outline" size="sm" className="gap-1"><Download className="h-3 w-3" /></Button>
+            </div>
+          </Card>
+        ))}
+      </div>
+
+      <Tabs defaultValue="ats" className="space-y-4">
+        <TabsList className="glass">
+          <TabsTrigger value="ats">ATS Analysis</TabsTrigger>
+          <TabsTrigger value="gap">Keyword Gap</TabsTrigger>
+          <TabsTrigger value="cover">Cover Letter</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="ats">
+          <Card className="glass p-6">
+            <div className="grid md:grid-cols-3 gap-4 mb-6">
+              {[
+                { label: "Format", score: 95, status: "Excellent parsing" },
+                { label: "Keywords", score: 78, status: "Add 4 from job desc" },
+                { label: "Action verbs", score: 88, status: "Strong impact" },
+              ].map((s) => (
+                <div key={s.label} className="p-4 rounded-xl bg-muted/30">
+                  <div className="text-xs text-muted-foreground">{s.label}</div>
+                  <div className="text-3xl font-display font-bold mt-1 gradient-text">{s.score}</div>
+                  <div className="text-xs text-muted-foreground mt-1">{s.status}</div>
+                </div>
+              ))}
+            </div>
+            <div className="space-y-2">
+              {[
+                { ok: true, text: "Consistent date formatting across roles" },
+                { ok: true, text: "Quantified achievements in 8/12 bullets" },
+                { ok: false, text: "Missing keyword: 'distributed systems'" },
+                { ok: false, text: "Use stronger action verb in line 14" },
+              ].map((s, i) => (
+                <div key={i} className="flex items-center gap-2 p-3 rounded-lg bg-muted/30 text-sm">
+                  {s.ok ? <CheckCircle2 className="h-4 w-4 text-success" /> : <AlertCircle className="h-4 w-4 text-warning" />}
+                  {s.text}
+                </div>
+              ))}
+            </div>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="gap">
+          <Card className="glass p-6">
+            <div className="text-sm text-muted-foreground mb-4">Comparing your resume vs <span className="text-foreground font-medium">Stripe — SWE New Grad</span></div>
+            <div className="space-y-2">
+              {keywordGap.map((k) => (
+                <div key={k.keyword} className="flex items-center gap-3 p-3 rounded-lg bg-muted/30">
+                  <span className="flex-1 font-medium text-sm">{k.keyword}</span>
+                  <Badge variant="outline" className="text-[10px]">{k.weight}</Badge>
+                  {k.inResume ? (
+                    <Badge className="bg-success/10 text-success border-success/20">In resume</Badge>
+                  ) : (
+                    <Badge variant="destructive" className="bg-destructive/10 text-destructive border-destructive/20">Missing</Badge>
+                  )}
+                </div>
+              ))}
+            </div>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="cover">
+          <Card className="glass p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-display font-semibold">Cover Letter Generator</h3>
+                <p className="text-xs text-muted-foreground">Powered by Resume Agent</p>
+              </div>
+              <Button className="bg-gradient-primary shadow-glow gap-2"><Sparkles className="h-4 w-4" /> Generate</Button>
+            </div>
+            <Textarea
+              rows={12}
+              defaultValue={`Dear Stripe Recruiting Team,\n\nWhen I built a payments-style ledger for my CS370 final project, I obsessed over the same idempotency primitives that power Stripe's reliability. That curiosity is why I'm applying for the New Grad SWE role.\n\nAt Meta last summer, I shipped a TypeScript service that processed 2M events/day with p99 < 40ms. I want to bring that bias for instrumented, well-tested systems to Stripe…`}
+              className="font-mono text-xs leading-relaxed"
+            />
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
