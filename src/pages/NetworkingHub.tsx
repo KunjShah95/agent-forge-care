@@ -1,11 +1,14 @@
+import { useMemo } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { contacts } from "@/lib/sample-data";
 import { Mail, Plus, Search, Send, Sparkles } from "lucide-react";
+
+import { useContacts } from "@/api/hooks";
+import { ListSkeleton } from "@/components/ui/skeleton";
 
 const templates = [
   { name: "Cold outreach — recruiter", preview: "Hi {Name}, I came across {Company}'s {Role} posting and your work on {Topic}…" },
@@ -22,7 +25,20 @@ const statusColors: Record<string, string> = {
   Closed: "bg-muted-foreground/20 text-muted-foreground",
 };
 
+function initials(name: string): string {
+  return name
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+}
+
 export default function NetworkingHub() {
+  const { data, isLoading } = useContacts();
+
+  const contacts = useMemo(() => data?.items || [], [data]);
+
   return (
     <div className="space-y-6 max-w-[1400px]">
       <div className="flex items-end justify-between flex-wrap gap-4">
@@ -38,7 +54,7 @@ export default function NetworkingHub() {
 
       <Tabs defaultValue="contacts">
         <TabsList className="glass">
-          <TabsTrigger value="contacts">Contacts ({contacts.length})</TabsTrigger>
+          <TabsTrigger value="contacts">Contacts ({!isLoading ? contacts.length : "…"})</TabsTrigger>
           <TabsTrigger value="templates">Templates</TabsTrigger>
         </TabsList>
 
@@ -50,23 +66,37 @@ export default function NetworkingHub() {
                 <Input placeholder="Search contacts…" className="pl-9" />
               </div>
             </div>
-            <div className="divide-y divide-border/50">
-              {contacts.map((c) => (
-                <div key={c.id} className="p-4 flex items-center gap-4 hover:bg-muted/30 transition">
-                  <Avatar className="h-10 w-10">
-                    <AvatarFallback className="bg-gradient-primary text-primary-foreground text-xs">{c.avatar}</AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium">{c.name}</div>
-                    <div className="text-xs text-muted-foreground truncate">{c.role} · {c.company}</div>
+            {isLoading ? (
+              <div className="p-4">
+                <ListSkeleton count={4} />
+              </div>
+            ) : contacts.length === 0 ? (
+              <div className="py-12 text-center text-sm text-muted-foreground">
+                No contacts yet. Start building your network!
+              </div>
+            ) : (
+              <div className="divide-y divide-border/50">
+                {contacts.map((c) => (
+                  <div key={c.id} className="p-4 flex items-center gap-4 hover:bg-muted/30 transition">
+                    <Avatar className="h-10 w-10">
+                      <AvatarFallback className="bg-gradient-primary text-primary-foreground text-xs">
+                        {initials(c.name)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium">{c.name}</div>
+                      <div className="text-xs text-muted-foreground truncate">
+                        {[c.role, c.company].filter(Boolean).join(" · ") || "—"}
+                      </div>
+                    </div>
+                    <div className="hidden md:block text-xs text-muted-foreground">{c.email}</div>
+                    <Badge className={`${statusColors[c.status] || ""} text-[10px]`} variant="outline">{c.status}</Badge>
+                    <div className="text-xs text-muted-foreground w-16 text-right">{c.last_contact || "—"}</div>
+                    <Button variant="ghost" size="icon"><Mail className="h-4 w-4" /></Button>
                   </div>
-                  <div className="hidden md:block text-xs text-muted-foreground">{c.email}</div>
-                  <Badge className={`${statusColors[c.status]} text-[10px]`} variant="outline">{c.status}</Badge>
-                  <div className="text-xs text-muted-foreground w-16 text-right">{c.lastContact}</div>
-                  <Button variant="ghost" size="icon"><Mail className="h-4 w-4" /></Button>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </Card>
         </TabsContent>
 

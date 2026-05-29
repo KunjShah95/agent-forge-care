@@ -3,8 +3,15 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { companies } from "@/lib/sample-data";
-import { Building2, Star, TrendingUp, BookOpen, FileText } from "lucide-react";
+import { Building2, TrendingUp, BookOpen, FileText } from "lucide-react";
+
+const companyProfiles = [
+  { id: "c1", name: "Anthropic", initials: "A", industry: "AI Research", size: "500-1000", glassdoor: 4.6, notes: "Mission-driven. Values alignment research." },
+  { id: "c2", name: "Stripe", initials: "S", industry: "Fintech", size: "5000+", glassdoor: 4.5, notes: "Strong engineering culture. Writing intensive." },
+  { id: "c3", name: "Linear", initials: "L", industry: "Productivity", size: "50-100", glassdoor: 4.8, notes: "Design obsessed. Small senior team." },
+  { id: "c4", name: "Vercel", initials: "V", industry: "Dev Tools", size: "200-500", glassdoor: 4.4, notes: "Frontend leaders. Remote-first." },
+  { id: "c5", name: "Helia Labs", initials: "H", industry: "AI Agents", size: "5-10", glassdoor: 4.9, notes: "Early stage. High equity upside." },
+];
 
 const trends = [
   { topic: "AI safety hiring surges +40% YoY", source: "Industry report · 2d ago" },
@@ -18,6 +25,19 @@ const insights = [
   { company: "Stripe", text: "OA is API-design heavy. Practice idempotency keys and rate-limiting.", date: "Nov 24" },
   { company: "Linear", text: "Pair-programming round. They watch how you ask clarifying questions.", date: "Nov 20" },
 ];
+
+const defaultNotes = `# Anthropic deep dive
+- Core values: helpful, harmless, honest
+- Eng blog posts: focus on constitutional AI, mech interp
+- Recent paper to mention: "Toy Models of Superposition"
+
+# Stripe
+- API design philosophy: durable objects, idempotency-first
+- Talk to: Maya P. (recruiter, already replied)
+
+# Questions to ask:
+- "How does your team balance research velocity vs publishing?"
+- "What did the last person in this role struggle with most?"`;
 
 export default function ResearchCenter() {
   return (
@@ -37,16 +57,18 @@ export default function ResearchCenter() {
 
         <TabsContent value="companies" className="mt-4">
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {companies.map((c) => (
+            {companyProfiles.map((c) => (
               <Card key={c.id} className="glass p-5 hover:shadow-glow transition">
                 <div className="flex items-start gap-3 mb-3">
-                  <div className="text-4xl">{c.logo}</div>
+                  <div className="h-12 w-12 rounded-xl bg-gradient-primary/10 border border-primary/20 flex items-center justify-center font-bold text-primary text-lg">
+                    {c.initials}
+                  </div>
                   <div className="flex-1">
                     <div className="font-display font-semibold">{c.name}</div>
                     <div className="text-xs text-muted-foreground">{c.industry} · {c.size}</div>
                   </div>
                   <Badge variant="outline" className="gap-1">
-                    <Star className="h-3 w-3 fill-warning text-warning" /> {c.glassdoor}
+                    <span className="text-warning">★</span> {c.glassdoor}
                   </Badge>
                 </div>
                 <p className="text-sm text-muted-foreground mb-3">{c.notes}</p>
@@ -85,7 +107,7 @@ export default function ResearchCenter() {
             <h3 className="font-display font-semibold mb-3">Personal research notes</h3>
             <Textarea
               rows={14}
-              defaultValue={`# Anthropic deep dive\n- Core values: helpful, harmless, honest\n- Eng blog posts: focus on constitutional AI, mech interp\n- Recent paper to mention: "Toy Models of Superposition"\n\n# Stripe\n- API design philosophy: durable objects, idempotency-first\n- Talk to: Maya P. (recruiter, already replied)\n\n# Questions to ask:\n- "How does your team balance research velocity vs publishing?"\n- "What did the last person in this role struggle with most?"`}
+              defaultValue={defaultNotes}
               className="font-mono text-xs"
             />
           </Card>

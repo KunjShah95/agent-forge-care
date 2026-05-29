@@ -1,6 +1,7 @@
 import {
   LayoutDashboard, Briefcase, Kanban, FileText, MessageSquare,
   Building2, Users, BarChart3, Settings, Sparkles, Bell,
+  Cpu, ListOrdered, Database,
 } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
@@ -20,6 +21,9 @@ const intelligenceNav = [
   { title: "Research Center", url: "/app/research", icon: Building2 },
   { title: "Networking Hub", url: "/app/networking", icon: Users },
   { title: "Opportunity Monitor", url: "/app/monitor", icon: Bell },
+  { title: "Agent Console", url: "/app/agents", icon: Cpu },
+  { title: "Task Queue", url: "/app/tasks", icon: ListOrdered },
+  { title: "Memory Viewer", url: "/app/memory", icon: Database },
   { title: "Analytics", url: "/app/analytics", icon: BarChart3 },
 ];
 

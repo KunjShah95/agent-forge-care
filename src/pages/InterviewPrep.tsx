@@ -4,8 +4,32 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { interviewQuestions } from "@/lib/sample-data";
-import { Play, Mic, MessageSquare, Trophy, Clock } from "lucide-react";
+import { Play, Mic, Trophy, Clock, BookOpen } from "lucide-react";
+
+const questionBank: Record<string, string[]> = {
+  Behavioral: [
+    "Tell me about a time you led a team through ambiguity.",
+    "Describe your most impactful project and the tradeoffs.",
+    "How do you handle disagreement with a manager?",
+    "Walk me through a failure and what you learned.",
+  ],
+  Technical: [
+    "Design a URL shortener that handles 1B requests/day.",
+    "Implement LRU cache in TypeScript.",
+    "Explain how React reconciliation works.",
+    "Find the longest palindromic substring.",
+  ],
+  "System Design": [
+    "Design Twitter's timeline service.",
+    "How would you build a real-time collaborative editor?",
+    "Architect a global CDN.",
+  ],
+  "ML/AI": [
+    "Explain attention vs convolution.",
+    "How do you evaluate an LLM?",
+    "Design a recommendation system for opportunities.",
+  ],
+};
 
 const sessions = [
   { id: "s1", company: "Stripe", type: "Behavioral", date: "Dec 3", score: 82, duration: "32 min" },
@@ -21,7 +45,7 @@ const categoryStats = [
 ];
 
 export default function InterviewPrep() {
-  const [category, setCategory] = useState<keyof typeof interviewQuestions>("Behavioral");
+  const [category, setCategory] = useState<string>("Behavioral");
 
   return (
     <div className="space-y-6 max-w-[1400px]">
@@ -53,13 +77,13 @@ export default function InterviewPrep() {
       <div className="grid lg:grid-cols-3 gap-6">
         <Card className="glass p-6 lg:col-span-2">
           <h2 className="font-display font-semibold mb-4">Question Bank</h2>
-          <Tabs value={category} onValueChange={(v) => setCategory(v as keyof typeof interviewQuestions)}>
+          <Tabs value={category} onValueChange={setCategory}>
             <TabsList className="glass">
-              {Object.keys(interviewQuestions).map((c) => (
+              {Object.keys(questionBank).map((c) => (
                 <TabsTrigger key={c} value={c}>{c}</TabsTrigger>
               ))}
             </TabsList>
-            {Object.entries(interviewQuestions).map(([cat, qs]) => (
+            {Object.entries(questionBank).map(([cat, qs]) => (
               <TabsContent key={cat} value={cat} className="mt-4 space-y-2">
                 {qs.map((q, i) => (
                   <div key={i} className="flex items-center gap-3 p-4 rounded-lg bg-muted/30 hover:bg-muted/50 transition cursor-pointer">
@@ -93,7 +117,7 @@ export default function InterviewPrep() {
             ))}
           </div>
           <Button variant="outline" size="sm" className="w-full mt-4 gap-2">
-            <MessageSquare className="h-3 w-3" /> Review all sessions
+            <BookOpen className="h-3 w-3" /> Review all sessions
           </Button>
         </Card>
       </div>

@@ -1,27 +1,90 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import {
-  Sparkles, Brain, Target, FileSearch, MessageSquare, Network,
-  Bell, ArrowRight, Zap, Check,
+  ArrowRight,
+  Bell,
+  Brain,
+  Check,
+  ClipboardList,
+  FileSearch,
+  Layers3,
+  MessageSquare,
+  Network,
+  Radar,
+  Sparkles,
+  Target,
+  Wand2,
+  Zap,
 } from "lucide-react";
 
-const agents = [
-  { name: "Internship Agent", icon: Target, desc: "Hunts internships across 200+ sources daily." },
-  { name: "Job Agent", icon: Zap, desc: "Tracks new grad & experienced roles in real time." },
-  { name: "Research Agent", icon: FileSearch, desc: "Compiles company insights, salary intel, interview leaks." },
-  { name: "Resume Agent", icon: Sparkles, desc: "Tailors resumes per role with ATS + keyword analysis." },
-  { name: "Interview Agent", icon: MessageSquare, desc: "Runs mock interviews and grades your answers." },
-  { name: "Networking Agent", icon: Network, desc: "Drafts outreach, tracks recruiter relationships." },
-  { name: "Opportunity Monitor", icon: Bell, desc: "Watches your filters 24/7 with smart alerts." },
+const agentModules = [
+  { name: "Planner Agent", icon: Brain, desc: "Breaks a vague goal into search, scoring, prep, and follow-up tasks." },
+  { name: "Opportunity Monitor", icon: Radar, desc: "Watches new openings, deadlines, and alerts across your sources." },
+  { name: "Internship Agent", icon: Target, desc: "Specialized discovery for internships, fellowships, hackathons, and research roles." },
+  { name: "Job Agent", icon: Zap, desc: "Finds new grad, internship-to-full-time, remote, and startup roles." },
+  { name: "Research Agent", icon: FileSearch, desc: "Collects company intel, interview signals, and market context." },
+  { name: "Resume Agent", icon: Sparkles, desc: "Optimizes resumes, cover letters, and keywords for each opportunity." },
+  { name: "Interview Agent", icon: MessageSquare, desc: "Generates mock questions, feedback, and interview plans." },
+  { name: "Networking Agent", icon: Network, desc: "Drafts outreach and tracks recruiter, founder, and engineer relationships." },
+];
+
+const platformModules = [
+  "Search across internships, jobs, research programs, hackathons, scholarships, and open-source programs",
+  "Explainable match scoring with skills, location, experience, company fit, and role type",
+  "Application tracker with stages, deadlines, reminders, and follow-up nudges",
+  "Resume Studio for ATS checks, keyword gaps, and role-specific rewrites",
+  "Interview Copilot for behavioral, technical, system design, and ML interviews",
+  "Networking Hub for outreach templates, relationship tracking, and follow-up timing",
+  "Opportunity Monitor that runs daily and notifies you when the right openings appear",
+  "Long-term memory for skills, targets, preferences, interview notes, and applications",
+];
+
+const dailyLoop = [
+  {
+    step: "1. Sense",
+    detail: "The monitor scans trusted sources, career pages, and public feeds for fresh opportunities.",
+  },
+  {
+    step: "2. Reason",
+    detail: "The planner compares openings against your profile, goals, and past outcomes.",
+  },
+  {
+    step: "3. Act",
+    detail: "Specialist agents tailor your resume, create outreach, and prepare interview material.",
+  },
+  {
+    step: "4. Learn",
+    detail: "Memory updates with every save, application, interview, and outcome so the system improves.",
+  },
+];
+
+const comparison = [
+  {
+    title: "Old way",
+    points: [
+      "Jump between job boards, docs, and spreadsheets",
+      "Repeat the same search every day",
+      "Manual resume edits for every application",
+    ],
+  },
+  {
+    title: "AgentForge way",
+    points: [
+      "One command center for discovery, prep, and tracking",
+      "Always-on agents watching your market and goals",
+      "Personalized actions based on long-term memory",
+    ],
+  },
 ];
 
 export default function Landing() {
   return (
     <div className="min-h-screen mesh-bg">
       <header className="sticky top-0 z-40 backdrop-blur-xl bg-background/60 border-b border-border/50">
-        <div className="container flex h-16 items-center justify-between">
+        <div className="container flex h-16 items-center justify-between gap-3">
           <Link to="/" className="flex items-center gap-2">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-primary shadow-glow">
               <Sparkles className="h-5 w-5 text-primary-foreground" />
@@ -31,14 +94,17 @@ export default function Landing() {
               <div className="text-[10px] text-muted-foreground">Career OS</div>
             </div>
           </Link>
-          <nav className="hidden md:flex items-center gap-8 text-sm text-muted-foreground">
+          <nav className="hidden md:flex items-center gap-6 text-sm text-muted-foreground">
+            <a href="#vision" className="hover:text-foreground transition">Vision</a>
             <a href="#agents" className="hover:text-foreground transition">Agents</a>
-            <a href="#features" className="hover:text-foreground transition">Features</a>
-            <a href="#pricing" className="hover:text-foreground transition">Pricing</a>
+            <a href="#workflow" className="hover:text-foreground transition">Workflow</a>
+            <a href="#roadmap" className="hover:text-foreground transition">Roadmap</a>
           </nav>
           <div className="flex items-center gap-2">
             <ThemeToggle />
-            <Button variant="ghost" size="sm" asChild><Link to="/onboarding">Sign in</Link></Button>
+            <Button variant="ghost" size="sm" asChild>
+              <Link to="/onboarding">Sign in</Link>
+            </Button>
             <Button size="sm" className="bg-gradient-primary shadow-glow" asChild>
               <Link to="/onboarding">Get started</Link>
             </Button>
@@ -46,125 +112,211 @@ export default function Landing() {
         </div>
       </header>
 
-      {/* Hero */}
-      <section className="container py-24 md:py-36 text-center">
-        <Badge variant="outline" className="glass mb-6 gap-2">
-          <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse-glow" />
-          7 specialized agents working for you, 24/7
-        </Badge>
-        <h1 className="font-display text-5xl md:text-7xl font-bold tracking-tight max-w-4xl mx-auto">
-          Your AI career team.
-          <br />
-          <span className="gradient-text">Always recruiting for you.</span>
-        </h1>
-        <p className="mt-6 text-lg text-muted-foreground max-w-2xl mx-auto">
-          AgentForge orchestrates a fleet of specialized agents that find opportunities,
-          tailor your resume, prep your interviews, and grow your network — while you sleep.
-        </p>
-        <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
-          <Button size="lg" className="bg-gradient-primary shadow-glow gap-2" asChild>
-            <Link to="/onboarding">Launch your career OS <ArrowRight className="h-4 w-4" /></Link>
-          </Button>
-          <Button size="lg" variant="outline" className="glass" asChild>
-            <Link to="/app">Live demo</Link>
-          </Button>
-        </div>
+      <section className="container py-20 md:py-28">
+        <div className="grid gap-10 lg:grid-cols-[1.15fr_0.85fr] items-center">
+          <div>
+            <Badge variant="outline" className="glass mb-6 gap-2">
+              <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse-glow" />
+              Multi-agent career operating system for internships, jobs, and research
+            </Badge>
+            <h1 className="font-display text-5xl md:text-7xl font-bold tracking-tight max-w-3xl">
+              Your AI career team,
+              <br />
+              <span className="gradient-text">working before you even ask.</span>
+            </h1>
+            <p className="mt-6 text-lg text-muted-foreground max-w-2xl">
+              AgentForge is the orchestrator for your career search. It continuously finds opportunities,
+              scores the best matches, prepares your applications, and helps you network and interview with confidence.
+            </p>
 
-        {/* Agent diagram */}
-        <div className="mt-20 max-w-4xl mx-auto">
-          <div className="glass rounded-2xl p-8 shadow-elegant">
-            <div className="flex flex-col items-center gap-6">
-              <div className="flex items-center gap-3 px-5 py-3 rounded-xl bg-gradient-primary shadow-glow text-primary-foreground">
-                <Brain className="h-5 w-5" />
-                <span className="font-display font-semibold">Planner Agent</span>
+            <div className="mt-8 flex flex-wrap items-center gap-3">
+              <Button size="lg" className="bg-gradient-primary shadow-glow gap-2" asChild>
+                <Link to="/onboarding">Launch your career OS <ArrowRight className="h-4 w-4" /></Link>
+              </Button>
+              <Button size="lg" variant="outline" className="glass" asChild>
+                <Link to="/app">Open the dashboard</Link>
+              </Button>
+            </div>
+
+            <div className="mt-10 grid gap-3 sm:grid-cols-3">
+              {[
+                { value: "24/7", label: "Opportunity monitoring" },
+                { value: "8", label: "Specialist agents" },
+                { value: "1", label: "Unified memory layer" },
+              ].map((item) => (
+                <Card key={item.label} className="glass p-4">
+                  <div className="text-2xl font-display font-bold gradient-text">{item.value}</div>
+                  <div className="text-xs text-muted-foreground mt-1">{item.label}</div>
+                </Card>
+              ))}
+            </div>
+          </div>
+
+          <Card className="glass p-6 shadow-elegant" id="vision">
+            <div className="flex items-center justify-between gap-3 mb-5">
+              <div>
+                <div className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Architecture</div>
+                <h2 className="font-display text-2xl font-bold mt-1">Planner-first agent engine</h2>
               </div>
-              <div className="h-8 w-px bg-gradient-to-b from-primary to-transparent" />
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 w-full">
-                {agents.slice(0, 7).map((a) => (
-                  <div key={a.name} className="glass rounded-xl p-3 text-center hover:shadow-glow transition">
-                    <a.icon className="h-5 w-5 mx-auto mb-2 text-primary" />
-                    <div className="text-xs font-medium">{a.name}</div>
+              <Badge className="bg-success/10 text-success border-success/20">Live concept</Badge>
+            </div>
+
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-primary/20 bg-gradient-primary/5 p-4 text-center">
+                <div className="inline-flex items-center gap-2 rounded-full bg-background/70 px-4 py-2 text-sm font-medium border border-border/60">
+                  <Brain className="h-4 w-4 text-primary" />
+                  Planner Agent
+                </div>
+                <p className="mt-3 text-sm text-muted-foreground">
+                  Turns one goal into an execution plan and delegates the work.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { icon: Target, label: "Internship Agent" },
+                  { icon: Zap, label: "Job Agent" },
+                  { icon: FileSearch, label: "Research Agent" },
+                  { icon: Sparkles, label: "Resume Agent" },
+                ].map((item) => (
+                  <div key={item.label} className="glass rounded-xl p-3 text-center">
+                    <item.icon className="h-5 w-5 mx-auto mb-2 text-primary" />
+                    <div className="text-xs font-medium">{item.label}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { icon: MessageSquare, label: "Interview Agent" },
+                  { icon: Network, label: "Networking Agent" },
+                  { icon: Bell, label: "Opportunity Monitor" },
+                  { icon: Layers3, label: "Memory Layer" },
+                ].map((item) => (
+                  <div key={item.label} className="glass rounded-xl p-3 text-center">
+                    <item.icon className="h-5 w-5 mx-auto mb-2 text-accent" />
+                    <div className="text-xs font-medium">{item.label}</div>
                   </div>
                 ))}
               </div>
             </div>
-          </div>
+          </Card>
         </div>
       </section>
 
-      {/* Agents */}
-      <section id="agents" className="container py-24">
-        <div className="text-center mb-16">
-          <Badge variant="outline" className="mb-4">Agent System</Badge>
-          <h2 className="font-display text-4xl md:text-5xl font-bold">A coordinated multi-agent fleet</h2>
+      <section id="agents" className="container py-20">
+        <div className="text-center mb-12">
+          <Badge variant="outline" className="mb-4">Agent system</Badge>
+          <h2 className="font-display text-4xl md:text-5xl font-bold">Specialized agents, one shared objective</h2>
           <p className="mt-4 text-muted-foreground max-w-2xl mx-auto">
-            Every agent has a single job and does it exceptionally well. The Planner orchestrates them based on your goals.
+            Each agent owns a single part of the workflow. The planner coordinates them so the whole system behaves like a personal career team.
           </p>
         </div>
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {agents.map((a) => (
-            <div key={a.name} className="glass rounded-2xl p-6 hover:shadow-glow transition group">
+
+        <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-4">
+          {agentModules.map((agent) => (
+            <Card key={agent.name} className="glass p-5 hover:shadow-glow transition group">
               <div className="h-10 w-10 rounded-xl bg-gradient-primary/10 border border-primary/20 flex items-center justify-center mb-4 group-hover:scale-110 transition">
-                <a.icon className="h-5 w-5 text-primary" />
+                <agent.icon className="h-5 w-5 text-primary" />
               </div>
-              <h3 className="font-display font-semibold">{a.name}</h3>
-              <p className="text-sm text-muted-foreground mt-1">{a.desc}</p>
-            </div>
+              <h3 className="font-display font-semibold">{agent.name}</h3>
+              <p className="text-sm text-muted-foreground mt-1">{agent.desc}</p>
+            </Card>
           ))}
         </div>
       </section>
 
-      {/* Features */}
-      <section id="features" className="container py-24">
-        <div className="grid md:grid-cols-2 gap-12 items-center">
+      <section id="workflow" className="container py-20">
+        <div className="grid lg:grid-cols-[0.9fr_1.1fr] gap-10 items-start">
           <div>
-            <Badge variant="outline" className="mb-4">Built for ambition</Badge>
-            <h2 className="font-display text-4xl font-bold">Everything you need to land your next role.</h2>
-            <ul className="mt-8 space-y-4">
-              {[
-                "Discover internships, jobs, hackathons, fellowships, scholarships",
-                "Match scoring with explainable reasoning",
-                "Kanban application tracker with reminders & timeline",
-                "Resume Studio with ATS + keyword gap analysis",
-                "Mock interviews — behavioral, technical, system design",
-                "Networking CRM with outreach templates",
-                "Analytics: conversion funnel, interview rate, skill demand",
-              ].map((f) => (
-                <li key={f} className="flex items-start gap-3">
-                  <div className="h-5 w-5 rounded-full bg-gradient-primary flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <Check className="h-3 w-3 text-primary-foreground" />
-                  </div>
-                  <span className="text-sm">{f}</span>
-                </li>
+            <Badge variant="outline" className="mb-4">What it does daily</Badge>
+            <h2 className="font-display text-4xl font-bold">A loop that compounds every day</h2>
+            <p className="mt-4 text-muted-foreground">
+              The real product isn’t just search. It is continuous execution: discover, reason, act, learn, repeat.
+            </p>
+
+            <div className="mt-8 space-y-4">
+              {dailyLoop.map((item) => (
+                <Card key={item.step} className="glass p-5">
+                  <div className="font-semibold">{item.step}</div>
+                  <p className="text-sm text-muted-foreground mt-1">{item.detail}</p>
+                </Card>
               ))}
-            </ul>
-          </div>
-          <div className="glass rounded-2xl p-2 shadow-elegant">
-            <div className="rounded-xl bg-gradient-primary/5 border border-primary/10 aspect-[4/3] flex items-center justify-center">
-              <div className="font-mono text-xs text-muted-foreground p-6 space-y-2">
-                <div className="text-primary">{`>`} Planner Agent dispatching…</div>
-                <div>{`>`} Internship Agent → scan complete (47 new)</div>
-                <div>{`>`} Resume Agent → tailoring for Anthropic</div>
-                <div>{`>`} Match score: <span className="text-success font-semibold">96%</span></div>
-                <div>{`>`} Networking Agent → draft sent ✓</div>
-                <div className="text-primary animate-pulse-glow">{`>`} _</div>
-              </div>
             </div>
+          </div>
+
+          <div className="grid gap-4">
+            <div className="grid md:grid-cols-2 gap-4">
+              {comparison.map((group) => (
+                <Card key={group.title} className="glass p-5">
+                  <div className="font-display text-lg font-bold">{group.title}</div>
+                  <ul className="mt-4 space-y-3">
+                    {group.points.map((point) => (
+                      <li key={point} className="flex items-start gap-3 text-sm text-muted-foreground">
+                        <Check className="h-4 w-4 text-success mt-0.5 flex-shrink-0" />
+                        <span>{point}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </Card>
+              ))}
+            </div>
+
+            <Card className="glass p-6 border-primary/20 bg-gradient-primary/5">
+              <div className="flex items-center gap-2 text-sm font-medium text-primary">
+                <Wand2 className="h-4 w-4" />
+                Example query flow
+              </div>
+              <div className="mt-4 font-mono text-xs space-y-2 text-muted-foreground">
+                <div>{`>`} Find AI internships in Ahmedabad</div>
+                <div>{`>`} Planner Agent → breaks down the task</div>
+                <div>{`>`} Internship Agent → searches sources</div>
+                <div>{`>`} Match engine → ranks by skills + location</div>
+                <div>{`>`} Resume Agent → prepares tailored application assets</div>
+                <div>{`>`} Monitor → watches deadlines and alerts you</div>
+              </div>
+            </Card>
           </div>
         </div>
       </section>
 
-      {/* CTA */}
-      <section className="container py-24">
-        <div className="glass rounded-3xl p-12 text-center bg-gradient-primary/5 border-primary/20">
-          <h2 className="font-display text-4xl md:text-5xl font-bold">Stop searching. Start landing.</h2>
-          <p className="mt-4 text-muted-foreground max-w-xl mx-auto">
-            Set up your career profile in 3 minutes. Your agents start working immediately.
+      <section className="container py-20">
+        <div className="text-center mb-12">
+          <Badge variant="outline" className="mb-4">Platform modules</Badge>
+          <h2 className="font-display text-4xl md:text-5xl font-bold">Built as a complete career operating system</h2>
+          <p className="mt-4 text-muted-foreground max-w-2xl mx-auto">
+            The MVP starts with discovery and matching, then expands into applications, networking, interview prep, and personalized monitoring.
           </p>
-          <Button size="lg" className="mt-8 bg-gradient-primary shadow-glow gap-2" asChild>
-            <Link to="/onboarding">Get started free <ArrowRight className="h-4 w-4" /></Link>
-          </Button>
         </div>
+
+        <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-4">
+          {platformModules.map((feature) => (
+            <Card key={feature} className="glass p-5">
+              <div className="h-10 w-10 rounded-xl bg-gradient-primary/10 border border-primary/20 flex items-center justify-center mb-4">
+                <ClipboardList className="h-5 w-5 text-primary" />
+              </div>
+              <p className="text-sm text-muted-foreground">{feature}</p>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      <section id="roadmap" className="container py-20">
+        <Card className="glass rounded-3xl p-10 md:p-12 text-center bg-gradient-primary/5 border-primary/20">
+          <Badge className="mb-4 bg-primary/10 text-primary border-primary/20">MVP roadmap</Badge>
+          <h2 className="font-display text-4xl md:text-5xl font-bold">Start with search. Grow into autopilot.</h2>
+          <p className="mt-4 text-muted-foreground max-w-3xl mx-auto">
+            Phase 1 focuses on opportunity discovery, profile memory, and match scoring. Phase 2 adds resume tailoring, applications, and interview prep. Phase 3 turns the product into a fully proactive career companion.
+          </p>
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+            <Button size="lg" className="bg-gradient-primary shadow-glow gap-2" asChild>
+              <Link to="/onboarding">Build your profile <ArrowRight className="h-4 w-4" /></Link>
+            </Button>
+            <Button size="lg" variant="outline" className="glass" asChild>
+              <Link to="/app">See the dashboard</Link>
+            </Button>
+          </div>
+        </Card>
       </section>
 
       <footer className="border-t border-border/50">
@@ -174,9 +326,9 @@ export default function Landing() {
             <span>© 2026 AgentForge Career OS</span>
           </div>
           <div className="flex gap-6">
-            <a href="#" className="hover:text-foreground">Privacy</a>
-            <a href="#" className="hover:text-foreground">Terms</a>
-            <a href="#" className="hover:text-foreground">Contact</a>
+            <a href="#vision" className="hover:text-foreground">Vision</a>
+            <a href="#workflow" className="hover:text-foreground">Workflow</a>
+            <a href="#roadmap" className="hover:text-foreground">Roadmap</a>
           </div>
         </div>
       </footer>

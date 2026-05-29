@@ -17,6 +17,9 @@ import NetworkingHub from "./pages/NetworkingHub";
 import OpportunityMonitor from "./pages/OpportunityMonitor";
 import Analytics from "./pages/Analytics";
 import Settings from "./pages/Settings";
+import AgentConsole from "./pages/AgentConsole";
+import TaskQueue from "./pages/TaskQueue";
+import MemoryViewer from "./pages/MemoryViewer";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -41,6 +44,9 @@ const App = () => (
               <Route path="networking" element={<NetworkingHub />} />
               <Route path="monitor" element={<OpportunityMonitor />} />
               <Route path="analytics" element={<Analytics />} />
+              <Route path="agents" element={<AgentConsole />} />
+              <Route path="tasks" element={<TaskQueue />} />
+              <Route path="memory" element={<MemoryViewer />} />
               <Route path="settings" element={<Settings />} />
             </Route>
             <Route path="/dashboard" element={<Navigate to="/app" replace />} />
