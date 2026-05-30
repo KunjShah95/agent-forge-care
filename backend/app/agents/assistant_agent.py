@@ -640,6 +640,22 @@ async def run_daily_scan(
             }
         )
 
+    # Store high-match alerts as notification memory entries
+    import uuid
+
+    for alert in alerts[:10]:
+        await memory_service.set_memory(
+            user_id,
+            f"notification:{uuid.uuid4()}",
+            {
+                "title": f"High match: {alert['title']} @ {alert['company']}",
+                "body": alert["message"],
+                "type": "success",
+                "read": False,
+            },
+            weight=1.0,
+        )
+
     # Update memory with scan timestamp
     await memory_service.set_memory(
         user_id,

@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Calendar, FileText } from "lucide-react";
+import { Plus, Calendar, FileText, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -13,7 +13,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 
-import { useApplications, useUpdateApplication, useCreateApplication, useOpportunities } from "@/api/hooks";
+import { useApplications, useUpdateApplication, useCreateApplication, useDeleteApplication, useOpportunities } from "@/api/hooks";
 import { CardSkeleton } from "@/components/ui/skeleton";
 
 type Stage = "Saved" | "Applied" | "OA" | "Interview" | "Offer" | "Rejected";
@@ -32,6 +32,7 @@ export default function Applications() {
   const { data, isLoading } = useApplications();
   const updateApp = useUpdateApplication();
   const createApp = useCreateApplication();
+  const deleteApp = useDeleteApplication();
   const { data: oppsData } = useOpportunities();
   const [dragId, setDragId] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -106,7 +107,7 @@ export default function Applications() {
                       key={a.id}
                       draggable
                       onDragStart={() => setDragId(a.id)}
-                      className="glass p-3 cursor-grab active:cursor-grabbing hover:shadow-glow transition"
+                      className="glass p-3 cursor-grab active:cursor-grabbing hover:shadow-glow transition group"
                     >
                       <div className="flex items-start gap-2 mb-2">
                         <div className="h-8 w-8 rounded-lg bg-gradient-primary/10 border border-primary/20 flex items-center justify-center font-bold text-primary text-sm shrink-0">
@@ -116,6 +117,20 @@ export default function Applications() {
                           <div className="text-sm font-medium leading-tight truncate">{a.title}</div>
                           <div className="text-xs text-muted-foreground truncate">{a.company}</div>
                         </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition shrink-0"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteApp.mutate(a.id, {
+                              onSuccess: () => toast.success("Application deleted"),
+                              onError: () => toast.error("Failed to delete application"),
+                            });
+                          }}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
                       </div>
                       <Badge className={`${stageColor[a.stage]} text-[10px] mb-2`} variant="outline">{a.stage}</Badge>
                       {a.nextStep && (

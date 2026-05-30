@@ -41,6 +41,7 @@ export default function ResumeStudio() {
   const [tailorCompany, setTailorCompany] = useState("");
   const [tailorRole, setTailorRole] = useState("software_engineering");
   const [tailorResult, setTailorResult] = useState<Record<string, unknown> | null>(null);
+  const [uploadResult, setUploadResult] = useState<{ filename: string; pages: number; characters: number; text: string } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [resumesList, setResumesList] = useState([
@@ -101,6 +102,7 @@ export default function ResumeStudio() {
             if (!file) return;
             try {
               const result = await resume.upload(file);
+              setUploadResult(result);
               setResumesList(prev => [...prev, { id: result.filename, name: result.filename, role: "Uploaded", updated: "Just now", ats: Math.min(95, Math.floor(Math.random() * 20) + 75) }]);
               toast.success("Resume uploaded!");
             } catch (err) {
@@ -165,32 +167,57 @@ export default function ResumeStudio() {
 
         <TabsContent value="ats">
           <Card className="glass p-6">
-            <div className="grid md:grid-cols-3 gap-4 mb-6">
-              {[
-                { label: "Format", score: 95, status: "Excellent parsing" },
-                { label: "Keywords", score: 78, status: "Add 4 from job desc" },
-                { label: "Action verbs", score: 88, status: "Strong impact" },
-              ].map((s) => (
-                <div key={s.label} className="p-4 rounded-xl bg-muted/30">
-                  <div className="text-xs text-muted-foreground">{s.label}</div>
-                  <div className="text-3xl font-display font-bold mt-1 gradient-text">{s.score}</div>
-                  <div className="text-xs text-muted-foreground mt-1">{s.status}</div>
-                </div>
-              ))}
-            </div>
-            <div className="space-y-2">
-              {[
-                { ok: true, text: "Consistent date formatting across roles" },
-                { ok: true, text: "Quantified achievements in 8/12 bullets" },
-                { ok: false, text: "Missing keyword: 'distributed systems'" },
-                { ok: false, text: "Use stronger action verb in line 14" },
-              ].map((s, i) => (
-                <div key={i} className="flex items-center gap-2 p-3 rounded-lg bg-muted/30 text-sm">
-                  {s.ok ? <CheckCircle2 className="h-4 w-4 text-success" /> : <AlertCircle className="h-4 w-4 text-warning" />}
-                  {s.text}
-                </div>
-              ))}
-            </div>
+            {!tailorResult ? (
+              <div className="text-center py-12">
+                <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                <p className="text-muted-foreground mb-4">Upload a resume and run ATS analysis</p>
+                <Button className="bg-gradient-primary shadow-glow gap-2" onClick={() => setTailorDialogOpen(true)}>
+                  <Sparkles className="h-4 w-4" /> Analyze Resume
+                </Button>
+              </div>
+            ) : (
+              <>
+                {(() => {
+                  const keywords = (tailorResult.ats_keywords as string[]) || [];
+                  const suggestions = (tailorResult.suggestions as string[]) || [];
+                  const actionItems = (tailorResult.action_items as string[]) || [];
+                  const kwScore = Math.min(100, 20 + keywords.length * 16);
+                  const fmtScore = uploadResult ? 85 : 70;
+                  const avScore = Math.min(100, 40 + actionItems.length * 20);
+                  return (
+                    <>
+                      <div className="grid md:grid-cols-3 gap-4 mb-6">
+                        {[
+                          { label: "Format", score: fmtScore, status: uploadResult ? `Parsed ${uploadResult.pages} pages` : "Upload a resume first" },
+                          { label: "Keywords", score: kwScore, status: `${keywords.length} keywords detected` },
+                          { label: "Action verbs", score: avScore, status: `${actionItems.length} action items identified` },
+                        ].map((s) => (
+                          <div key={s.label} className="p-4 rounded-xl bg-muted/30">
+                            <div className="text-xs text-muted-foreground">{s.label}</div>
+                            <div className="text-3xl font-display font-bold mt-1 gradient-text">{s.score}</div>
+                            <div className="text-xs text-muted-foreground mt-1">{s.status}</div>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="space-y-2">
+                        {keywords.slice(0, 5).map((kw: string) => (
+                          <div key={kw} className="flex items-center gap-2 p-3 rounded-lg bg-muted/30 text-sm">
+                            <CheckCircle2 className="h-4 w-4 text-success" />
+                            Keyword match: {kw}
+                          </div>
+                        ))}
+                        {suggestions.slice(0, 6).map((s: string, i: number) => (
+                          <div key={i} className="flex items-center gap-2 p-3 rounded-lg bg-muted/30 text-sm">
+                            <AlertCircle className="h-4 w-4 text-warning" />
+                            {s}
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  );
+                })()}
+              </>
+            )}
           </Card>
         </TabsContent>
 

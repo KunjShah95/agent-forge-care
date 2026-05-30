@@ -14,6 +14,8 @@ from app.schemas.user import (
     ResearchRequest,
     CoverLetterRequest,
     ResumeTailorRequest,
+    CareerGuidanceRequest,
+    NetworkingOutreachRequest,
 )
 
 router = APIRouter()
@@ -270,6 +272,72 @@ async def resume_tailor(
     await db.commit()
     try:
         result = await tailor_resume(str(user.id), data.model_dump(), db)
+        task.status = TaskStatus.completed
+        task.output = result
+        await db.commit()
+        return result
+    except Exception as e:
+        task.status = TaskStatus.failed
+        task.error = str(e)
+        await db.commit()
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/career-guidance", status_code=200)
+@limiter.limit("10/minute")
+async def career_guidance(
+    request: Request,
+    data: CareerGuidanceRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.agents.assistant_agent import get_career_guidance
+
+    task = AgentTask(
+        user_id=user.id,
+        agent_type=AgentType.research,
+        status=TaskStatus.running,
+        input=data.model_dump(),
+    )
+    db.add(task)
+    await db.commit()
+    try:
+        result = await get_career_guidance(str(user.id), data.model_dump(), db)
+        task.status = TaskStatus.completed
+        task.output = result
+        await db.commit()
+        return result
+    except Exception as e:
+        task.status = TaskStatus.failed
+        task.error = str(e)
+        await db.commit()
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/networking-outreach", status_code=200)
+@limiter.limit("10/minute")
+async def networking_outreach(
+    request: Request,
+    data: NetworkingOutreachRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.agents.assistant_agent import generate_outreach
+
+    task = AgentTask(
+        user_id=user.id,
+        agent_type=AgentType.networking,
+        status=TaskStatus.running,
+        input=data.model_dump(),
+    )
+    db.add(task)
+    await db.commit()
+    try:
+        result = await generate_outreach(str(user.id), data.model_dump(), db)
         task.status = TaskStatus.completed
         task.output = result
         await db.commit()

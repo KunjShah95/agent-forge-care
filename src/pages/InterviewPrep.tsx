@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
@@ -22,7 +23,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Play, Mic, Trophy, Clock, BookOpen, Loader2 } from "lucide-react";
+import { Play, Mic, Trophy, Clock, BookOpen, Loader2, MessageSquare, Send, Sparkles } from "lucide-react";
 import { useInterviewPrep } from "@/api/hooks";
 import { toast } from "sonner";
 
@@ -64,6 +65,17 @@ const categoryStats = [
   { name: "ML/AI", done: 18, total: 30, score: 79 },
 ];
 
+const mockFeedbackOptions = [
+  "Great answer! Consider adding more specific metrics to quantify your impact.",
+  "Strong response. You could also mention how you handled stakeholder communication.",
+  "Good structure. Try to include a concrete example of tradeoffs you considered.",
+  "Well articulated. For bonus points, mention what you'd do differently next time.",
+  "Solid answer. Adding a brief note about lessons learned would strengthen it further.",
+  "Clear and concise. Consider elaborating on the technical decisions involved.",
+  "Nice approach. You might also discuss how you prioritized competing constraints.",
+  "Well framed. Including the timeline and team size would add helpful context.",
+];
+
 export default function InterviewPrep() {
   const navigate = useNavigate();
   const [category, setCategory] = useState<string>("Behavioral");
@@ -73,6 +85,10 @@ export default function InterviewPrep() {
   const [type, setType] = useState("behavioral");
   const [generatedQuestions, setGeneratedQuestions] = useState<string[]>([]);
   const [generatedTips, setGeneratedTips] = useState<string[]>([]);
+  const [selectedQuestion, setSelectedQuestion] = useState<string | null>(null);
+  const [userAnswer, setUserAnswer] = useState("");
+  const [feedback, setFeedback] = useState<string | null>(null);
+  const [isGettingFeedback, setIsGettingFeedback] = useState(false);
 
   const interviewPrep = useInterviewPrep();
 
@@ -90,6 +106,31 @@ export default function InterviewPrep() {
     } catch {
       toast.error("Failed to generate questions");
     }
+  };
+
+  const handleQuestionClick = (q: string) => {
+    if (selectedQuestion === q) {
+      setSelectedQuestion(null);
+      setUserAnswer("");
+      setFeedback(null);
+    } else {
+      setSelectedQuestion(q);
+      setUserAnswer("");
+      setFeedback(null);
+    }
+  };
+
+  const handleGetFeedback = () => {
+    if (!userAnswer.trim()) {
+      toast.error("Please write an answer first");
+      return;
+    }
+    setIsGettingFeedback(true);
+    setTimeout(() => {
+      const randomFeedback = mockFeedbackOptions[Math.floor(Math.random() * mockFeedbackOptions.length)];
+      setFeedback(randomFeedback);
+      setIsGettingFeedback(false);
+    }, 800);
   };
 
   const displayQuestions = generatedQuestions.length > 0
@@ -150,14 +191,70 @@ export default function InterviewPrep() {
             {Object.entries(displayQuestions).map(([cat, qs]) => (
               <TabsContent key={cat} value={cat} className="mt-4 space-y-2">
                 {qs.map((q, i) => (
-                  <div key={i} className="flex items-center gap-3 p-4 rounded-lg bg-muted/30 hover:bg-muted/50 transition cursor-pointer">
-                    <div className="h-8 w-8 rounded-lg bg-gradient-primary/10 border border-primary/20 flex items-center justify-center text-xs font-display font-bold text-primary">
-                      Q{i + 1}
+                  <div key={i}>
+                    <div
+                      className={`flex items-center gap-3 p-4 rounded-lg transition cursor-pointer ${
+                        selectedQuestion === q ? "bg-primary/10 border border-primary/30" : "bg-muted/30 hover:bg-muted/50"
+                      }`}
+                      onClick={() => handleQuestionClick(q)}
+                    >
+                      <div className="h-8 w-8 rounded-lg bg-gradient-primary/10 border border-primary/20 flex items-center justify-center text-xs font-display font-bold text-primary">
+                        Q{i + 1}
+                      </div>
+                      <div className="flex-1 text-sm">{q}</div>
+                      <div className="flex items-center gap-1">
+                        {selectedQuestion === q && <MessageSquare className="h-3 w-3 text-primary" />}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="gap-1"
+                          onClick={(e) => { e.stopPropagation(); navigate("/app/agents"); }}
+                        >
+                          <Play className="h-3 w-3" /> Practice
+                        </Button>
+                      </div>
                     </div>
-                    <div className="flex-1 text-sm">{q}</div>
-                    <Button variant="ghost" size="sm" className="gap-1" onClick={() => navigate("/app/agents")}>
-                      <Play className="h-3 w-3" /> Practice
-                    </Button>
+                    {selectedQuestion === q && (
+                      <div className="ml-12 mt-2 space-y-3 p-4 rounded-lg bg-muted/20 border border-muted/40">
+                        <Textarea
+                          placeholder="Type your answer here..."
+                          value={userAnswer}
+                          onChange={(e) => setUserAnswer(e.target.value)}
+                          rows={5}
+                          className="text-sm"
+                        />
+                        <div className="flex items-center gap-3">
+                          <Button
+                            size="sm"
+                            className="gap-2 bg-gradient-primary shadow-glow"
+                            onClick={handleGetFeedback}
+                            disabled={isGettingFeedback || !userAnswer.trim()}
+                          >
+                            {isGettingFeedback ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <Send className="h-3 w-3" />
+                            )}
+                            Get Feedback
+                          </Button>
+                          {feedback && (
+                            <span className="text-xs text-muted-foreground">
+                              <Sparkles className="h-3 w-3 inline mr-1 text-primary" />
+                              AI feedback generated
+                            </span>
+                          )}
+                        </div>
+                        {feedback && (
+                          <div className="flex items-start gap-3 p-4 rounded-lg bg-primary/5 border border-primary/10">
+                            <Sparkles className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
+                            <div>
+                              <div className="text-xs font-semibold text-primary mb-1">AI Feedback</div>
+                              <p className="text-sm text-muted-foreground">{feedback}</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </TabsContent>

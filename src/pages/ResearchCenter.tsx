@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Building2, TrendingUp, BookOpen, FileText, Search, Loader2, Save } from "lucide-react";
+import { Building2, TrendingUp, BookOpen, FileText, Search, Loader2, Save, Code, Lightbulb, DollarSign, Users, Target } from "lucide-react";
 import { useResearch, useCreateMemory, useMemory } from "@/api/hooks";
 import { toast } from "sonner";
 
@@ -48,6 +48,7 @@ export default function ResearchCenter() {
   const [researchResult, setResearchResult] = useState<Record<string, unknown> | null>(null);
   const [researchedCompany, setResearchedCompany] = useState("");
   const [notes, setNotes] = useState(defaultNotes);
+  const [showRawJson, setShowRawJson] = useState(false);
 
   const research = useResearch();
   const createMemory = useCreateMemory();
@@ -82,6 +83,8 @@ export default function ResearchCenter() {
       toast.error("Failed to save notes");
     }
   };
+
+  const r = researchResult as Record<string, unknown> | null;
 
   return (
     <div className="space-y-6 max-w-[1400px]">
@@ -124,13 +127,125 @@ export default function ResearchCenter() {
 
           {researchResult && (
             <Card className="glass p-5 border-primary/30">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-display font-semibold">Research: {researchedCompany}</h3>
-                <Badge variant="outline">AI Generated</Badge>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-display font-semibold">Research: {researchedCompany}</h3>
+                  <Badge variant="outline">AI Generated</Badge>
+                </div>
+                <Button variant="ghost" size="sm" className="gap-1 text-xs" onClick={() => setShowRawJson(!showRawJson)}>
+                  <Code className="h-3 w-3" />
+                  {showRawJson ? "Hide" : "Show"} Raw JSON
+                </Button>
               </div>
-              <pre className="text-xs text-muted-foreground whitespace-pre-wrap font-mono bg-muted/30 p-4 rounded-lg overflow-auto max-h-64">
-                {JSON.stringify(researchResult, null, 2)}
-              </pre>
+
+              {showRawJson ? (
+                <pre className="text-xs text-muted-foreground whitespace-pre-wrap font-mono bg-muted/30 p-4 rounded-lg overflow-auto max-h-96">
+                  {JSON.stringify(researchResult, null, 2)}
+                </pre>
+              ) : (
+                <div className="space-y-4">
+                  {r?.summary && (
+                    <div className="flex items-start gap-3 p-4 rounded-lg bg-primary/5 border border-primary/10">
+                      <Lightbulb className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
+                      <div>
+                        <div className="text-xs font-semibold text-primary mb-1">Summary</div>
+                        <p className="text-sm text-muted-foreground">{r.summary as string}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {r?.focus && (
+                    <div className="flex items-start gap-3 p-4 rounded-lg bg-muted/30">
+                      <Target className="h-5 w-5 text-warning mt-0.5 flex-shrink-0" />
+                      <div>
+                        <div className="text-xs font-semibold text-warning mb-1">Focus Areas</div>
+                        <p className="text-sm text-muted-foreground">{r.focus as string}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {r?.company_info && (
+                    <div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <Building2 className="h-4 w-4 text-primary" />
+                        <h4 className="font-display font-semibold text-sm">Company Info</h4>
+                      </div>
+                      <div className="grid sm:grid-cols-2 gap-3">
+                        {(r.company_info as Record<string, string>)?.description && (
+                          <div className="p-3 rounded-lg bg-muted/30 col-span-full">
+                            <div className="text-xs text-muted-foreground mb-1">Description</div>
+                            <p className="text-sm">{(r.company_info as Record<string, string>).description}</p>
+                          </div>
+                        )}
+                        {(r.company_info as Record<string, string>)?.culture && (
+                          <div className="p-3 rounded-lg bg-muted/30">
+                            <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+                              <Users className="h-3 w-3" /> Culture
+                            </div>
+                            <p className="text-sm">{(r.company_info as Record<string, string>).culture}</p>
+                          </div>
+                        )}
+                        {(r.company_info as Record<string, string>)?.funding && (
+                          <div className="p-3 rounded-lg bg-muted/30">
+                            <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+                              <DollarSign className="h-3 w-3" /> Funding
+                            </div>
+                            <p className="text-sm">{(r.company_info as Record<string, string>).funding}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {r?.market_intelligence && (
+                    <div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <TrendingUp className="h-4 w-4 text-success" />
+                        <h4 className="font-display font-semibold text-sm">Market Intelligence</h4>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        {Object.entries(r.market_intelligence as Record<string, unknown>).map(([key, val]) => (
+                          <div key={key} className="p-3 rounded-lg bg-muted/30">
+                            <div className="text-xs text-muted-foreground mb-1 capitalize">{key.replace(/_/g, " ")}</div>
+                            <div className="font-display font-semibold text-sm">{String(val)}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {r?.skill_insights && Array.isArray(r.skill_insights) && (
+                    <div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <BookOpen className="h-4 w-4 text-info" />
+                        <h4 className="font-display font-semibold text-sm">Skill Insights</h4>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {(r.skill_insights as string[]).map((skill, i) => (
+                          <Badge key={i} variant="secondary" className="text-xs">{skill}</Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {r?.interview_insights && Array.isArray(r.interview_insights) && (
+                    <div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <FileText className="h-4 w-4 text-warning" />
+                        <h4 className="font-display font-semibold text-sm">Interview Insights</h4>
+                      </div>
+                      <ul className="space-y-2">
+                        {(r.interview_insights as string[]).map((insight, i) => (
+                          <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                            <span className="text-warning mt-1.5 h-1.5 w-1.5 rounded-full bg-warning flex-shrink-0" />
+                            {insight}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
             </Card>
           )}
 

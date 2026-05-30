@@ -101,6 +101,7 @@ async def add_skill(
     ps = ProfileSkill(
         profile_id=profile.id, skill_id=skill.id, proficiency=data.proficiency
     )
+    ps.skill = skill
     db.add(ps)
     await db.flush()
     return ps

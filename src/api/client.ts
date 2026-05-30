@@ -316,6 +316,21 @@ export const resume = {
   },
 };
 
+export type Notification = {
+  id: string;
+  title: string;
+  body: string;
+  type: "success" | "error" | "info";
+  read: boolean;
+  created_at: string;
+};
+
+export const notifications = {
+  list: () => request<{ items: Notification[] }>("/notifications"),
+  markRead: (id: string) => request<Notification>(`/notifications/${id}`, { method: "PATCH" }),
+  markAllRead: () => request<{ status: string }>("/notifications/read-all", { method: "POST" }),
+};
+
 export type MemoryEntry = {
   id: string;
   key: string;

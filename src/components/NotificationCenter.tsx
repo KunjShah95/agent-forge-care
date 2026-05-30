@@ -1,23 +1,9 @@
-import { useState } from "react";
 import { Bell, CheckCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
-import { useAgentTasks } from "@/api/hooks";
+import { useNotifications, useMarkNotificationRead, useMarkAllNotificationsRead } from "@/api/hooks";
 import { formatDistanceToNow } from "date-fns";
-import type { AgentTask } from "@/api/client";
-
-function taskToNotification(task: AgentTask) {
-  const time = formatDistanceToNow(new Date(task.created_at), { addSuffix: true });
-  switch (task.status) {
-    case "completed":
-      return { id: task.id, title: `${task.agent_type} completed`, body: "Task finished successfully", time, type: "success" as const };
-    case "failed":
-      return { id: task.id, title: `${task.agent_type} failed`, body: task.error || "Task encountered an error", time, type: "error" as const };
-    default:
-      return { id: task.id, title: `${task.agent_type} running`, body: "Task is in progress", time, type: "info" as const };
-  }
-}
 
 const dotColor = {
   success: "bg-emerald-500",
@@ -26,15 +12,15 @@ const dotColor = {
 };
 
 export function NotificationCenter() {
-  const { data } = useAgentTasks();
-  const [readIds, setReadIds] = useState<Set<string>>(new Set());
+  const { data } = useNotifications();
+  const markRead = useMarkNotificationRead();
+  const markAllRead = useMarkAllNotificationsRead();
 
-  const tasks = data?.items ?? [];
-  const notifications = tasks.map(taskToNotification);
-  const unread = notifications.filter(n => !readIds.has(n.id));
+  const notifications = data?.items ?? [];
+  const unread = notifications.filter(n => !n.read);
 
-  const markAllRead = () => {
-    setReadIds(new Set(notifications.map(n => n.id)));
+  const handleMarkAllRead = () => {
+    markAllRead.mutate();
   };
 
   return (
@@ -57,13 +43,19 @@ export function NotificationCenter() {
             <div className="p-8 text-center text-sm text-muted-foreground">No new notifications</div>
           ) : (
             notifications.map((n) => (
-              <div key={n.id} className="p-4 border-b border-border/30 last:border-0 hover:bg-muted/50 cursor-pointer transition">
+              <div
+                key={n.id}
+                className="p-4 border-b border-border/30 last:border-0 hover:bg-muted/50 cursor-pointer transition"
+                onClick={() => { if (!n.read) markRead.mutate(n.id); }}
+              >
                 <div className="flex items-start gap-3">
-                  {!readIds.has(n.id) && <span className={`h-2 w-2 rounded-full mt-1.5 ${dotColor[n.type]}`} />}
+                  {!n.read && <span className={`h-2 w-2 rounded-full mt-1.5 ${dotColor[n.type]}`} />}
                   <div className="flex-1 min-w-0">
                     <div className="font-medium text-sm">{n.title}</div>
                     <div className="text-xs text-muted-foreground mt-0.5">{n.body}</div>
-                    <div className="text-[10px] text-muted-foreground mt-1">{n.time}</div>
+                    <div className="text-[10px] text-muted-foreground mt-1">
+                      {formatDistanceToNow(new Date(n.created_at), { addSuffix: true })}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -71,7 +63,7 @@ export function NotificationCenter() {
           )}
         </div>
         <div className="p-2 border-t border-border/50">
-          <Button variant="ghost" size="sm" className="w-full text-xs gap-1.5" onClick={markAllRead} disabled={unread.length === 0}>
+          <Button variant="ghost" size="sm" className="w-full text-xs gap-1.5" onClick={handleMarkAllRead} disabled={unread.length === 0}>
             <CheckCheck className="h-3.5 w-3.5" />
             Mark all as read
           </Button>

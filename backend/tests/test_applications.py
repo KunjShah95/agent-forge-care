@@ -125,16 +125,13 @@ async def test_create_application_opportunity_not_found(auth_client, mock_db):
 
 @pytest.mark.asyncio
 async def test_create_application_invalid_id_format(auth_client, mock_db):
-    async def flush_side():
-        mock_db.add.call_args[0][0].id = _uid()
-
-    mock_db.flush = AsyncMock(side_effect=flush_side)
+    setup_mock_execute(mock_db, [MockResult(scalar_value=None)])
 
     response = await auth_client.post(
         "/api/v1/applications",
         json={"opportunity_id": "not-a-uuid"},
     )
-    assert response.status_code == 422
+    assert response.status_code == 404
 
 
 @pytest.mark.asyncio

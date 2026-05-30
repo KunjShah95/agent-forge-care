@@ -151,6 +151,7 @@ async def test_add_skill_creates_new_skill(auth_client, mock_db):
     results = [
         MockResult(scalar_value=profile),
         MockResult(scalar_value=None),
+        MockResult(scalar_value=None),
     ]
     setup_mock_execute(mock_db, results)
 
@@ -185,6 +186,7 @@ async def test_add_skill_duplicate(auth_client, mock_db):
 @pytest.mark.asyncio
 async def test_add_skill_creates_profile_if_missing(auth_client, mock_db):
     results = [
+        MockResult(scalar_value=None),
         MockResult(scalar_value=None),
         MockResult(scalar_value=None),
     ]
@@ -236,7 +238,7 @@ async def test_remove_skill_not_found(auth_client, mock_db):
 
 
 @pytest.mark.asyncio
-async def test_remove_skill_not_found(auth_client, mock_db):
+async def test_remove_skill_not_found_uuid(auth_client, mock_db):
     profile = make_profile()
     results = [
         MockResult(scalar_value=profile),

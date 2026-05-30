@@ -17,6 +17,7 @@ def register_routes():
         monitor,
         chat,
         resume,
+        notifications,
     )
 
     router.include_router(auth.router, prefix="/auth", tags=["Auth"])
@@ -34,6 +35,9 @@ def register_routes():
     router.include_router(monitor.router, prefix="/monitor", tags=["Monitor"])
     router.include_router(chat.router, prefix="/chat", tags=["Chat"])
     router.include_router(resume.router, prefix="/resume", tags=["Resume"])
+    router.include_router(
+        notifications.router, prefix="/notifications", tags=["Notifications"]
+    )
 
 
 register_routes()

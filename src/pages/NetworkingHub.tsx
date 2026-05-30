@@ -7,13 +7,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Mail, Plus, Search, Send, Sparkles } from "lucide-react";
+import { Mail, Plus, Search, Send, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 
-import { useContacts, useCreateContact } from "@/api/hooks";
+import { useContacts, useCreateContact, useUpdateContact, useDeleteContact } from "@/api/hooks";
 import { ListSkeleton } from "@/components/ui/skeleton";
 
 const templates = [
@@ -46,10 +49,28 @@ export default function NetworkingHub() {
   const createContact = useCreateContact();
   const [searchQuery, setSearchQuery] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
   const [newRole, setNewRole] = useState("");
   const [newCompany, setNewCompany] = useState("");
   const [newEmail, setNewEmail] = useState("");
+  const [newLinkedin, setNewLinkedin] = useState("");
+  const [newNotes, setNewNotes] = useState("");
+  const [newStatus, setNewStatus] = useState("New");
+
+  const updateContact = useUpdateContact();
+  const deleteContact = useDeleteContact();
+
+  const resetForm = () => {
+    setNewName("");
+    setNewRole("");
+    setNewCompany("");
+    setNewEmail("");
+    setNewLinkedin("");
+    setNewNotes("");
+    setNewStatus("New");
+    setEditingId(null);
+  };
 
   const contacts = useMemo(() => {
     const items = data?.items || [];
@@ -71,7 +92,7 @@ export default function NetworkingHub() {
           <p className="text-muted-foreground mt-1">Track recruiters, draft outreach, manage relationships.</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" className="gap-2" onClick={() => setDialogOpen(true)}><Plus className="h-4 w-4" /> Add contact</Button>
+          <Button variant="outline" className="gap-2" onClick={() => { resetForm(); setDialogOpen(true); }}><Plus className="h-4 w-4" /> Add contact</Button>
           <Button className="bg-gradient-primary shadow-glow gap-2" onClick={() => navigate("/app/agents")}><Sparkles className="h-4 w-4" /> Draft outreach</Button>
         </div>
       </div>
@@ -106,7 +127,21 @@ export default function NetworkingHub() {
             ) : (
               <div className="divide-y divide-border/50">
                 {contacts.map((c) => (
-                  <div key={c.id} className="p-4 flex items-center gap-4 hover:bg-muted/30 transition">
+                  <div
+                    key={c.id}
+                    className="p-4 flex items-center gap-4 hover:bg-muted/30 transition cursor-pointer"
+                    onClick={() => {
+                      setEditingId(c.id);
+                      setNewName(c.name);
+                      setNewRole(c.role || "");
+                      setNewCompany(c.company || "");
+                      setNewEmail(c.email || "");
+                      setNewLinkedin(c.linkedin_url || "");
+                      setNewNotes(c.notes || "");
+                      setNewStatus(c.status);
+                      setDialogOpen(true);
+                    }}
+                  >
                     <Avatar className="h-10 w-10">
                       <AvatarFallback className="bg-gradient-primary text-primary-foreground text-xs">
                         {initials(c.name)}
@@ -121,7 +156,16 @@ export default function NetworkingHub() {
                     <div className="hidden md:block text-xs text-muted-foreground">{c.email}</div>
                     <Badge className={`${statusColors[c.status] || ""} text-[10px]`} variant="outline">{c.status}</Badge>
                     <div className="text-xs text-muted-foreground w-16 text-right">{c.last_contact || "—"}</div>
-                    <Button variant="ghost" size="icon" onClick={() => navigate("/app/agents")}><Mail className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); navigate("/app/agents"); }}><Mail className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={(e) => {
+                      e.stopPropagation();
+                      deleteContact.mutate(c.id, {
+                        onSuccess: () => toast.success("Contact deleted"),
+                        onError: () => toast.error("Failed to delete contact"),
+                      });
+                    }}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   </div>
                 ))}
               </div>
@@ -145,10 +189,10 @@ export default function NetworkingHub() {
         </TabsContent>
       </Tabs>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) { setDialogOpen(false); resetForm(); } }}>
         <DialogContent className="glass">
           <DialogHeader>
-            <DialogTitle className="font-display">Add Contact</DialogTitle>
+            <DialogTitle className="font-display">{editingId ? "Edit Contact" : "Add Contact"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
@@ -169,30 +213,75 @@ export default function NetworkingHub() {
               <Label>Email</Label>
               <Input className="mt-1.5" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="jane@acme.com" />
             </div>
+            <div>
+              <Label>LinkedIn URL</Label>
+              <Input className="mt-1.5" value={newLinkedin} onChange={(e) => setNewLinkedin(e.target.value)} placeholder="https://linkedin.com/in/..." />
+            </div>
+            <div>
+              <Label>Notes</Label>
+              <Input className="mt-1.5" value={newNotes} onChange={(e) => setNewNotes(e.target.value)} placeholder="Any notes..." />
+            </div>
+            <div>
+              <Label>Status</Label>
+              <Select value={newStatus} onValueChange={setNewStatus}>
+                <SelectTrigger className="mt-1.5">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.keys(statusColors).map((s) => (
+                    <SelectItem key={s} value={s}>{s}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+            {editingId && (
+              <Button variant="destructive" onClick={() => {
+                deleteContact.mutate(editingId, {
+                  onSuccess: () => { toast.success("Contact deleted"); setDialogOpen(false); resetForm(); },
+                  onError: () => toast.error("Failed to delete contact"),
+                });
+              }} disabled={deleteContact.isPending}>
+                {deleteContact.isPending ? "Deleting…" : "Delete"}
+              </Button>
+            )}
+            <Button variant="outline" onClick={() => { setDialogOpen(false); resetForm(); }}>Cancel</Button>
             <Button
               className="bg-gradient-primary"
-              disabled={!newName.trim() || createContact.isPending}
+              disabled={!newName.trim() || createContact.isPending || updateContact.isPending}
               onClick={() => {
-                createContact.mutate(
-                  { name: newName, role: newRole || undefined, company: newCompany || undefined, email: newEmail || undefined },
-                  {
-                    onSuccess: () => {
-                      toast.success("Contact added");
-                      setDialogOpen(false);
-                      setNewName("");
-                      setNewRole("");
-                      setNewCompany("");
-                      setNewEmail("");
+                const data = {
+                  name: newName,
+                  role: newRole || undefined,
+                  company: newCompany || undefined,
+                  email: newEmail || undefined,
+                  linkedin_url: newLinkedin || undefined,
+                  notes: newNotes || undefined,
+                  status: newStatus,
+                };
+                if (editingId) {
+                  updateContact.mutate(
+                    { id: editingId, data },
+                    {
+                      onSuccess: () => { toast.success("Contact updated"); setDialogOpen(false); resetForm(); },
+                      onError: () => toast.error("Failed to update contact"),
                     },
-                    onError: () => toast.error("Failed to add contact"),
-                  },
-                );
+                  );
+                } else {
+                  createContact.mutate(
+                    data,
+                    {
+                      onSuccess: () => { toast.success("Contact added"); setDialogOpen(false); resetForm(); },
+                      onError: () => toast.error("Failed to add contact"),
+                    },
+                  );
+                }
               }}
             >
-              {createContact.isPending ? "Adding…" : "Add"}
+              {editingId
+                ? (updateContact.isPending ? "Saving…" : "Save")
+                : (createContact.isPending ? "Adding…" : "Add")}
             </Button>
           </DialogFooter>
         </DialogContent>

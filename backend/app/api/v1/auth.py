@@ -12,6 +12,7 @@ from app.models.user import User
 from app.schemas.user import (
     RegisterRequest,
     LoginRequest,
+    RefreshRequest,
     TokenResponse,
     UserOut,
     UserUpdate,
@@ -89,12 +90,12 @@ async def login(
 @router.post("/refresh", response_model=TokenResponse)
 @limiter.limit("5/minute")
 async def refresh_token(
-    request: Request, token: str, db: AsyncSession = Depends(get_db)
+    request: Request, data: RefreshRequest, db: AsyncSession = Depends(get_db)
 ):
     """Refresh an access token using a valid refresh token."""
     try:
         payload = jwt.decode(
-            token, settings.jwt_secret, algorithms=[settings.jwt_algorithm]
+            data.token, settings.jwt_secret, algorithms=[settings.jwt_algorithm]
         )
         if payload.get("type") != "refresh":
             raise HTTPException(status_code=401, detail="Invalid token type")

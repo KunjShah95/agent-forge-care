@@ -145,7 +145,8 @@ async def test_refresh_token_success(async_client, mock_db):
     setup_mock_execute(mock_db, [MockResult()])
 
     response = await async_client.post(
-        f"/api/v1/auth/refresh?token={refresh}",
+        "/api/v1/auth/refresh",
+        json={"token": refresh},
     )
     assert response.status_code == 200
     data = response.json()
@@ -161,7 +162,8 @@ async def test_refresh_with_access_token(async_client, mock_db):
     token = create_access_token(str(uuid.uuid4()))
 
     response = await async_client.post(
-        f"/api/v1/auth/refresh?token={token}",
+        "/api/v1/auth/refresh",
+        json={"token": token},
     )
     assert response.status_code == 401
 
@@ -169,7 +171,8 @@ async def test_refresh_with_access_token(async_client, mock_db):
 @pytest.mark.asyncio
 async def test_refresh_invalid_token(async_client, mock_db):
     response = await async_client.post(
-        "/api/v1/auth/refresh?token=invalid.token.here",
+        "/api/v1/auth/refresh",
+        json={"token": "invalid.token.here"},
     )
     assert response.status_code == 401
 

@@ -17,6 +17,10 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class RefreshRequest(BaseModel):
+    token: str
+
+
 class TokenResponse(BaseModel):
     access_token: str
     refresh_token: str
@@ -388,3 +392,30 @@ class MonitorSettingsUpdate(BaseModel):
     min_match_score: Optional[int] = None
     max_results: Optional[int] = None
     frequency: Optional[str] = None
+
+
+class CareerGuidanceRequest(BaseModel):
+    query: str
+    context: Optional[dict] = None
+
+
+class NetworkingOutreachRequest(BaseModel):
+    target_companies: list[str]
+    role: Optional[str] = None
+    skills: Optional[list[str]] = None
+
+
+# ─── Notifications ──────────────────────────────────────────
+
+
+class NotificationOut(BaseModel):
+    id: str
+    title: str
+    body: str
+    type: str
+    read: bool
+    created_at: datetime
+
+
+class NotificationList(BaseModel):
+    items: list[NotificationOut]

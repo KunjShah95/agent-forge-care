@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
@@ -10,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useProfile, useUpdateProfile } from "@/api/hooks";
+import { useProfile, useUpdateProfile, useMemory, useCreateMemory } from "@/api/hooks";
 
 type ProfileFormValues = {
   school: string;
@@ -35,6 +36,9 @@ export default function Settings() {
   const [agentToggles, setAgentToggles] = useState<Record<string, boolean>>(
     Object.fromEntries(agentNames.map((a) => [a, true]))
   );
+  const queryClient = useQueryClient();
+  const { data: memoryData } = useMemory();
+  const createMemory = useCreateMemory();
 
   const { register, handleSubmit, reset, formState: { isDirty } } = useForm<ProfileFormValues>({
     defaultValues: {
@@ -71,6 +75,15 @@ export default function Settings() {
       });
     }
   }, [profile, reset]);
+
+  useEffect(() => {
+    if (memoryData?.items) {
+      const entry = memoryData.items.find((m) => m.key === "agent_toggles");
+      if (entry && entry.value && typeof entry.value === "object") {
+        setAgentToggles(entry.value as Record<string, boolean>);
+      }
+    }
+  }, [memoryData]);
 
   const onSubmit = (data: ProfileFormValues) => {
     updateProfile.mutate(
@@ -169,7 +182,11 @@ export default function Settings() {
               <Badge variant="outline" className="bg-success/10 text-success border-success/20">Healthy</Badge>
               <Switch
                 checked={agentToggles[a]}
-                onCheckedChange={(checked) => setAgentToggles((prev) => ({ ...prev, [a]: checked }))}
+                onCheckedChange={(checked) => {
+                const next = { ...agentToggles, [a]: checked };
+                setAgentToggles(next);
+                createMemory.mutate({ key: "agent_toggles", value: next });
+              }}
               />
             </Card>
           ))}

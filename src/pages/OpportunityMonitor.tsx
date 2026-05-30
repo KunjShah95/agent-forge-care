@@ -13,8 +13,8 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Bell, Mail, Smartphone, Zap, Loader2, Trash2 } from "lucide-react";
-import { useAlertConfigs, useCreateAlert, useUpdateAlert, useDeleteAlert } from "@/api/hooks";
+import { Bell, Mail, Smartphone, Zap, Loader2, Trash2, Play } from "lucide-react";
+import { useAlertConfigs, useCreateAlert, useUpdateAlert, useDeleteAlert, useRunMonitor } from "@/api/hooks";
 import { toast } from "sonner";
 
 export default function OpportunityMonitor() {
@@ -34,6 +34,7 @@ export default function OpportunityMonitor() {
   const createAlert = useCreateAlert();
   const updateAlert = useUpdateAlert();
   const deleteAlert = useDeleteAlert();
+  const runMonitor = useRunMonitor();
 
   const resetForm = () => {
     setFormName("");
@@ -108,6 +109,13 @@ export default function OpportunityMonitor() {
           <h1 className="font-display text-3xl font-bold">Opportunity Monitor</h1>
           <p className="text-muted-foreground mt-1">Configure alerts. Your Monitor Agent watches 24/7.</p>
         </div>
+        <Button variant="outline" className="gap-2" onClick={() => runMonitor.mutate(undefined, {
+          onSuccess: () => toast.success("Monitor scan started"),
+          onError: () => toast.error("Failed to start scan"),
+        })} disabled={runMonitor.isPending}>
+          {runMonitor.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+          {runMonitor.isPending ? "Scanning…" : "Run Scan"}
+        </Button>
         <Button className="bg-gradient-primary shadow-glow gap-2" onClick={openNew}>
           <Bell className="h-4 w-4" /> New alert
         </Button>

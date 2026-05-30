@@ -123,6 +123,14 @@ export function useUpdateContact() {
   });
 }
 
+export function useDeleteContact() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.contacts.delete,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["contacts"] }),
+  });
+}
+
 // ─── Agents ─────────────────────────────────────────────
 
 export function useAgentTasks(params?: { status?: string }) {
@@ -276,5 +284,31 @@ export function useDeleteAlert() {
   return useMutation({
     mutationFn: api.monitor.deleteAlert,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["monitor"] }),
+  });
+}
+
+// ─── Notifications ──────────────────────────────────────
+
+export function useNotifications() {
+  return useQuery({
+    queryKey: ["notifications"],
+    queryFn: api.notifications.list,
+    refetchInterval: 15_000,
+  });
+}
+
+export function useMarkNotificationRead() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.notifications.markRead,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications"] }),
+  });
+}
+
+export function useMarkAllNotificationsRead() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.notifications.markAllRead,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications"] }),
   });
 }

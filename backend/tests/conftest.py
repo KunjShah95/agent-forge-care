@@ -33,6 +33,7 @@ from app.models.user import (
     MatchScore,
     PlannerGoal,
 )
+from sqlalchemy import DateTime, ARRAY as SA_ARRAY, Boolean, Integer
 from app.api.v1.auth import create_access_token, create_refresh_token
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -243,14 +244,49 @@ class MockResult:
         return self._scalars_list
 
 
+def _apply_orm_defaults(obj):
+    if not hasattr(obj, "__table__"):
+        return
+    for col in obj.__table__.columns:
+        current = getattr(obj, col.name)
+        if current is not None:
+            continue
+        if col.default is not None:
+            try:
+                arg = col.default.arg
+                val = arg() if callable(arg) else arg
+                setattr(obj, col.name, val)
+                continue
+            except TypeError:
+                pass
+        if getattr(obj, col.name) is None:
+            if col.name == "id":
+                val = str(uuid.uuid4())
+            elif isinstance(col.type, SA_ARRAY):
+                val = []
+            elif isinstance(col.type, DateTime):
+                val = datetime.now(timezone.utc)
+            elif isinstance(col.type, Boolean):
+                val = False
+            elif isinstance(col.type, Integer):
+                val = 0
+            else:
+                continue
+            setattr(obj, col.name, val)
+
+
 @pytest.fixture
 def mock_db():
     session = AsyncMock()
     session.commit = AsyncMock()
     session.rollback = AsyncMock()
+
+    def add_side(obj):
+        _apply_orm_defaults(obj)
+
+    session.add = MagicMock(side_effect=add_side)
     session.flush = AsyncMock()
     session.close = AsyncMock()
-    session.add = MagicMock()
     session.delete = AsyncMock()
     session.execute = AsyncMock()
     return session
