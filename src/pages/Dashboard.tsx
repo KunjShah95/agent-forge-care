@@ -118,7 +118,7 @@ export default function Dashboard() {
           <div className="relative mt-6 grid sm:grid-cols-3 gap-3">
             {[
               { icon: Target, label: "Match score", value: analytics ? `${analytics.interview_rate}%` : "—" },
-              { icon: MapPin, label: "Targets", value: "SF • NYC • Remote" },
+              { icon: MapPin, label: "Targets", value: profile?.target_locations?.length ? profile.target_locations.join(" • ") : "—" },
               { icon: ClipboardList, label: "Auto actions", value: tasksData?.items?.length ? `${tasksData.items.length} queued` : "—" },
             ].map((item) => (
               <div key={item.label} className="glass rounded-xl p-4">

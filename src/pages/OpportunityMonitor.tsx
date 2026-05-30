@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +14,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Bell, Mail, Smartphone, Zap, Loader2, Trash2, Play } from "lucide-react";
-import { useAlertConfigs, useCreateAlert, useUpdateAlert, useDeleteAlert, useRunMonitor } from "@/api/hooks";
+import { useAlertConfigs, useCreateAlert, useUpdateAlert, useDeleteAlert, useRunMonitor, useMonitorSettings, useUpdateMonitorSettings } from "@/api/hooks";
 import { toast } from "sonner";
 
 export default function OpportunityMonitor() {
@@ -31,10 +31,22 @@ export default function OpportunityMonitor() {
   const [threshold, setThreshold] = useState("85");
 
   const { data: alerts, isLoading } = useAlertConfigs();
+  const { data: settingsData } = useMonitorSettings();
   const createAlert = useCreateAlert();
   const updateAlert = useUpdateAlert();
   const deleteAlert = useDeleteAlert();
   const runMonitor = useRunMonitor();
+  const updateSettings = useUpdateMonitorSettings();
+
+  // Hydrate settings from backend on load
+  useEffect(() => {
+    if (settingsData) {
+      setDailyDigest(settingsData.digest);
+      setPushNotif(settingsData.push);
+      setRealTime(settingsData.realtime);
+      setThreshold(String(settingsData.min_match_score));
+    }
+  }, [settingsData]);
 
   const resetForm = () => {
     setFormName("");
@@ -72,10 +84,10 @@ export default function OpportunityMonitor() {
 
     try {
       if (editingId) {
-        await updateAlert.mutateAsync({ id: editingId, data: payload } as never);
+        await updateAlert.mutateAsync({ id: editingId, data: payload });
         toast.success("Alert updated");
       } else {
-        await createAlert.mutateAsync(payload as never);
+        await createAlert.mutateAsync(payload);
         toast.success("Alert created");
       }
       setDialogOpen(false);
@@ -87,10 +99,16 @@ export default function OpportunityMonitor() {
 
   const handleToggle = async (alert: { id: string; is_active: boolean }) => {
     try {
-      await updateAlert.mutateAsync({ id: alert.id, data: { is_active: !alert.is_active } } as never);
+      await updateAlert.mutateAsync({ id: alert.id, data: { is_active: !alert.is_active } });
     } catch {
       toast.error("Failed to toggle alert");
     }
+  };
+
+  const persistSettings = (patch: Partial<{ digest: boolean; push: boolean; realtime: boolean; min_match_score: number }>) => {
+    updateSettings.mutate(patch, {
+      onError: () => toast.error("Failed to save settings"),
+    });
   };
 
   const handleDelete = async (id: string) => {
@@ -170,7 +188,7 @@ export default function OpportunityMonitor() {
                   <div className="text-xs text-muted-foreground">8:00 AM PT</div>
                 </div>
               </div>
-              <Switch checked={dailyDigest} onCheckedChange={setDailyDigest} />
+              <Switch checked={dailyDigest} onCheckedChange={(v) => { setDailyDigest(v); persistSettings({ digest: v }); }} />
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -180,7 +198,7 @@ export default function OpportunityMonitor() {
                   <div className="text-xs text-muted-foreground">For 90%+ matches only</div>
                 </div>
               </div>
-              <Switch checked={pushNotif} onCheckedChange={setPushNotif} />
+              <Switch checked={pushNotif} onCheckedChange={(v) => { setPushNotif(v); persistSettings({ push: v }); }} />
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -190,7 +208,7 @@ export default function OpportunityMonitor() {
                   <div className="text-xs text-muted-foreground">Slack & SMS</div>
                 </div>
               </div>
-              <Switch checked={realTime} onCheckedChange={setRealTime} />
+              <Switch checked={realTime} onCheckedChange={(v) => { setRealTime(v); persistSettings({ realtime: v }); }} />
             </div>
           </div>
           <div className="pt-4 border-t border-border/50">
@@ -198,6 +216,7 @@ export default function OpportunityMonitor() {
             <Input
               value={threshold}
               onChange={(e) => setThreshold(e.target.value)}
+              onBlur={() => persistSettings({ min_match_score: Number(threshold) || 85 })}
               type="number"
               className="mt-1.5"
             />

@@ -10,7 +10,8 @@ import {
   Target, FileSearch, MessageSquare, Network, Bell,
   Sparkles, Zap, Trash2, Play, XCircle,
 } from "lucide-react";
-import { useAgentTasks, useRunPlanner, useRunMonitor } from "@/api/hooks";
+import { toast } from "sonner";
+import { useAgentTasks, useRunPlanner, useRunMonitor, useDeleteTask } from "@/api/hooks";
 import type { AgentTask } from "@/api/client";
 
 const agentTypeDisplayMap: Record<string, { name: string; icon: React.ElementType }> = {
@@ -39,7 +40,7 @@ function formatTimeAgo(dateStr: string) {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
-function AgentQueueItem({ item, onRun }: { item: AgentTask; onRun?: (item: AgentTask) => void }) {
+function AgentQueueItem({ item, onRun, onDelete }: { item: AgentTask; onRun?: (item: AgentTask) => void; onDelete?: (id: string) => void }) {
   const display = getAgentDisplay(item.agent_type);
   const Icon = display.icon;
   const taskDescription = item.input?.goal as string || item.input?.task as string || display.name + " task";
@@ -89,7 +90,7 @@ function AgentQueueItem({ item, onRun }: { item: AgentTask; onRun?: (item: Agent
             <Play className="h-3 w-3" />
           </Button>
         )}
-        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-destructive" onClick={() => toast.error("Not implemented yet")}>
+        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-destructive" onClick={() => onDelete?.(item.id)}>
           <Trash2 className="h-3 w-3" />
         </Button>
       </div>
@@ -117,6 +118,7 @@ export default function TaskQueue() {
   const { data, isLoading } = useAgentTasks();
   const runPlanner = useRunPlanner();
   const runMonitor = useRunMonitor();
+  const deleteTask = useDeleteTask();
   const [hideCompleted, setHideCompleted] = useState(false);
 
   const handleRunTask = (task: AgentTask) => {
@@ -134,6 +136,19 @@ export default function TaskQueue() {
     } else {
       toast.error("Re-run not supported for this agent type");
     }
+  };
+
+  const handleDeleteTask = (id: string) => {
+    deleteTask.mutate(id, {
+      onSuccess: () => toast.success("Task deleted"),
+      onError: () => toast.error("Failed to delete task"),
+    });
+  };
+
+  const handleClearCompleted = () => {
+    completedItems.forEach((t) => deleteTask.mutate(t.id));
+    toast.success(`Clearing ${completedItems.length} completed tasks`);
+    setHideCompleted(true);
   };
 
   const handleRetryFailed = () => {
@@ -159,7 +174,7 @@ export default function TaskQueue() {
           <Button variant="outline" className="gap-2" disabled={failedItems.length === 0 || runPlanner.isPending || runMonitor.isPending} onClick={handleRetryFailed}>
             <Play className="h-4 w-4" /> Retry Failed
           </Button>
-          <Button variant="outline" className="gap-2" onClick={() => { toast.error("Not implemented yet"); setHideCompleted(true); }} disabled={hideCompleted || completedItems.length === 0}>
+          <Button variant="outline" className="gap-2" onClick={handleClearCompleted} disabled={hideCompleted || completedItems.length === 0}>
             <Trash2 className="h-4 w-4" /> Clear Completed
           </Button>
         </div>
@@ -200,7 +215,7 @@ export default function TaskQueue() {
               <p className="text-sm text-muted-foreground">No active tasks in the queue.</p>
             </div>
           ) : (
-            activeItems.map((item) => <AgentQueueItem key={item.id} item={item} onRun={handleRunTask} />)
+            activeItems.map((item) => <AgentQueueItem key={item.id} item={item} onRun={handleRunTask} onDelete={handleDeleteTask} />)
           )}
         </TabsContent>
 
@@ -213,7 +228,7 @@ export default function TaskQueue() {
               No completed tasks yet.
             </div>
           ) : (
-            visibleCompleted.map((item) => <AgentQueueItem key={item.id} item={item} />)
+            visibleCompleted.map((item) => <AgentQueueItem key={item.id} item={item} onDelete={handleDeleteTask} />)
           )}
         </TabsContent>
 
@@ -229,7 +244,7 @@ export default function TaskQueue() {
           ) : (
             failedItems.map((item) => (
               <div key={item.id}>
-                <AgentQueueItem item={item} />
+                <AgentQueueItem item={item} onDelete={handleDeleteTask} />
                 {item.error && (
                   <div className="ml-12 mt-1 p-3 rounded-lg bg-destructive/5 border border-destructive/10 text-xs text-destructive/80 font-mono">
                     Error: {item.error}

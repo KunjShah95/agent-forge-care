@@ -151,6 +151,8 @@ export const agents = {
 
   resumeTailor: (data: { role_type: string; target_company?: string; skills?: string[] }) =>
     request<Record<string, unknown>>("/agents/resume-tailor", { method: "POST", body: data }),
+
+  deleteTask: (id: string) => request<void>(`/agents/tasks/${id}`, { method: "DELETE" }),
 };
 
 // Memory
@@ -283,6 +285,14 @@ export type AlertConfig = {
   created_at: string;
 };
 
+export type MonitorSettings = {
+  frequency: string;
+  digest: boolean;
+  push: boolean;
+  realtime: boolean;
+  min_match_score: number;
+};
+
 export const monitor = {
   listAlerts: () => request<AlertConfig[]>("/monitor/alerts"),
   createAlert: (data: { name: string; keywords?: string[]; locations?: string[]; opportunity_types?: string[]; min_match_score?: number; frequency?: string }) =>
@@ -290,6 +300,10 @@ export const monitor = {
   updateAlert: (id: string, data: Partial<AlertConfig>) =>
     request<AlertConfig>(`/monitor/alerts/${id}`, { method: "PATCH", body: data }),
   deleteAlert: (id: string) => request<void>(`/monitor/alerts/${id}`, { method: "DELETE" }),
+
+  getSettings: () => request<MonitorSettings>("/monitor/settings"),
+  updateSettings: (data: Partial<MonitorSettings>) =>
+    request<MonitorSettings>("/monitor/settings", { method: "PATCH", body: data }),
 };
 
 export const resume = {

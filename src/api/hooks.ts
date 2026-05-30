@@ -166,6 +166,14 @@ export function useRunMonitor() {
   });
 }
 
+export function useDeleteTask() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.agents.deleteTask,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["agent-tasks"] }),
+  });
+}
+
 // ─── Memory ─────────────────────────────────────────────
 
 export function useMemory() {
@@ -293,6 +301,22 @@ export function useDeleteAlert() {
   return useMutation({
     mutationFn: api.monitor.deleteAlert,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["monitor"] }),
+  });
+}
+
+export function useMonitorSettings() {
+  return useQuery({
+    queryKey: ["monitor", "settings"],
+    queryFn: api.monitor.getSettings,
+  });
+}
+
+export function useUpdateMonitorSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Partial<import("./client").MonitorSettings>) =>
+      api.monitor.updateSettings(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["monitor", "settings"] }),
   });
 }
 
