@@ -1,10 +1,11 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Search, MapPin, Building2, Sparkles, X, RefreshCw, Target,
+  ChevronLeft, ChevronRight,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -12,6 +13,10 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { CardSkeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/EmptyState";
+import {
+  Pagination, PaginationContent, PaginationItem, PaginationLink,
+  PaginationPrevious, PaginationNext, PaginationEllipsis,
+} from "@/components/ui/pagination";
 
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -21,12 +26,15 @@ import type { ScoredOpportunity } from "@/api/client";
 const typeFilters = ["All", "Internship", "Full-time", "Hackathon", "Scholarship", "Fellowship", "Research"];
 const sizeFilters = ["All sizes", "Startup", "Mid-size", "Enterprise"];
 
+const ITEMS_PER_PAGE = 9;
+
 export default function Opportunities() {
   const [query, setQuery] = useState("");
   const [type, setType] = useState("All");
   const [size, setSize] = useState("All sizes");
   const [remoteOnly, setRemoteOnly] = useState(false);
   const [selected, setSelected] = useState<ScoredOpportunity | null>(null);
+  const [page, setPage] = useState(1);
 
   const navigate = useNavigate();
   const { data, isLoading, error, refetch } = useMatches();
@@ -53,6 +61,11 @@ export default function Opportunities() {
   const handleRefresh = () => {
     refreshMutation.mutate();
   };
+
+  useEffect(() => { setPage(1); }, [query, type, size, remoteOnly]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
+  const pageItems = filtered.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
 
   const salaryDisplay = (o: ScoredOpportunity) => {
     if (o.salary_min && o.salary_max) {
@@ -156,7 +169,7 @@ export default function Opportunities() {
       ) : (
         /* Cards grid */
         <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filtered.map((o) => (
+          {pageItems.map((o) => (
             <Card
               key={o.id}
               className="glass p-5 hover:shadow-glow transition cursor-pointer group"
@@ -200,6 +213,59 @@ export default function Opportunities() {
               </div>
             </Card>
           ))}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {filtered.length > ITEMS_PER_PAGE && (
+        <div className="flex flex-col items-center gap-3 pt-4">
+          <p className="text-sm text-muted-foreground">
+            Showing {(page - 1) * ITEMS_PER_PAGE + 1}–{Math.min(page * ITEMS_PER_PAGE, filtered.length)} of{" "}
+            {filtered.length}
+          </p>
+          <Pagination>
+            <PaginationContent>
+              <PaginationItem>
+                <PaginationPrevious
+                  href="#"
+                  onClick={(e) => { e.preventDefault(); setPage(Math.max(1, page - 1)); }}
+                  className={page <= 1 ? "pointer-events-none opacity-50" : ""}
+                />
+              </PaginationItem>
+              {Array.from({ length: totalPages }).map((_, i) => {
+                const p = i + 1;
+                const show = p === 1 || p === totalPages || Math.abs(p - page) <= 1;
+                if (!show) {
+                  if (p === page - 2 || p === page + 2) {
+                    return (
+                      <PaginationItem key={p}>
+                        <PaginationEllipsis />
+                      </PaginationItem>
+                    );
+                  }
+                  return null;
+                }
+                return (
+                  <PaginationItem key={p}>
+                    <PaginationLink
+                      href="#"
+                      isActive={p === page}
+                      onClick={(e) => { e.preventDefault(); setPage(p); }}
+                    >
+                      {p}
+                    </PaginationLink>
+                  </PaginationItem>
+                );
+              })}
+              <PaginationItem>
+                <PaginationNext
+                  href="#"
+                  onClick={(e) => { e.preventDefault(); setPage(Math.min(totalPages, page + 1)); }}
+                  className={page >= totalPages ? "pointer-events-none opacity-50" : ""}
+                />
+              </PaginationItem>
+            </PaginationContent>
+          </Pagination>
         </div>
       )}
 

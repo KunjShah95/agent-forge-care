@@ -7,10 +7,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Layers3, Brain, Star, BookOpen,
-  Plus, Sparkles, Clock, Database, Zap, Trash2,
+  Plus, Sparkles, Clock, Database, Zap, Trash2, Pencil,
 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { useMemory, useCreateMemory, useDeleteMemory, useProfile } from "@/api/hooks";
+import { useMemory, useCreateMemory, useUpdateMemory, useDeleteMemory, useProfile } from "@/api/hooks";
+import { toast } from "@/hooks/use-toast";
 import type { MemoryEntry } from "@/api/client";
 
 function formatRelativeTime(dateStr: string) {
@@ -27,7 +29,7 @@ function formatRelativeTime(dateStr: string) {
   return `${Math.floor(days / 30)}mo ago`;
 }
 
-function MemoryEntryRow({ entry, onDelete }: { entry: MemoryEntry; onDelete: (id: string) => void }) {
+function MemoryEntryRow({ entry, onEdit, onDelete }: { entry: MemoryEntry; onEdit: (entry: MemoryEntry) => void; onDelete: (id: string) => void }) {
   return (
     <div className="flex items-center gap-4 p-4 rounded-xl bg-muted/30 hover:bg-muted/50 transition group">
       <div className="flex-1 min-w-0">
@@ -40,6 +42,14 @@ function MemoryEntryRow({ entry, onDelete }: { entry: MemoryEntry; onDelete: (id
         <p className="text-sm text-muted-foreground mt-0.5">{String(entry.value)}</p>
       </div>
       <div className="text-xs text-muted-foreground hidden md:block">{formatRelativeTime(entry.updated_at)}</div>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="opacity-0 group-hover:opacity-100 transition"
+        onClick={() => onEdit(entry)}
+      >
+        <Pencil className="h-3 w-3" />
+      </Button>
       <Button
         variant="ghost"
         size="sm"
@@ -56,10 +66,14 @@ export default function MemoryViewer() {
   const [addOpen, setAddOpen] = useState(false);
   const [newKey, setNewKey] = useState("");
   const [newValue, setNewValue] = useState("");
+  const [editingEntry, setEditingEntry] = useState<MemoryEntry | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const [editWeight, setEditWeight] = useState("");
 
   const { data: memoryData, isLoading: memoryLoading } = useMemory();
   const { data: profile, isLoading: profileLoading } = useProfile();
   const createMemory = useCreateMemory();
+  const updateMemory = useUpdateMemory();
   const deleteMemory = useDeleteMemory();
 
   const entries = memoryData?.items ?? [];
@@ -92,6 +106,40 @@ export default function MemoryViewer() {
         }
       );
     }
+  };
+
+  const handleEdit = (entry: MemoryEntry) => {
+    setEditingEntry(entry);
+    setEditValue(JSON.stringify(entry.value, null, 2));
+    setEditWeight(String(entry.weight));
+  };
+
+  const handleSaveEdit = () => {
+    if (!editingEntry) return;
+    let parsedValue: unknown;
+    try {
+      parsedValue = JSON.parse(editValue);
+    } catch {
+      toast({ title: "Invalid JSON", description: "Value must be valid JSON", variant: "destructive" });
+      return;
+    }
+    const weight = parseFloat(editWeight);
+    if (isNaN(weight)) {
+      toast({ title: "Invalid weight", description: "Weight must be a number", variant: "destructive" });
+      return;
+    }
+    updateMemory.mutate(
+      { id: editingEntry.id, data: { value: parsedValue, weight } },
+      {
+        onSuccess: () => {
+          toast({ title: "Memory updated" });
+          setEditingEntry(null);
+        },
+        onError: () => {
+          toast({ title: "Failed to update memory", variant: "destructive" });
+        },
+      }
+    );
   };
 
   const handleDelete = (id: string) => {
@@ -164,7 +212,7 @@ export default function MemoryViewer() {
             ) : (
               <div className="space-y-2">
                 {(profileEntries.length > 0 ? profileEntries : otherEntries).map((entry) => (
-                  <MemoryEntryRow key={entry.id} entry={entry} onDelete={handleDelete} />
+                  <MemoryEntryRow key={entry.id} entry={entry} onEdit={handleEdit} onDelete={handleDelete} />
                 ))}
               </div>
             )}
@@ -337,6 +385,59 @@ export default function MemoryViewer() {
             >
               {createMemory.isPending ? "Saving..." : "Save Memory"}
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!editingEntry} onOpenChange={(open) => { if (!open) setEditingEntry(null); }}>
+        <DialogContent className="max-w-md glass">
+          <DialogHeader>
+            <DialogTitle className="font-display">Edit Memory Entry</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium">Key</label>
+              <Input value={editingEntry?.key ?? ""} disabled className="mt-1.5" />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Value (JSON)</label>
+              <Textarea
+                placeholder='e.g., "Anthropic" or {"company":"Stripe"}'
+                value={editValue}
+                onChange={(e) => setEditValue(e.target.value)}
+                className="mt-1.5 font-mono text-xs"
+                rows={6}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Weight</label>
+              <Input
+                type="number"
+                step="0.1"
+                min="0"
+                max="10"
+                placeholder="e.g., 1.0"
+                value={editWeight}
+                onChange={(e) => setEditWeight(e.target.value)}
+                className="mt-1.5"
+              />
+            </div>
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => setEditingEntry(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="flex-1 bg-gradient-primary shadow-glow"
+                onClick={handleSaveEdit}
+                disabled={updateMemory.isPending}
+              >
+                {updateMemory.isPending ? "Saving..." : "Save Changes"}
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

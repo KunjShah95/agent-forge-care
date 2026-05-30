@@ -1,9 +1,7 @@
-from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from jose import jwt
-from passlib.context import CryptContext
 
 from app.config import settings
 from app.database import get_db
@@ -17,31 +15,9 @@ from app.schemas.user import (
     UserOut,
     UserUpdate,
 )
+from app.services.auth_service import AuthService
 
 router = APIRouter()
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-
-def create_access_token(user_id: str) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(
-        minutes=settings.access_token_expire_minutes
-    )
-    return jwt.encode(
-        {"sub": user_id, "exp": expire, "type": "access"},
-        settings.jwt_secret,
-        algorithm=settings.jwt_algorithm,
-    )
-
-
-def create_refresh_token(user_id: str) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(
-        days=settings.refresh_token_expire_days
-    )
-    return jwt.encode(
-        {"sub": user_id, "exp": expire, "type": "refresh"},
-        settings.jwt_secret,
-        algorithm=settings.jwt_algorithm,
-    )
 
 
 @router.post(
@@ -58,15 +34,15 @@ async def register(
 
     user = User(
         email=data.email,
-        password_hash=pwd_context.hash(data.password),
+        password_hash=AuthService.hash_password(data.password),
         full_name=data.full_name,
     )
     db.add(user)
     await db.flush()
 
     return TokenResponse(
-        access_token=create_access_token(str(user.id)),
-        refresh_token=create_refresh_token(str(user.id)),
+        access_token=AuthService.create_access_token(str(user.id)),
+        refresh_token=AuthService.create_refresh_token(str(user.id)),
     )
 
 
@@ -78,12 +54,12 @@ async def login(
     """Authenticate and get JWT tokens."""
     result = await db.execute(select(User).where(User.email == data.email))
     user = result.scalar_one_or_none()
-    if not user or not pwd_context.verify(data.password, user.password_hash):
+    if not user or not AuthService.verify_password(data.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     return TokenResponse(
-        access_token=create_access_token(str(user.id)),
-        refresh_token=create_refresh_token(str(user.id)),
+        access_token=AuthService.create_access_token(str(user.id)),
+        refresh_token=AuthService.create_refresh_token(str(user.id)),
     )
 
 
@@ -104,8 +80,8 @@ async def refresh_token(
         raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
 
     return TokenResponse(
-        access_token=create_access_token(user_id),
-        refresh_token=create_refresh_token(user_id),
+        access_token=AuthService.create_access_token(user_id),
+        refresh_token=AuthService.create_refresh_token(user_id),
     )
 
 

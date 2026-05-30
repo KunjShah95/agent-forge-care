@@ -30,19 +30,26 @@ const statusConfig = {
   failed: { icon: AlertCircle, className: "text-destructive", label: "Failed" },
 };
 
-const agentMetrics = [
-  { agent: "Planner", runs: 847, success: 98, avgDuration: "12s" },
-  { agent: "Internship", runs: 2134, success: 96, avgDuration: "45s" },
-  { agent: "Job", runs: 1892, success: 97, avgDuration: "38s" },
-  { agent: "Research", runs: 643, success: 99, avgDuration: "22s" },
-  { agent: "Resume", runs: 412, success: 95, avgDuration: "18s" },
-  { agent: "Interview", runs: 298, success: 94, avgDuration: "15s" },
-  { agent: "Networking", runs: 184, success: 97, avgDuration: "8s" },
-  { agent: "Monitor", runs: 4256, success: 99, avgDuration: "55s" },
-];
-
 export default function AgentConsole() {
   const { data: tasksData, isLoading: tasksLoading } = useAgentTasks();
+
+  const agentTypes = ["planner", "internship", "job", "research", "resume", "interview", "networking", "monitor"];
+  const agentMetrics = agentTypes.map((type) => {
+    const tasks = (tasksData?.items || []).filter(
+      (t: AgentTask) => t.agent_type === type
+    );
+    const total = tasks.length;
+    const completed = tasks.filter((t: AgentTask) => t.status === "completed").length;
+    const success = total > 0 ? Math.round((completed / total) * 100) : 100;
+    const durations = tasks
+      .filter((t: AgentTask) => t.status === "completed" && t.created_at && t.completed_at)
+      .map((t: AgentTask) => new Date(t.completed_at!).getTime() - new Date(t.created_at).getTime());
+    const avgDuration =
+      durations.length > 0
+        ? Math.round(durations.reduce((a: number, b: number) => a + b, 0) / durations.length / 1000) + "s"
+        : "—";
+    return { agent: type.charAt(0).toUpperCase() + type.slice(1), runs: total, success, avgDuration };
+  });
 
   return (
     <div className="space-y-6 max-w-[1400px]">

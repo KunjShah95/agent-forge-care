@@ -79,7 +79,7 @@ async def test_list_opportunities_with_match_score(auth_client, mock_db):
     ms = make_match_score(opp_id=opp.id)
     count_result = MockResult(scalar_value=1)
     opp_result = MockResult(scalars_list=[opp])
-    ms_result = MockResult(scalar_value=ms)
+    ms_result = MockResult(scalars_list=[ms])
 
     mock_db.execute = AsyncMock(side_effect=[count_result, opp_result, ms_result])
 

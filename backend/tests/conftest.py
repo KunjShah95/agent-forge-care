@@ -34,7 +34,10 @@ from app.models.user import (
     PlannerGoal,
 )
 from sqlalchemy import DateTime, ARRAY as SA_ARRAY, Boolean, Integer
-from app.api.v1.auth import create_access_token, create_refresh_token
+from app.services.auth_service import AuthService
+
+create_access_token = AuthService.create_access_token
+create_refresh_token = AuthService.create_refresh_token
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 

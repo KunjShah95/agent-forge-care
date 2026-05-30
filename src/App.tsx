@@ -25,6 +25,7 @@ import AgentConsole from "./pages/AgentConsole";
 import TaskQueue from "./pages/TaskQueue";
 import MemoryViewer from "./pages/MemoryViewer";
 import NotFound from "./pages/NotFound";
+import ErrorBoundary from "@/components/ErrorBoundary";
 
 const queryClient = new QueryClient();
 
@@ -36,36 +37,38 @@ const App = () => (
           <Toaster />
           <Sonner />
           <BrowserRouter>
-            <Routes>
-              <Route path="/" element={<Landing />} />
-              <Route path="/login" element={<Login />} />
-              <Route path="/register" element={<Register />} />
-              <Route path="/onboarding" element={<Onboarding />} />
-              <Route
-                path="/app"
-                element={
-                  <ProtectedRoute>
-                    <AppLayout />
-                  </ProtectedRoute>
-                }
-              >
-                <Route index element={<Dashboard />} />
-                <Route path="opportunities" element={<Opportunities />} />
-                <Route path="applications" element={<Applications />} />
-                <Route path="resume" element={<ResumeStudio />} />
-                <Route path="interview" element={<InterviewPrep />} />
-                <Route path="research" element={<ResearchCenter />} />
-                <Route path="networking" element={<NetworkingHub />} />
-                <Route path="monitor" element={<OpportunityMonitor />} />
-                <Route path="analytics" element={<Analytics />} />
-                <Route path="agents" element={<AgentConsole />} />
-                <Route path="tasks" element={<TaskQueue />} />
-                <Route path="memory" element={<MemoryViewer />} />
-                <Route path="settings" element={<Settings />} />
-              </Route>
-              <Route path="/dashboard" element={<Navigate to="/app" replace />} />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
+            <ErrorBoundary>
+              <Routes>
+                <Route path="/" element={<Landing />} />
+                <Route path="/login" element={<Login />} />
+                <Route path="/register" element={<Register />} />
+                <Route path="/onboarding" element={<Onboarding />} />
+                <Route
+                  path="/app"
+                  element={
+                    <ProtectedRoute>
+                      <AppLayout />
+                    </ProtectedRoute>
+                  }
+                >
+                  <Route index element={<Dashboard />} />
+                  <Route path="opportunities" element={<Opportunities />} />
+                  <Route path="applications" element={<Applications />} />
+                  <Route path="resume" element={<ResumeStudio />} />
+                  <Route path="interview" element={<InterviewPrep />} />
+                  <Route path="research" element={<ResearchCenter />} />
+                  <Route path="networking" element={<NetworkingHub />} />
+                  <Route path="monitor" element={<OpportunityMonitor />} />
+                  <Route path="analytics" element={<Analytics />} />
+                  <Route path="agents" element={<AgentConsole />} />
+                  <Route path="tasks" element={<TaskQueue />} />
+                  <Route path="memory" element={<MemoryViewer />} />
+                  <Route path="settings" element={<Settings />} />
+                </Route>
+                <Route path="/dashboard" element={<Navigate to="/app" replace />} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </ErrorBoundary>
           </BrowserRouter>
         </TooltipProvider>
       </ThemeProvider>

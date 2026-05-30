@@ -137,7 +137,9 @@ async def test_login_invalid_email_format(async_client, mock_db):
 
 @pytest.mark.asyncio
 async def test_refresh_token_success(async_client, mock_db):
-    from app.api.v1.auth import create_refresh_token
+    from app.services.auth_service import AuthService
+
+    create_refresh_token = AuthService.create_refresh_token
     import uuid
 
     user_id = str(uuid.uuid4())
@@ -156,7 +158,9 @@ async def test_refresh_token_success(async_client, mock_db):
 
 @pytest.mark.asyncio
 async def test_refresh_with_access_token(async_client, mock_db):
-    from app.api.v1.auth import create_access_token
+    from app.services.auth_service import AuthService
+
+    create_access_token = AuthService.create_access_token
     import uuid
 
     token = create_access_token(str(uuid.uuid4()))

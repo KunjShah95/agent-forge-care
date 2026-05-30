@@ -96,6 +96,22 @@ async def list_tasks(
     return TaskList(items=[TaskOut.model_validate(t) for t in tasks])
 
 
+@router.delete("/tasks/{id}", status_code=204)
+async def delete_task(
+    id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete an agent task."""
+    result = await db.execute(
+        select(AgentTask).where(AgentTask.id == id, AgentTask.user_id == user.id)
+    )
+    task = result.scalar_one_or_none()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    await db.delete(task)
+
+
 @router.get("/tasks/{id}", response_model=TaskOut)
 async def get_task(
     id: str,

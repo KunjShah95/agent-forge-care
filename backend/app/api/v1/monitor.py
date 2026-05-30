@@ -96,6 +96,32 @@ async def delete_alert_config(
     await db.delete(config)
 
 
+@router.get("/settings")
+async def get_monitor_settings(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get opportunity monitor settings."""
+    from app.models.user import MemoryEntry
+
+    result = await db.execute(
+        select(MemoryEntry).where(
+            MemoryEntry.user_id == user.id,
+            MemoryEntry.key == "monitor_settings",
+        )
+    )
+    entry = result.scalar_one_or_none()
+    if entry:
+        return entry.value
+    return {
+        "frequency": "daily",
+        "digest": True,
+        "push": False,
+        "realtime": False,
+        "min_match_score": 80,
+    }
+
+
 @router.patch("/settings")
 async def update_monitor_settings(
     data: MonitorSettingsUpdate,

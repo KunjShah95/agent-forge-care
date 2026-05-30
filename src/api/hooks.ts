@@ -183,6 +183,15 @@ export function useCreateMemory() {
   });
 }
 
+export function useUpdateMemory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Parameters<typeof api.memory.update>[1] }) =>
+      api.memory.update(id, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["memory"] }),
+  });
+}
+
 export function useDeleteMemory() {
   const qc = useQueryClient();
   return useMutation({

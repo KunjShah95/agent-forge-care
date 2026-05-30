@@ -51,21 +51,24 @@ async def list_opportunities(
     result = await db.execute(query)
     items = result.scalars().all()
 
-    # Attach match scores
+    # Attach match scores (batched to avoid N+1)
     opportunity_list = []
-    for opp in items:
+    if items:
+        opp_ids = [opp.id for opp in items]
         ms_result = await db.execute(
             select(MatchScore).where(
-                MatchScore.opportunity_id == opp.id,
+                MatchScore.opportunity_id.in_(opp_ids),
                 MatchScore.user_id == user.id,
             )
         )
-        ms = ms_result.scalar_one_or_none()
-        opp_out = OpportunityOut.model_validate(opp)
-        if ms:
-            opp_out.match_score = float(ms.overall_score)
-            opp_out.match_reasons = ms.reasons or []
-        opportunity_list.append(opp_out)
+        ms_map = {ms.opportunity_id: ms for ms in ms_result.scalars().all()}
+        for opp in items:
+            ms = ms_map.get(opp.id)
+            opp_out = OpportunityOut.model_validate(opp)
+            if ms:
+                opp_out.match_score = float(ms.overall_score)
+                opp_out.match_reasons = ms.reasons or []
+            opportunity_list.append(opp_out)
 
     return OpportunityList(items=opportunity_list, total=total, page=page)
 
