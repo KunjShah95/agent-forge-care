@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, func
@@ -16,6 +17,10 @@ from app.schemas.user import (
     ResumeTailorRequest,
     CareerGuidanceRequest,
     NetworkingOutreachRequest,
+    InterviewFeedbackRequest,
+    InterviewSessionOut,
+    InterviewSessionList,
+    InterviewSessionCreate,
 )
 
 router = APIRouter()
@@ -365,3 +370,80 @@ async def networking_outreach(
         from fastapi import HTTPException
 
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ─── Interview Sessions ─────────────────────────────────────
+
+
+@router.get("/interview-sessions", response_model=InterviewSessionList)
+async def list_interview_sessions(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.models.user import MemoryEntry
+
+    result = await db.execute(
+        select(MemoryEntry).where(
+            MemoryEntry.user_id == user.id,
+            MemoryEntry.key == "interview_sessions",
+        )
+    )
+    entry = result.scalar_one_or_none()
+    sessions = entry.value if entry and entry.value else []
+    return InterviewSessionList(items=[InterviewSessionOut(**s) for s in sessions])
+
+
+@router.post("/interview-sessions", status_code=201)
+async def create_interview_session(
+    data: InterviewSessionCreate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.models.user import MemoryEntry
+    import uuid
+
+    result = await db.execute(
+        select(MemoryEntry).where(
+            MemoryEntry.user_id == user.id,
+            MemoryEntry.key == "interview_sessions",
+        )
+    )
+    entry = result.scalar_one_or_none()
+    session = {
+        "id": str(uuid.uuid4())[:8],
+        "company": data.company,
+        "type": data.type,
+        "date": datetime.now(timezone.utc).strftime("%b %d"),
+        "score": data.score,
+        "duration": data.duration,
+    }
+    if entry:
+        sessions = entry.value or []
+        sessions.append(session)
+        entry.value = sessions
+    else:
+        entry = MemoryEntry(
+            user_id=user.id,
+            key="interview_sessions",
+            value=[session],
+        )
+        db.add(entry)
+    await db.flush()
+    return InterviewSessionOut(**session)
+
+
+# ─── Interview Feedback ─────────────────────────────────────
+
+
+@router.post("/interview-feedback", status_code=200)
+@limiter.limit("10/minute")
+async def interview_feedback(
+    request: Request,
+    data: InterviewFeedbackRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.agents.assistant_agent import review_interview_answer
+
+    result = await review_interview_answer(str(user.id), data.model_dump(), db)
+    return result

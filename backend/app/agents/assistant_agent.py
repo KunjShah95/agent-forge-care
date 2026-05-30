@@ -402,6 +402,70 @@ Return ONLY valid JSON. No markdown, no explanations."""
     }
 
 
+# ─── Interview Answer Review ─────────────────────────────────
+
+
+async def review_interview_answer(
+    user_id: str,
+    params: dict,
+    db: AsyncSession,
+) -> dict:
+    """Review a user's interview answer and provide structured feedback."""
+    question = params.get("question", "")
+    answer = params.get("answer", "")
+    company = params.get("company")
+    role = params.get("role")
+
+    llm = _get_llm(temperature=0.5)
+
+    if not llm:
+        return {
+            "feedback": "AI review is unavailable. Your answer was recorded.",
+            "score": None,
+            "strengths": [],
+            "improvements": [],
+        }
+
+    try:
+        from langchain_core.messages import HumanMessage
+
+        prompt = f"""You are an expert interview coach. Review this answer and provide structured feedback.
+
+QUESTION: {question}
+
+ANSWER: {answer}
+
+{"COMPANY: " + company if company else ""}
+{"ROLE: " + role if role else ""}
+
+Return ONLY valid JSON with these keys:
+- "feedback": A 2-3 sentence constructive critique of the answer
+- "score": An integer 0-100 rating
+- "strengths": Array of 1-3 specific strengths in the answer
+- "improvements": Array of 1-3 specific improvements or gaps
+
+Be specific and actionable. Reference what the candidate actually said.
+Return ONLY valid JSON. No markdown, no explanations."""
+
+        response = await llm.ainvoke([HumanMessage(content=prompt)])
+        parsed = json.loads(_strip_json_fences(response.content))
+
+        return {
+            "feedback": parsed.get("feedback", "Your answer was reviewed."),
+            "score": parsed.get("score"),
+            "strengths": parsed.get("strengths", []),
+            "improvements": parsed.get("improvements", []),
+        }
+    except Exception as e:
+        logger.warning("LLM review_interview_answer failed: %s", e)
+        return {
+            "feedback": "Could not generate AI feedback at this time.",
+            "score": None,
+            "strengths": [],
+            "improvements": [],
+        }
+
+
 # ─── Networking Actions ─────────────────────────────────────
 
 

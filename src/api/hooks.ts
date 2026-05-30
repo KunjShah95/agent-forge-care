@@ -345,3 +345,43 @@ export function useMarkAllNotificationsRead() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications"] }),
   });
 }
+
+// ─── Resume ──────────────────────────────────────────────
+
+export function useResumes() {
+  return useQuery({
+    queryKey: ["resumes"],
+    queryFn: api.resume.list,
+  });
+}
+
+export function useDeleteResume() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.resume.delete,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["resumes"] }),
+  });
+}
+
+// ─── Interview Sessions ──────────────────────────────────
+
+export function useInterviewSessions() {
+  return useQuery({
+    queryKey: ["interview-sessions"],
+    queryFn: api.interview.sessions.list,
+  });
+}
+
+export function useCreateInterviewSession() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.interview.sessions.create,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["interview-sessions"] }),
+  });
+}
+
+export function useInterviewFeedback() {
+  return useMutation({
+    mutationFn: api.interview.feedback,
+  });
+}

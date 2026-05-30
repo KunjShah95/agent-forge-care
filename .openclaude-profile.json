@@ -1,0 +1,9 @@
+{
+  "profile": "openai",
+  "env": {
+    "OPENAI_BASE_URL": "https://openrouter.ai/api",
+    "OPENAI_MODEL": "z-ai/glm-4.5-air:free",
+    "OPENAI_API_KEY": "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"
+  },
+  "createdAt": "2026-05-29T10:27:20.916Z"
+}

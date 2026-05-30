@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -22,8 +22,8 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Upload, Sparkles, FileText, Download, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
-import { useResumeTailor, useCoverLetter } from "@/api/hooks";
+import { Upload, Sparkles, FileText, Download, CheckCircle2, AlertCircle, Loader2, Trash2 } from "lucide-react";
+import { useResumeTailor, useCoverLetter, useResumes, useDeleteResume } from "@/api/hooks";
 import { resume } from "@/api/client";
 import { toast } from "sonner";
 
@@ -44,11 +44,10 @@ export default function ResumeStudio() {
   const [uploadResult, setUploadResult] = useState<{ filename: string; pages: number; characters: number; text: string } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [resumesList, setResumesList] = useState([
-    { id: "r1", name: "Alex_Kim_SWE_v4.pdf", role: "Software Engineering", updated: "2d ago", ats: 92 },
-    { id: "r2", name: "Alex_Kim_ML_Research.pdf", role: "ML Research", updated: "5d ago", ats: 88 },
-    { id: "r3", name: "Alex_Kim_Frontend.pdf", role: "Frontend / Design Eng", updated: "1w ago", ats: 95 },
-  ]);
+
+  const { data: resumesData } = useResumes();
+  const deleteResume = useDeleteResume();
+  const resumesList = resumesData?.items ?? [];
 
   const [coverCompany, setCoverCompany] = useState("");
   const [coverRole, setCoverRole] = useState("");
@@ -103,7 +102,6 @@ export default function ResumeStudio() {
             try {
               const result = await resume.upload(file);
               setUploadResult(result);
-              setResumesList(prev => [...prev, { id: result.filename, name: result.filename, role: "Uploaded", updated: "Just now", ats: Math.min(95, Math.floor(Math.random() * 20) + 75) }]);
               toast.success("Resume uploaded!");
             } catch (err) {
               toast.error(err instanceof Error ? err.message : "Upload failed");
@@ -133,26 +131,30 @@ export default function ResumeStudio() {
 
       <div className="grid lg:grid-cols-3 gap-6">
         {resumesList.map((r) => (
-          <Card key={r.id} className="glass p-5 hover:shadow-glow transition">
+          <Card key={r.filename} className="glass p-5 hover:shadow-glow transition group">
             <div className="flex items-start gap-3 mb-4">
               <div className="h-12 w-12 rounded-xl bg-gradient-primary/10 border border-primary/20 flex items-center justify-center">
                 <FileText className="h-6 w-6 text-primary" />
               </div>
               <div className="flex-1 min-w-0">
-                <div className="font-medium truncate">{r.name}</div>
-                <div className="text-xs text-muted-foreground">{r.role} · {r.updated}</div>
+                <div className="font-medium truncate">{r.filename}</div>
+                <div className="text-xs text-muted-foreground">{r.pages} pages · {r.characters.toLocaleString()} chars</div>
               </div>
             </div>
             <div className="space-y-2">
               <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">ATS Score</span>
-                <span className="font-display font-semibold gradient-text">{r.ats}/100</span>
+                <span className="text-muted-foreground">Parsed</span>
+                <span className="font-display font-semibold gradient-text">{r.characters > 0 ? "Ready" : "Empty"}</span>
               </div>
-              <Progress value={r.ats} className="h-1.5" />
+              <Progress value={r.characters > 0 ? 100 : 0} className="h-1.5" />
             </div>
             <div className="flex gap-2 mt-4">
-              <Button variant="outline" size="sm" className="flex-1">Edit</Button>
-              <Button variant="outline" size="sm" className="gap-1"><Download className="h-3 w-3" /></Button>
+              <Button variant="outline" size="sm" className="flex-1" onClick={() => deleteResume.mutate(r.filename, {
+                onSuccess: () => toast.success("Resume deleted"),
+                onError: () => toast.error("Failed to delete resume"),
+              })} disabled={deleteResume.isPending}>
+                <Trash2 className="h-3 w-3 mr-1" /> Delete
+              </Button>
             </div>
           </Card>
         ))}

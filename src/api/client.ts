@@ -328,6 +328,23 @@ export const resume = {
 
     return response.json() as Promise<{ filename: string; pages: number; characters: number; text: string }>;
   },
+
+  list: () => request<{ items: ResumeItem[]; total: number }>("/resume"),
+
+  delete: (filename: string) => request<void>(`/resume/${encodeURIComponent(filename)}`, { method: "DELETE" }),
+};
+
+export const interview = {
+  sessions: {
+    list: () => request<{ items: InterviewSession[] }>("/agents/interview-sessions"),
+    create: (data: { company: string; type: string; score?: number; duration?: string }) =>
+      request<InterviewSession>("/agents/interview-sessions", { method: "POST", body: data }),
+  },
+  feedback: (data: { question: string; answer: string; company?: string; role?: string }) =>
+    request<{ feedback: string; score?: number; strengths?: string[]; improvements?: string[] }>(
+      "/agents/interview-feedback",
+      { method: "POST", body: data }
+    ),
 };
 
 export type Notification = {
@@ -343,6 +360,22 @@ export const notifications = {
   list: () => request<{ items: Notification[] }>("/notifications"),
   markRead: (id: string) => request<Notification>(`/notifications/${id}`, { method: "PATCH" }),
   markAllRead: () => request<{ status: string }>("/notifications/read-all", { method: "POST" }),
+};
+
+export type ResumeItem = {
+  filename: string;
+  pages: number;
+  characters: number;
+  uploaded_at?: string;
+};
+
+export type InterviewSession = {
+  id: string;
+  company: string;
+  type: string;
+  date: string;
+  score?: number;
+  duration?: string;
 };
 
 export type MemoryEntry = {

@@ -24,7 +24,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Play, Mic, Trophy, Clock, BookOpen, Loader2, MessageSquare, Send, Sparkles } from "lucide-react";
-import { useInterviewPrep } from "@/api/hooks";
+import { useInterviewPrep, useInterviewSessions, useCreateInterviewSession, useInterviewFeedback } from "@/api/hooks";
 import { toast } from "sonner";
 
 const questionBank: Record<string, string[]> = {
@@ -52,28 +52,11 @@ const questionBank: Record<string, string[]> = {
   ],
 };
 
-const sessions = [
-  { id: "s1", company: "Stripe", type: "Behavioral", date: "Dec 3", score: 82, duration: "32 min" },
-  { id: "s2", company: "Anthropic", type: "ML Technical", date: "Dec 2", score: 76, duration: "45 min" },
-  { id: "s3", company: "Linear", type: "System Design", date: "Nov 28", score: 88, duration: "50 min" },
-];
-
 const categoryStats = [
   { name: "Behavioral", done: 24, total: 40, score: 82 },
   { name: "Technical", done: 38, total: 60, score: 76 },
   { name: "System Design", done: 12, total: 20, score: 88 },
   { name: "ML/AI", done: 18, total: 30, score: 79 },
-];
-
-const mockFeedbackOptions = [
-  "Great answer! Consider adding more specific metrics to quantify your impact.",
-  "Strong response. You could also mention how you handled stakeholder communication.",
-  "Good structure. Try to include a concrete example of tradeoffs you considered.",
-  "Well articulated. For bonus points, mention what you'd do differently next time.",
-  "Solid answer. Adding a brief note about lessons learned would strengthen it further.",
-  "Clear and concise. Consider elaborating on the technical decisions involved.",
-  "Nice approach. You might also discuss how you prioritized competing constraints.",
-  "Well framed. Including the timeline and team size would add helpful context.",
 ];
 
 export default function InterviewPrep() {
@@ -87,10 +70,14 @@ export default function InterviewPrep() {
   const [generatedTips, setGeneratedTips] = useState<string[]>([]);
   const [selectedQuestion, setSelectedQuestion] = useState<string | null>(null);
   const [userAnswer, setUserAnswer] = useState("");
-  const [feedback, setFeedback] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<{ feedback: string; score?: number; strengths?: string[]; improvements?: string[] } | null>(null);
   const [isGettingFeedback, setIsGettingFeedback] = useState(false);
 
   const interviewPrep = useInterviewPrep();
+  const { data: sessionsData } = useInterviewSessions();
+  const createSession = useCreateInterviewSession();
+  const interviewFeedback = useInterviewFeedback();
+  const sessions = sessionsData?.items ?? [];
 
   const handleGenerate = async () => {
     if (!company || !role) {
@@ -120,17 +107,25 @@ export default function InterviewPrep() {
     }
   };
 
-  const handleGetFeedback = () => {
+  const handleGetFeedback = async () => {
     if (!userAnswer.trim()) {
       toast.error("Please write an answer first");
       return;
     }
     setIsGettingFeedback(true);
-    setTimeout(() => {
-      const randomFeedback = mockFeedbackOptions[Math.floor(Math.random() * mockFeedbackOptions.length)];
-      setFeedback(randomFeedback);
+    try {
+      const result = await interviewFeedback.mutateAsync({
+        question: selectedQuestion || "",
+        answer: userAnswer,
+        company,
+        role,
+      });
+      setFeedback(result);
+    } catch {
+      toast.error("Failed to get feedback");
+    } finally {
       setIsGettingFeedback(false);
-    }, 800);
+    }
   };
 
   const displayQuestions = generatedQuestions.length > 0
@@ -247,9 +242,22 @@ export default function InterviewPrep() {
                         {feedback && (
                           <div className="flex items-start gap-3 p-4 rounded-lg bg-primary/5 border border-primary/10">
                             <Sparkles className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
-                            <div>
-                              <div className="text-xs font-semibold text-primary mb-1">AI Feedback</div>
-                              <p className="text-sm text-muted-foreground">{feedback}</p>
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-semibold text-primary">AI Feedback</span>
+                                {feedback.score != null && (
+                                  <span className={`text-xs font-bold ${feedback.score >= 70 ? "text-success" : feedback.score >= 40 ? "text-warning" : "text-destructive"}`}>
+                                    Score: {feedback.score}/100
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-sm text-muted-foreground">{feedback.feedback}</p>
+                              {feedback.strengths && feedback.strengths.length > 0 && (
+                                <div className="text-xs"><span className="text-success font-medium">Strengths:</span> {feedback.strengths.join(", ")}</div>
+                              )}
+                              {feedback.improvements && feedback.improvements.length > 0 && (
+                                <div className="text-xs"><span className="text-warning font-medium">Improve:</span> {feedback.improvements.join(", ")}</div>
+                              )}
                             </div>
                           </div>
                         )}

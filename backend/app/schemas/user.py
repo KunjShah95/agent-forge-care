@@ -419,3 +419,51 @@ class NotificationOut(BaseModel):
 
 class NotificationList(BaseModel):
     items: list[NotificationOut]
+
+
+# ─── Resume ──────────────────────────────────────────────
+
+
+class ResumeOut(BaseModel):
+    filename: str
+    pages: int
+    characters: int
+    uploaded_at: Optional[str] = None
+
+
+class ResumeList(BaseModel):
+    items: list[ResumeOut]
+    total: int
+
+
+# ─── Interview Sessions ──────────────────────────────────
+
+
+class InterviewSessionOut(BaseModel):
+    id: str
+    company: str
+    type: str
+    date: str
+    score: Optional[int] = None
+    duration: Optional[str] = None
+
+
+class InterviewSessionList(BaseModel):
+    items: list[InterviewSessionOut]
+
+
+class InterviewSessionCreate(BaseModel):
+    company: str
+    type: str
+    score: Optional[int] = None
+    duration: Optional[str] = None
+
+
+# ─── Interview Feedback ──────────────────────────────────
+
+
+class InterviewFeedbackRequest(BaseModel):
+    question: str
+    answer: str
+    company: Optional[str] = None
+    role: Optional[str] = None
