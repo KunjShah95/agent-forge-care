@@ -21,15 +21,14 @@ class ProfileService:
 
     async def get_profile_skills(self, profile_id: str) -> list[ProfileSkill]:
         result = await self.db.execute(
-            select(ProfileSkill)
-            .where(ProfileSkill.profile_id == profile_id)
+            select(ProfileSkill).where(ProfileSkill.profile_id == profile_id)
         )
         return list(result.scalars().all())
 
-    async def add_skill(self, profile_id: str, name: str, proficiency: str = "intermediate") -> ProfileSkill:
-        skill_result = await self.db.execute(
-            select(Skill).where(Skill.name == name)
-        )
+    async def add_skill(
+        self, profile_id: str, name: str, proficiency: str = "intermediate"
+    ) -> ProfileSkill:
+        skill_result = await self.db.execute(select(Skill).where(Skill.name == name))
         skill = skill_result.scalar_one_or_none()
         if not skill:
             skill = Skill(name=name)
@@ -46,19 +45,17 @@ class ProfileService:
         if existing:
             return existing
 
-        ps = ProfileSkill(profile_id=profile_id, skill_id=skill.id, proficiency=proficiency)
+        ps = ProfileSkill(
+            profile_id=profile_id, skill_id=skill.id, proficiency=proficiency
+        )
         self.db.add(ps)
         await self.db.flush()
         return ps
 
     async def get_skill_names(self, profile_id: str) -> list[str]:
-        skills = await self.get_profile_skills(profile_id)
-        names = []
-        for ps in skills:
-            skill_result = await self.db.execute(
-                select(Skill).where(Skill.id == ps.skill_id)
-            )
-            skill = skill_result.scalar_one_or_none()
-            if skill:
-                names.append(skill.name)
-        return names
+        result = await self.db.execute(
+            select(Skill.name)
+            .join(ProfileSkill, ProfileSkill.skill_id == Skill.id)
+            .where(ProfileSkill.profile_id == profile_id)
+        )
+        return list(result.scalars().all())

@@ -5,7 +5,13 @@ from sqlalchemy import select
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User, Profile, Skill, ProfileSkill
-from app.schemas.user import ProfileOut, ProfileUpdate, ProfileSkillOut, SkillOut, AddSkillRequest
+from app.schemas.user import (
+    ProfileOut,
+    ProfileUpdate,
+    ProfileSkillOut,
+    SkillOut,
+    AddSkillRequest,
+)
 
 router = APIRouter()
 
@@ -52,18 +58,12 @@ async def get_skills(
 ):
     """List all skills for the current user."""
     result = await db.execute(
-        select(Profile).where(Profile.user_id == user.id)
+        select(ProfileSkill)
+        .join(Skill, ProfileSkill.skill_id == Skill.id)
+        .join(Profile, ProfileSkill.profile_id == Profile.id)
+        .where(Profile.user_id == user.id)
     )
-    profile = result.scalar_one_or_none()
-    if not profile:
-        return []
-    await db.flush()
-    # Re-fetch with relationship loaded
-    profile_result = await db.execute(
-        select(Profile).where(Profile.id == profile.id)
-    )
-    profile = profile_result.scalar_one()
-    return profile.skills
+    return list(result.scalars().all())
 
 
 @router.post("/skills", response_model=ProfileSkillOut, status_code=201)
@@ -98,7 +98,9 @@ async def add_skill(
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=409, detail="Skill already added")
 
-    ps = ProfileSkill(profile_id=profile.id, skill_id=skill.id, proficiency=data.proficiency)
+    ps = ProfileSkill(
+        profile_id=profile.id, skill_id=skill.id, proficiency=data.proficiency
+    )
     db.add(ps)
     await db.flush()
     return ps

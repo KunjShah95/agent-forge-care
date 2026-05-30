@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, func
 
 from app.database import get_db
 from app.dependencies import get_current_user
@@ -12,17 +12,33 @@ router = APIRouter()
 
 @router.get("", response_model=MemoryList)
 async def list_memory(
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """List all memory entries for the current user."""
+    count_result = await db.execute(
+        select(func.count())
+        .select_from(MemoryEntry)
+        .where(MemoryEntry.user_id == user.id)
+    )
+    total = count_result.scalar()
+
+    offset = (page - 1) * limit
     result = await db.execute(
         select(MemoryEntry)
         .where(MemoryEntry.user_id == user.id)
         .order_by(desc(MemoryEntry.updated_at))
+        .offset(offset)
+        .limit(limit)
     )
     entries = result.scalars().all()
-    return MemoryList(items=[MemoryOut.model_validate(e) for e in entries])
+    return MemoryList(
+        items=[MemoryOut.model_validate(e) for e in entries],
+        total=total,
+        page=page,
+    )
 
 
 @router.post("", response_model=MemoryOut, status_code=201)
@@ -86,9 +102,7 @@ async def get_memory_context(
     db: AsyncSession = Depends(get_db),
 ):
     """Get condensed memory context for agent system use."""
-    result = await db.execute(
-        select(MemoryEntry).where(MemoryEntry.user_id == user.id)
-    )
+    result = await db.execute(select(MemoryEntry).where(MemoryEntry.user_id == user.id))
     entries = result.scalars().all()
 
     context = {}

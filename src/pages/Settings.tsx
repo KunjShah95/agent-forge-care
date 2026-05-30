@@ -1,3 +1,6 @@
+import { useEffect, useState } from "react";
+import { useForm } from "react-hook-form";
+import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,8 +9,92 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useProfile, useUpdateProfile } from "@/api/hooks";
+
+type ProfileFormValues = {
+  school: string;
+  graduation_date: string;
+  portfolio_url: string;
+  linkedin_url: string;
+  github_url: string;
+  bio: string;
+  career_goal: string;
+  salary_min: string;
+  salary_max: string;
+  target_locations: string;
+  role_types: string;
+  company_sizes: string;
+};
+
+const agentNames = ["Planner", "Internship", "Job", "Research", "Resume", "Interview", "Networking", "Opportunity Monitor"];
 
 export default function Settings() {
+  const { data: profile, isLoading } = useProfile();
+  const updateProfile = useUpdateProfile();
+  const [agentToggles, setAgentToggles] = useState<Record<string, boolean>>(
+    Object.fromEntries(agentNames.map((a) => [a, true]))
+  );
+
+  const { register, handleSubmit, reset, formState: { isDirty } } = useForm<ProfileFormValues>({
+    defaultValues: {
+      school: "",
+      graduation_date: "",
+      portfolio_url: "",
+      linkedin_url: "",
+      github_url: "",
+      bio: "",
+      career_goal: "",
+      salary_min: "",
+      salary_max: "",
+      target_locations: "",
+      role_types: "",
+      company_sizes: "",
+    },
+  });
+
+  useEffect(() => {
+    if (profile) {
+      reset({
+        school: profile.school || "",
+        graduation_date: profile.graduation_date || "",
+        portfolio_url: profile.portfolio_url || "",
+        linkedin_url: profile.linkedin_url || "",
+        github_url: profile.github_url || "",
+        bio: profile.bio || "",
+        career_goal: profile.career_goal || "",
+        salary_min: profile.salary_min?.toString() || "",
+        salary_max: profile.salary_max?.toString() || "",
+        target_locations: profile.target_locations?.join(", ") || "",
+        role_types: profile.role_types?.join(", ") || "",
+        company_sizes: profile.company_sizes?.join(", ") || "",
+      });
+    }
+  }, [profile, reset]);
+
+  const onSubmit = (data: ProfileFormValues) => {
+    updateProfile.mutate(
+      {
+        school: data.school || undefined,
+        graduation_date: data.graduation_date || undefined,
+        portfolio_url: data.portfolio_url || undefined,
+        linkedin_url: data.linkedin_url || undefined,
+        github_url: data.github_url || undefined,
+        bio: data.bio || undefined,
+        career_goal: data.career_goal || undefined,
+        salary_min: data.salary_min ? Number(data.salary_min) : undefined,
+        salary_max: data.salary_max ? Number(data.salary_max) : undefined,
+        target_locations: data.target_locations ? data.target_locations.split(",").map((s) => s.trim()).filter(Boolean) : [],
+        role_types: data.role_types ? data.role_types.split(",").map((s) => s.trim()).filter(Boolean) : [],
+        company_sizes: data.company_sizes ? data.company_sizes.split(",").map((s) => s.trim()).filter(Boolean) : [],
+      },
+      {
+        onSuccess: () => toast.success("Profile updated successfully"),
+        onError: () => toast.error("Failed to update profile"),
+      }
+    );
+  };
+
   return (
     <div className="space-y-6 max-w-3xl">
       <div>
@@ -26,24 +113,51 @@ export default function Settings() {
           <Card className="glass p-6 space-y-4">
             <div className="flex items-center gap-4">
               <Avatar className="h-16 w-16 border-2 border-primary/30">
-                <AvatarFallback className="bg-gradient-primary text-primary-foreground text-lg font-display">AK</AvatarFallback>
+                <AvatarFallback className="bg-gradient-primary text-primary-foreground text-lg font-display">
+                  {isLoading ? "..." : "U"}
+                </AvatarFallback>
               </Avatar>
               <Button variant="outline" size="sm">Upload photo</Button>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div><Label>Name</Label><Input defaultValue="Alex Kim" className="mt-1.5" /></div>
-              <div><Label>Email</Label><Input defaultValue="alex@stanford.edu" className="mt-1.5" /></div>
-              <div><Label>School</Label><Input defaultValue="Stanford University" className="mt-1.5" /></div>
-              <div><Label>Graduation</Label><Input defaultValue="June 2026" className="mt-1.5" /></div>
-              <div><Label>Portfolio</Label><Input defaultValue="https://alexkim.dev" className="mt-1.5" /></div>
-              <div><Label>LinkedIn</Label><Input defaultValue="linkedin.com/in/alexkim" className="mt-1.5" /></div>
-            </div>
-            <Button className="bg-gradient-primary shadow-glow">Save changes</Button>
+            {isLoading ? (
+              <div className="grid grid-cols-2 gap-4">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="space-y-2">
+                    <Skeleton className="h-4 w-16" />
+                    <Skeleton className="h-10 w-full" />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <form onSubmit={handleSubmit(onSubmit)}>
+                <div className="grid grid-cols-2 gap-4">
+                  <div><Label>School</Label><Input {...register("school")} className="mt-1.5" /></div>
+                  <div><Label>Graduation Date</Label><Input {...register("graduation_date")} className="mt-1.5" placeholder="e.g., June 2026" /></div>
+                  <div><Label>Portfolio URL</Label><Input {...register("portfolio_url")} className="mt-1.5" /></div>
+                  <div><Label>LinkedIn</Label><Input {...register("linkedin_url")} className="mt-1.5" /></div>
+                  <div><Label>GitHub</Label><Input {...register("github_url")} className="mt-1.5" /></div>
+                  <div><Label>Career Goal</Label><Input {...register("career_goal")} className="mt-1.5" /></div>
+                  <div><Label>Min Salary</Label><Input {...register("salary_min")} type="number" className="mt-1.5" /></div>
+                  <div><Label>Max Salary</Label><Input {...register("salary_max")} type="number" className="mt-1.5" /></div>
+                  <div className="col-span-2"><Label>Target Locations (comma-separated)</Label><Input {...register("target_locations")} className="mt-1.5" placeholder="e.g., San Francisco, Remote" /></div>
+                  <div><Label>Role Types (comma-separated)</Label><Input {...register("role_types")} className="mt-1.5" placeholder="e.g., Internship, New Grad" /></div>
+                  <div><Label>Company Sizes (comma-separated)</Label><Input {...register("company_sizes")} className="mt-1.5" placeholder="e.g., Startup, Mid-size" /></div>
+                  <div className="col-span-2"><Label>Bio</Label><Input {...register("bio")} className="mt-1.5" /></div>
+                </div>
+                <Button
+                  type="submit"
+                  className="bg-gradient-primary shadow-glow mt-4"
+                  disabled={updateProfile.isPending || !isDirty}
+                >
+                  {updateProfile.isPending ? "Saving..." : "Save changes"}
+                </Button>
+              </form>
+            )}
           </Card>
         </TabsContent>
 
         <TabsContent value="agents" className="mt-4 space-y-3">
-          {["Planner", "Internship", "Job", "Research", "Resume", "Interview", "Networking", "Opportunity Monitor"].map((a) => (
+          {agentNames.map((a) => (
             <Card key={a} className="glass p-4 flex items-center gap-4">
               <div className="h-8 w-8 rounded-lg bg-gradient-primary/10 border border-primary/20 flex items-center justify-center text-xs font-bold text-primary">
                 {a[0]}
@@ -53,7 +167,10 @@ export default function Settings() {
                 <div className="text-xs text-muted-foreground">Active · Last run 12 min ago</div>
               </div>
               <Badge variant="outline" className="bg-success/10 text-success border-success/20">Healthy</Badge>
-              <Switch defaultChecked />
+              <Switch
+                checked={agentToggles[a]}
+                onCheckedChange={(checked) => setAgentToggles((prev) => ({ ...prev, [a]: checked }))}
+              />
             </Card>
           ))}
         </TabsContent>

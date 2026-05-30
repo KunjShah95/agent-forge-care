@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings
+from pydantic import model_validator
 from typing import List
 import os
 
@@ -6,7 +7,7 @@ import os
 class Settings(BaseSettings):
     # App
     app_name: str = "AgentForge Career OS"
-    debug: bool = True
+    debug: bool = False
     port: int = 8000
     cors_origins: str = "http://localhost:5173"
 
@@ -15,7 +16,9 @@ class Settings(BaseSettings):
         return [o.strip() for o in self.cors_origins.split(",")]
 
     # Database
-    database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/agentforge"
+    database_url: str = (
+        "postgresql+asyncpg://postgres:postgres@localhost:5432/agentforge"
+    )
 
     # JWT
     jwt_secret: str = "change-me-to-a-random-secret-key"
@@ -48,6 +51,14 @@ class Settings(BaseSettings):
         "env_file_encoding": "utf-8",
         "extra": "ignore",
     }
+
+    @model_validator(mode="after")
+    def validate_jwt_secret(self):
+        if not self.debug and self.jwt_secret == "change-me-to-a-random-secret-key":
+            raise ValueError(
+                "jwt_secret must be changed from the default value when debug is False"
+            )
+        return self
 
 
 settings = Settings()

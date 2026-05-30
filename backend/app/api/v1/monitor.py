@@ -1,27 +1,49 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, func
 
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User, AlertConfig
-from app.schemas.user import AlertConfigCreate, AlertConfigUpdate, AlertConfigOut
+from app.schemas.user import (
+    AlertConfigCreate,
+    AlertConfigUpdate,
+    AlertConfigOut,
+    AlertConfigList,
+    MonitorSettingsUpdate,
+)
 
 router = APIRouter()
 
 
-@router.get("/alerts", response_model=list[AlertConfigOut])
+@router.get("/alerts", response_model=AlertConfigList)
 async def list_alert_configs(
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """List all alert configurations."""
+    count_result = await db.execute(
+        select(func.count())
+        .select_from(AlertConfig)
+        .where(AlertConfig.user_id == user.id)
+    )
+    total = count_result.scalar()
+
+    offset = (page - 1) * limit
     result = await db.execute(
         select(AlertConfig)
         .where(AlertConfig.user_id == user.id)
         .order_by(desc(AlertConfig.created_at))
+        .offset(offset)
+        .limit(limit)
     )
-    return [AlertConfigOut.model_validate(c) for c in result.scalars().all()]
+    return AlertConfigList(
+        items=[AlertConfigOut.model_validate(c) for c in result.scalars().all()],
+        total=total,
+        page=page,
+    )
 
 
 @router.post("/alerts", response_model=AlertConfigOut, status_code=201)
@@ -76,13 +98,13 @@ async def delete_alert_config(
 
 @router.patch("/settings")
 async def update_monitor_settings(
-    data: dict,
+    data: MonitorSettingsUpdate,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Update opportunity monitor settings."""
-    # Store in memory as user preference
     from app.models.user import MemoryEntry
+
     result = await db.execute(
         select(MemoryEntry).where(
             MemoryEntry.user_id == user.id,
@@ -91,9 +113,13 @@ async def update_monitor_settings(
     )
     entry = result.scalar_one_or_none()
     if entry:
-        entry.value = data
+        entry.value = data.model_dump(exclude_unset=True)
     else:
-        entry = MemoryEntry(user_id=user.id, key="monitor_settings", value=data)
+        entry = MemoryEntry(
+            user_id=user.id,
+            key="monitor_settings",
+            value=data.model_dump(exclude_unset=True),
+        )
         db.add(entry)
     await db.flush()
     return {"status": "updated"}

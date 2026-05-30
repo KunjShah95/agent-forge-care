@@ -16,14 +16,14 @@ from app.config import settings
 logger = logging.getLogger("agentforge.embeddings")
 
 
-def get_text_embedding(text: str) -> list[float]:
+async def get_text_embedding(text: str) -> list[float]:
     """
     Get embedding vector for a text string.
     Uses OpenAI if API key is available, otherwise uses a deterministic fallback.
     """
     if settings.openai_api_key:
         try:
-            return _get_openai_embedding(text)
+            return await _get_openai_embedding(text)
         except Exception as e:
             logger.warning("OpenAI embedding failed, using fallback: %s", e)
             return _get_fallback_embedding(text)
@@ -31,13 +31,14 @@ def get_text_embedding(text: str) -> list[float]:
         return _get_fallback_embedding(text)
 
 
-def _get_openai_embedding(text: str) -> list[float]:
+async def _get_openai_embedding(text: str) -> list[float]:
     """Get embedding using OpenAI API."""
     import openai
-    client = openai.OpenAI(api_key=settings.openai_api_key)
-    response = client.embeddings.create(
+
+    client = openai.AsyncOpenAI(api_key=settings.openai_api_key)
+    response = await client.embeddings.create(
         model="text-embedding-3-small",
-        input=text[:8000],  # Truncate to token limit
+        input=text[:8000],
     )
     return response.data[0].embedding
 
@@ -54,8 +55,9 @@ def _get_fallback_embedding(text: str, dimensions: int = 384) -> list[float]:
     hash_bytes = hashlib.sha256(text.encode()).digest()
 
     # Generate deterministic vector using numpy
-    np.random.seed(int.from_bytes(hash_bytes[:4], "big"))
-    vector = np.random.randn(dimensions).astype(np.float32)
+    seed_val = int.from_bytes(hash_bytes[:4], "big")
+    rng = np.random.RandomState(seed_val)
+    vector = rng.randn(dimensions).astype(np.float32)
 
     # Normalize to unit length
     norm = np.linalg.norm(vector)

@@ -1,9 +1,13 @@
+import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Building2, TrendingUp, BookOpen, FileText } from "lucide-react";
+import { Building2, TrendingUp, BookOpen, FileText, Search, Loader2, Save } from "lucide-react";
+import { useResearch, useCreateMemory, useMemory } from "@/api/hooks";
+import { toast } from "sonner";
 
 const companyProfiles = [
   { id: "c1", name: "Anthropic", initials: "A", industry: "AI Research", size: "500-1000", glassdoor: 4.6, notes: "Mission-driven. Values alignment research." },
@@ -40,6 +44,45 @@ const defaultNotes = `# Anthropic deep dive
 - "What did the last person in this role struggle with most?"`;
 
 export default function ResearchCenter() {
+  const [researchInput, setResearchInput] = useState("");
+  const [researchResult, setResearchResult] = useState<Record<string, unknown> | null>(null);
+  const [researchedCompany, setResearchedCompany] = useState("");
+  const [notes, setNotes] = useState(defaultNotes);
+
+  const research = useResearch();
+  const createMemory = useCreateMemory();
+  const { data: memoriesData } = useMemory();
+
+  const existingNotes = memoriesData?.items?.find?.((m) => m.key === "research_notes");
+  if (existingNotes && notes === defaultNotes && typeof existingNotes.value === "string") {
+    setNotes(existingNotes.value);
+  }
+
+  const handleResearch = async (companyName?: string) => {
+    const target = companyName || researchInput;
+    if (!target) {
+      toast.error("Please enter a company name");
+      return;
+    }
+    try {
+      const result = await research.mutateAsync({ company: target });
+      setResearchResult(result);
+      setResearchedCompany(target);
+      toast.success(`Research complete for ${target}`);
+    } catch {
+      toast.error("Research failed. Please try again.");
+    }
+  };
+
+  const handleSaveNotes = async () => {
+    try {
+      await createMemory.mutateAsync({ key: "research_notes", value: notes });
+      toast.success("Notes saved");
+    } catch {
+      toast.error("Failed to save notes");
+    }
+  };
+
   return (
     <div className="space-y-6 max-w-[1400px]">
       <div>
@@ -55,7 +98,42 @@ export default function ResearchCenter() {
           <TabsTrigger value="notes"><FileText className="h-3 w-3 mr-1" /> Notes</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="companies" className="mt-4">
+        <TabsContent value="companies" className="mt-4 space-y-4">
+          <Card className="glass p-4">
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Enter company name to research..."
+                  value={researchInput}
+                  onChange={(e) => setResearchInput(e.target.value)}
+                  className="pl-9"
+                  onKeyDown={(e) => e.key === "Enter" && handleResearch()}
+                />
+              </div>
+              <Button
+                className="bg-gradient-primary shadow-glow gap-2"
+                onClick={() => handleResearch()}
+                disabled={research.isPending}
+              >
+                {research.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                Research
+              </Button>
+            </div>
+          </Card>
+
+          {researchResult && (
+            <Card className="glass p-5 border-primary/30">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-display font-semibold">Research: {researchedCompany}</h3>
+                <Badge variant="outline">AI Generated</Badge>
+              </div>
+              <pre className="text-xs text-muted-foreground whitespace-pre-wrap font-mono bg-muted/30 p-4 rounded-lg overflow-auto max-h-64">
+                {JSON.stringify(researchResult, null, 2)}
+              </pre>
+            </Card>
+          )}
+
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
             {companyProfiles.map((c) => (
               <Card key={c.id} className="glass p-5 hover:shadow-glow transition">
@@ -72,7 +150,16 @@ export default function ResearchCenter() {
                   </Badge>
                 </div>
                 <p className="text-sm text-muted-foreground mb-3">{c.notes}</p>
-                <Button variant="outline" size="sm" className="w-full">View profile</Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  onClick={() => handleResearch(c.name)}
+                  disabled={research.isPending}
+                >
+                  {research.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                  View profile
+                </Button>
               </Card>
             ))}
           </div>
@@ -103,11 +190,23 @@ export default function ResearchCenter() {
         </TabsContent>
 
         <TabsContent value="notes" className="mt-4">
-          <Card className="glass p-6">
-            <h3 className="font-display font-semibold mb-3">Personal research notes</h3>
+          <Card className="glass p-6 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="font-display font-semibold">Personal research notes</h3>
+              <Button
+                size="sm"
+                className="gap-2 bg-gradient-primary shadow-glow"
+                onClick={handleSaveNotes}
+                disabled={createMemory.isPending}
+              >
+                {createMemory.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                Save
+              </Button>
+            </div>
             <Textarea
               rows={14}
-              defaultValue={defaultNotes}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
               className="font-mono text-xs"
             />
           </Card>

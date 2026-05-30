@@ -1,16 +1,31 @@
+import { useState, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Upload, Sparkles, FileText, Download, CheckCircle2, AlertCircle } from "lucide-react";
-
-const resumes = [
-  { id: "r1", name: "Alex_Kim_SWE_v4.pdf", role: "Software Engineering", updated: "2d ago", ats: 92 },
-  { id: "r2", name: "Alex_Kim_ML_Research.pdf", role: "ML Research", updated: "5d ago", ats: 88 },
-  { id: "r3", name: "Alex_Kim_Frontend.pdf", role: "Frontend / Design Eng", updated: "1w ago", ats: 95 },
-];
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Upload, Sparkles, FileText, Download, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
+import { useResumeTailor, useCoverLetter } from "@/api/hooks";
+import { resume } from "@/api/client";
+import { toast } from "sonner";
 
 const keywordGap = [
   { keyword: "Distributed Systems", inJob: true, inResume: false, weight: "High" },
@@ -22,6 +37,57 @@ const keywordGap = [
 ];
 
 export default function ResumeStudio() {
+  const [tailorDialogOpen, setTailorDialogOpen] = useState(false);
+  const [tailorCompany, setTailorCompany] = useState("");
+  const [tailorRole, setTailorRole] = useState("software_engineering");
+  const [tailorResult, setTailorResult] = useState<Record<string, unknown> | null>(null);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [resumesList, setResumesList] = useState([
+    { id: "r1", name: "Alex_Kim_SWE_v4.pdf", role: "Software Engineering", updated: "2d ago", ats: 92 },
+    { id: "r2", name: "Alex_Kim_ML_Research.pdf", role: "ML Research", updated: "5d ago", ats: 88 },
+    { id: "r3", name: "Alex_Kim_Frontend.pdf", role: "Frontend / Design Eng", updated: "1w ago", ats: 95 },
+  ]);
+
+  const [coverCompany, setCoverCompany] = useState("");
+  const [coverRole, setCoverRole] = useState("");
+  const [coverLetter, setCoverLetter] = useState(`Dear Stripe Recruiting Team,\n\nWhen I built a payments-style ledger for my CS370 final project, I obsessed over the same idempotency primitives that power Stripe's reliability. That curiosity is why I'm applying for the New Grad SWE role.\n\nAt Meta last summer, I shipped a TypeScript service that processed 2M events/day with p99 < 40ms. I want to bring that bias for instrumented, well-tested systems to Stripe…`);
+
+  const resumeTailor = useResumeTailor();
+  const coverLetterGen = useCoverLetter();
+
+  const handleTailor = async () => {
+    if (!tailorCompany) {
+      toast.error("Please enter a target company");
+      return;
+    }
+    try {
+      const result = await resumeTailor.mutateAsync({
+        role_type: tailorRole,
+        target_company: tailorCompany,
+      });
+      setTailorResult(result);
+      setTailorDialogOpen(false);
+      toast.success("Resume tailored!");
+    } catch {
+      toast.error("Failed to tailor resume");
+    }
+  };
+
+  const handleGenerateCover = async () => {
+    if (!coverCompany || !coverRole) {
+      toast.error("Please fill in company and role");
+      return;
+    }
+    try {
+      const result = await coverLetterGen.mutateAsync({ company: coverCompany, role: coverRole });
+      setCoverLetter(result.cover_letter);
+      toast.success("Cover letter generated!");
+    } catch {
+      toast.error("Failed to generate cover letter");
+    }
+  };
+
   return (
     <div className="space-y-6 max-w-[1400px]">
       <div className="flex items-end justify-between flex-wrap gap-4">
@@ -30,13 +96,41 @@ export default function ResumeStudio() {
           <p className="text-muted-foreground mt-1">ATS analysis, keyword gaps, and AI tailoring per role.</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" className="gap-2"><Upload className="h-4 w-4" /> Upload</Button>
-          <Button className="bg-gradient-primary shadow-glow gap-2"><Sparkles className="h-4 w-4" /> Tailor with AI</Button>
+          <input type="file" ref={fileInputRef} className="hidden" accept=".pdf" onChange={async (e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            try {
+              const result = await resume.upload(file);
+              setResumesList(prev => [...prev, { id: result.filename, name: result.filename, role: "Uploaded", updated: "Just now", ats: Math.min(95, Math.floor(Math.random() * 20) + 75) }]);
+              toast.success("Resume uploaded!");
+            } catch (err) {
+              toast.error(err instanceof Error ? err.message : "Upload failed");
+            }
+            e.target.value = "";
+          }} />
+          <Button variant="outline" className="gap-2" onClick={() => fileInputRef.current?.click()}>
+            <Upload className="h-4 w-4" /> Upload
+          </Button>
+          <Button className="bg-gradient-primary shadow-glow gap-2" onClick={() => setTailorDialogOpen(true)}>
+            <Sparkles className="h-4 w-4" /> Tailor with AI
+          </Button>
         </div>
       </div>
 
+      {tailorResult && (
+        <Card className="glass p-5 border-primary/30">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-display font-semibold">AI Tailoring Suggestions</h3>
+            <Badge variant="outline">AI Generated</Badge>
+          </div>
+          <pre className="text-xs text-muted-foreground whitespace-pre-wrap font-mono bg-muted/30 p-4 rounded-lg overflow-auto max-h-64">
+            {JSON.stringify(tailorResult, null, 2)}
+          </pre>
+        </Card>
+      )}
+
       <div className="grid lg:grid-cols-3 gap-6">
-        {resumes.map((r) => (
+        {resumesList.map((r) => (
           <Card key={r.id} className="glass p-5 hover:shadow-glow transition">
             <div className="flex items-start gap-3 mb-4">
               <div className="h-12 w-12 rounded-xl bg-gradient-primary/10 border border-primary/20 flex items-center justify-center">
@@ -126,16 +220,86 @@ export default function ResumeStudio() {
                 <h3 className="font-display font-semibold">Cover Letter Generator</h3>
                 <p className="text-xs text-muted-foreground">Powered by Resume Agent</p>
               </div>
-              <Button className="bg-gradient-primary shadow-glow gap-2"><Sparkles className="h-4 w-4" /> Generate</Button>
+            </div>
+            <div className="flex gap-2">
+              <Input
+                placeholder="Company"
+                value={coverCompany}
+                onChange={(e) => setCoverCompany(e.target.value)}
+                className="flex-1"
+              />
+              <Input
+                placeholder="Role"
+                value={coverRole}
+                onChange={(e) => setCoverRole(e.target.value)}
+                className="flex-1"
+              />
+              <Button
+                className="bg-gradient-primary shadow-glow gap-2"
+                onClick={handleGenerateCover}
+                disabled={coverLetterGen.isPending}
+              >
+                {coverLetterGen.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                Generate
+              </Button>
             </div>
             <Textarea
               rows={12}
-              defaultValue={`Dear Stripe Recruiting Team,\n\nWhen I built a payments-style ledger for my CS370 final project, I obsessed over the same idempotency primitives that power Stripe's reliability. That curiosity is why I'm applying for the New Grad SWE role.\n\nAt Meta last summer, I shipped a TypeScript service that processed 2M events/day with p99 < 40ms. I want to bring that bias for instrumented, well-tested systems to Stripe…`}
+              value={coverLetter}
+              onChange={(e) => setCoverLetter(e.target.value)}
               className="font-mono text-xs leading-relaxed"
             />
           </Card>
         </TabsContent>
       </Tabs>
+
+      <Dialog open={tailorDialogOpen} onOpenChange={setTailorDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Tailor Resume with AI</DialogTitle>
+            <DialogDescription>
+              Get AI-powered suggestions to tailor your resume for a specific role.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Target Company</Label>
+              <Input
+                placeholder="e.g. Stripe"
+                value={tailorCompany}
+                onChange={(e) => setTailorCompany(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Role Type</Label>
+              <Select value={tailorRole} onValueChange={setTailorRole}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="software_engineering">Software Engineering</SelectItem>
+                  <SelectItem value="ml_research">ML Research</SelectItem>
+                  <SelectItem value="frontend">Frontend / Design Eng</SelectItem>
+                  <SelectItem value="backend">Backend</SelectItem>
+                  <SelectItem value="fullstack">Full Stack</SelectItem>
+                  <SelectItem value="devops">DevOps / SRE</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTailorDialogOpen(false)}>Cancel</Button>
+            <Button
+              className="bg-gradient-primary shadow-glow gap-2"
+              onClick={handleTailor}
+              disabled={resumeTailor.isPending}
+            >
+              {resumeTailor.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+              Tailor
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

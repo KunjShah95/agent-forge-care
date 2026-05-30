@@ -133,7 +133,6 @@ async def decompose_goal_node(state: PlannerGraphState) -> dict:
             plan=task_list,
         )
         db.add(planner_goal)
-        await db.flush()
 
         planner_task = AgentTask(
             id=planner_task_id,
@@ -145,7 +144,7 @@ async def decompose_goal_node(state: PlannerGraphState) -> dict:
             started_at=datetime.now(timezone.utc),
         )
         db.add(planner_task)
-        await db.flush()
+        await db.commit()
 
     return {
         "tasks": task_list,

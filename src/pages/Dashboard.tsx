@@ -13,10 +13,13 @@ import {
   Area, AreaChart, CartesianGrid,
 } from "recharts";
 
-import { useMatches, useAgentTasks, useAnalyticsSummary, useAnalyticsActivity, useAnalyticsFunnel, useOpportunities } from "@/api/hooks";
+import { useAuth, useProfile, useRunPlanner, useMatches, useAgentTasks, useAnalyticsSummary, useAnalyticsActivity, useAnalyticsFunnel, useOpportunities } from "@/api/hooks";
 import { StatSkeleton, CardSkeleton, ListSkeleton } from "@/components/ui/skeleton";
 
 export default function Dashboard() {
+  const { data: auth } = useAuth();
+  const { data: profile } = useProfile();
+  const runPlanner = useRunPlanner();
   const { data: matchesData, isLoading: matchesLoading } = useMatches();
   const { data: tasksData, isLoading: tasksLoading } = useAgentTasks();
   const { data: analytics, isLoading: analyticsLoading } = useAnalyticsSummary();
@@ -77,7 +80,7 @@ export default function Dashboard() {
     return tasksData.items.slice(0, 7).map((t) => ({
       id: t.id,
       agent: t.agent_type,
-      action: t.input?.goal ? `Goal: ${t.input.goal}` : t.output?.message || t.status,
+      action: t.input?.goal ? `Goal: ${String(t.input.goal)}` : t.output?.message ? String(t.output.message) : t.status,
       timestamp: t.created_at ? new Date(t.created_at).toLocaleString() : "",
       status: t.status === "running" ? "running" as const
         : t.status === "completed" ? "complete" as const
@@ -103,13 +106,13 @@ export default function Dashboard() {
           <div className="relative flex flex-col lg:flex-row lg:items-end justify-between gap-6">
             <div>
               <Badge className="mb-3 bg-success/10 text-success border-success/20">Career OS active</Badge>
-              <h1 className="font-display text-3xl font-bold">Good morning, Alex 👋</h1>
+              <h1 className="font-display text-3xl font-bold">Good morning, {auth?.full_name || "there"} 👋</h1>
               <p className="text-muted-foreground mt-2 max-w-2xl">
                 The planner has already scanned the market, scored fresh matches, and queued actions for today.
               </p>
             </div>
-            <Button className="bg-gradient-primary shadow-glow gap-2 shrink-0">
-              <Sparkles className="h-4 w-4" /> Run Planner Agent
+            <Button className="bg-gradient-primary shadow-glow gap-2 shrink-0" onClick={() => runPlanner.mutate("Plan my job search strategy for this week")} disabled={runPlanner.isPending}>
+              <Sparkles className="h-4 w-4" /> {runPlanner.isPending ? "Running…" : "Run Planner Agent"}
             </Button>
           </div>
           <div className="relative mt-6 grid sm:grid-cols-3 gap-3">
@@ -137,17 +140,31 @@ export default function Dashboard() {
             </div>
             <Layers3 className="h-4 w-4 text-muted-foreground" />
           </div>
-          <div className="space-y-3 text-sm">
-            <div className="p-3 rounded-lg bg-muted/40 border-l-2 border-primary">
-              <span className="font-medium">Target role:</span> ML research internship with frontier AI labs.
+          {profile ? (
+            <div className="space-y-3 text-sm">
+              {profile.career_goal && (
+                <div className="p-3 rounded-lg bg-muted/40 border-l-2 border-primary">
+                  <span className="font-medium">Career goal:</span> {profile.career_goal}
+                </div>
+              )}
+              {profile.skills && profile.skills.length > 0 && (
+                <div className="p-3 rounded-lg bg-muted/40 border-l-2 border-accent">
+                  <span className="font-medium">Skill profile:</span> {profile.skills.map((s) => s.name).join(", ")}
+                </div>
+              )}
+              {profile.target_locations && profile.target_locations.length > 0 && (
+                <div className="p-3 rounded-lg bg-muted/40 border-l-2 border-success">
+                  <span className="font-medium">Preferences:</span> {profile.target_locations.join(", ")}
+                  {profile.role_types && profile.role_types.length > 0 && ` · ${profile.role_types.join(", ")}`}
+                </div>
+              )}
+              {!profile.career_goal && !profile.skills?.length && !profile.target_locations?.length && (
+                <div className="py-4 text-center text-sm text-muted-foreground">Complete onboarding to populate your profile.</div>
+              )}
             </div>
-            <div className="p-3 rounded-lg bg-muted/40 border-l-2 border-accent">
-              <span className="font-medium">Skill profile:</span> Python, React, TypeScript, PyTorch, research writing.
-            </div>
-            <div className="p-3 rounded-lg bg-muted/40 border-l-2 border-success">
-              <span className="font-medium">Preferences:</span> Ahmedabad + remote-first, high growth, strong mentorship.
-            </div>
-          </div>
+          ) : (
+            <div className="py-8 text-center text-sm text-muted-foreground">Loading profile…</div>
+          )}
         </Card>
       </div>
 
@@ -179,22 +196,25 @@ export default function Dashboard() {
               </div>
               <div>
                 <h2 className="font-display font-semibold">Planner Agent — Today's Reasoning</h2>
-                <p className="text-xs text-muted-foreground">Updated 2 min ago</p>
+                <p className="text-xs text-muted-foreground">{agentTasks.length > 0 ? "Latest agent activity" : "Run the planner to get started"}</p>
               </div>
             </div>
-            <Badge className="bg-success/10 text-success border-success/20">Active</Badge>
+            {agentTasks.length > 0 && <Badge className="bg-success/10 text-success border-success/20">Active</Badge>}
           </div>
-          <div className="space-y-3 text-sm">
-            <div className="p-3 rounded-lg bg-muted/40 border-l-2 border-primary">
-              <span className="font-medium">Goal:</span> Land an ML research internship by mid-Feb.
+          {agentTasks.length > 0 ? (
+            <div className="space-y-3 text-sm">
+              {agentTasks.slice(0, 3).map((t) => (
+                <div key={t.id} className="p-3 rounded-lg bg-muted/40 border-l-2 border-primary">
+                  <span className="font-medium capitalize">{t.agent.replace(/_/g, " ")}:</span> {t.action}
+                  {t.timestamp && <span className="text-xs text-muted-foreground ml-2">({t.timestamp})</span>}
+                </div>
+              ))}
             </div>
-            <div className="p-3 rounded-lg bg-muted/40 border-l-2 border-accent">
-              <span className="font-medium">Priority this week:</span> Stripe OA (due 12/8), Anthropic interview prep (12/10), 2 new applications to research labs.
+          ) : (
+            <div className="py-8 text-center text-sm text-muted-foreground">
+              No planner reasoning yet. Click "Run Planner Agent" to generate a strategy.
             </div>
-            <div className="p-3 rounded-lg bg-muted/40 border-l-2 border-success">
-              <span className="font-medium">Dispatched:</span> Resume Agent → tailoring for MIT REU. Interview Agent → 8 ML system design questions queued.
-            </div>
-          </div>
+          )}
         </Card>
 
         {/* Pipeline */}
@@ -209,7 +229,7 @@ export default function Dashboard() {
                 <div key={i} className="h-4 bg-muted/40 rounded animate-pulse" style={{ width: `${60 + Math.random() * 40}%` }} />
               ))}
             </div>
-          : pipeline.length > 0 ? (
+          ) : pipeline.length > 0 ? (
             <>
               <ResponsiveContainer width="100%" height={180}>
                 <BarChart data={pipeline}>
@@ -271,7 +291,7 @@ export default function Dashboard() {
         <Card className="glass p-6">
           <h2 className="font-display font-semibold mb-4">Upcoming Deadlines</h2>
           {oppsLoading ? (
-            <ListSkeleton rows={5} />
+            <ListSkeleton count={5} />
           ) : deadlines.length > 0 ? (
             <div className="space-y-3">
               {deadlines.map((d) => (
@@ -336,7 +356,7 @@ export default function Dashboard() {
         <Card className="glass p-6">
           <h2 className="font-display font-semibold mb-4">Agent Activity</h2>
           {tasksLoading ? (
-            <ListSkeleton rows={6} />
+            <ListSkeleton count={6} />
           ) : agentTasks.length > 0 ? (
             <div className="space-y-3 max-h-[260px] overflow-y-auto scrollbar-thin">
               {agentTasks.map((t) => (

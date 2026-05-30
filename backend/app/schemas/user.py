@@ -5,6 +5,7 @@ from pydantic import BaseModel, EmailStr, Field
 
 # ─── Auth ───────────────────────────────────────────────────
 
+
 class RegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8)
@@ -24,6 +25,7 @@ class TokenResponse(BaseModel):
 
 # ─── Users ──────────────────────────────────────────────────
 
+
 class UserOut(BaseModel):
     id: str
     email: str
@@ -34,7 +36,13 @@ class UserOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class UserUpdate(BaseModel):
+    full_name: Optional[str] = None
+    avatar_url: Optional[str] = None
+
+
 # ─── Skills ─────────────────────────────────────────────────
+
 
 class SkillOut(BaseModel):
     id: str
@@ -51,6 +59,7 @@ class ProfileSkillOut(BaseModel):
 
 
 # ─── Profiles ───────────────────────────────────────────────
+
 
 class ProfileUpdate(BaseModel):
     school: Optional[str] = None
@@ -96,6 +105,7 @@ class AddSkillRequest(BaseModel):
 
 # ─── Opportunities ──────────────────────────────────────────
 
+
 class OpportunityOut(BaseModel):
     id: str
     title: str
@@ -137,6 +147,7 @@ class ScoredOpportunityList(BaseModel):
 
 # ─── Applications ───────────────────────────────────────────
 
+
 class ApplicationCreate(BaseModel):
     opportunity_id: str
     notes: Optional[str] = None
@@ -168,9 +179,12 @@ class ApplicationOut(BaseModel):
 
 class ApplicationList(BaseModel):
     items: list[ApplicationOut]
+    total: int
+    page: int
 
 
 # ─── Contacts ───────────────────────────────────────────────
+
 
 class ContactCreate(BaseModel):
     name: str
@@ -211,9 +225,12 @@ class ContactOut(BaseModel):
 
 class ContactList(BaseModel):
     items: list[ContactOut]
+    total: int
+    page: int
 
 
 # ─── Agents ─────────────────────────────────────────────────
+
 
 class PlannerRunRequest(BaseModel):
     goal: str
@@ -243,6 +260,7 @@ class PlannerRunResponse(BaseModel):
 
 # ─── Memory ─────────────────────────────────────────────────
 
+
 class MemoryCreate(BaseModel):
     key: str
     value: Any
@@ -267,9 +285,12 @@ class MemoryOut(BaseModel):
 
 class MemoryList(BaseModel):
     items: list[MemoryOut]
+    total: int
+    page: int
 
 
 # ─── Analytics ──────────────────────────────────────────────
+
 
 class AnalyticsSummary(BaseModel):
     active_matches: int = 0
@@ -296,6 +317,7 @@ class ActivityPoint(BaseModel):
 
 
 # ─── Monitor ────────────────────────────────────────────────
+
 
 class AlertConfigCreate(BaseModel):
     name: str
@@ -329,3 +351,40 @@ class AlertConfigOut(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class AlertConfigList(BaseModel):
+    items: list[AlertConfigOut]
+    total: int
+    page: int
+
+
+class InterviewPrepRequest(BaseModel):
+    company: str
+    role: str
+    type: str = "behavioral"
+
+
+class ResearchRequest(BaseModel):
+    company: str
+
+
+class CoverLetterRequest(BaseModel):
+    company: str
+    role: str
+    application_id: Optional[str] = None
+
+
+class ResumeTailorRequest(BaseModel):
+    role_type: str = "internship"
+    target_company: Optional[str] = None
+    skills: list[str] = []
+
+
+class MonitorSettingsUpdate(BaseModel):
+    keywords: Optional[list[str]] = None
+    locations: Optional[list[str]] = None
+    opportunity_types: Optional[list[str]] = None
+    min_match_score: Optional[int] = None
+    max_results: Optional[int] = None
+    frequency: Optional[str] = None

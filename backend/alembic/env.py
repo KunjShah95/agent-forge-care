@@ -9,10 +9,13 @@ from alembic import context
 
 from app.database import Base
 from app.models.user import *  # noqa: F401, F403 — ensure all models are imported
+from app.config import settings
 
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
+
+config.set_main_option("sqlalchemy.url", settings.database_url)
 
 target_metadata = Base.metadata
 

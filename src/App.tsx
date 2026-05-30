@@ -4,8 +4,12 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { AuthProvider } from "@/lib/auth-context";
+import ProtectedRoute from "@/components/ProtectedRoute";
 import AppLayout from "@/components/AppLayout";
 import Landing from "./pages/Landing";
+import Login from "./pages/Login";
+import Register from "./pages/Register";
 import Onboarding from "./pages/Onboarding";
 import Dashboard from "./pages/Dashboard";
 import Opportunities from "./pages/Opportunities";
@@ -26,35 +30,46 @@ const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <ThemeProvider>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<Landing />} />
-            <Route path="/onboarding" element={<Onboarding />} />
-            <Route path="/app" element={<AppLayout />}>
-              <Route index element={<Dashboard />} />
-              <Route path="opportunities" element={<Opportunities />} />
-              <Route path="applications" element={<Applications />} />
-              <Route path="resume" element={<ResumeStudio />} />
-              <Route path="interview" element={<InterviewPrep />} />
-              <Route path="research" element={<ResearchCenter />} />
-              <Route path="networking" element={<NetworkingHub />} />
-              <Route path="monitor" element={<OpportunityMonitor />} />
-              <Route path="analytics" element={<Analytics />} />
-              <Route path="agents" element={<AgentConsole />} />
-              <Route path="tasks" element={<TaskQueue />} />
-              <Route path="memory" element={<MemoryViewer />} />
-              <Route path="settings" element={<Settings />} />
-            </Route>
-            <Route path="/dashboard" element={<Navigate to="/app" replace />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-      </TooltipProvider>
-    </ThemeProvider>
+    <AuthProvider>
+      <ThemeProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <Routes>
+              <Route path="/" element={<Landing />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/register" element={<Register />} />
+              <Route path="/onboarding" element={<Onboarding />} />
+              <Route
+                path="/app"
+                element={
+                  <ProtectedRoute>
+                    <AppLayout />
+                  </ProtectedRoute>
+                }
+              >
+                <Route index element={<Dashboard />} />
+                <Route path="opportunities" element={<Opportunities />} />
+                <Route path="applications" element={<Applications />} />
+                <Route path="resume" element={<ResumeStudio />} />
+                <Route path="interview" element={<InterviewPrep />} />
+                <Route path="research" element={<ResearchCenter />} />
+                <Route path="networking" element={<NetworkingHub />} />
+                <Route path="monitor" element={<OpportunityMonitor />} />
+                <Route path="analytics" element={<Analytics />} />
+                <Route path="agents" element={<AgentConsole />} />
+                <Route path="tasks" element={<TaskQueue />} />
+                <Route path="memory" element={<MemoryViewer />} />
+                <Route path="settings" element={<Settings />} />
+              </Route>
+              <Route path="/dashboard" element={<Navigate to="/app" replace />} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </BrowserRouter>
+        </TooltipProvider>
+      </ThemeProvider>
+    </AuthProvider>
   </QueryClientProvider>
 );
 

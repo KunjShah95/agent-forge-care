@@ -5,7 +5,12 @@ from sqlalchemy import select, func, desc
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User, Opportunity, MatchScore
-from app.schemas.user import OpportunityOut, OpportunityList, ScoredOpportunityOut, ScoredOpportunityList
+from app.schemas.user import (
+    OpportunityOut,
+    OpportunityList,
+    ScoredOpportunityOut,
+    ScoredOpportunityList,
+)
 
 router = APIRouter()
 
@@ -30,9 +35,9 @@ async def list_opportunities(
     if search:
         search_term = f"%{search}%"
         query = query.where(
-            Opportunity.title.ilike(search_term) |
-            Opportunity.company.ilike(search_term) |
-            Opportunity.description.ilike(search_term)
+            Opportunity.title.ilike(search_term)
+            | Opportunity.company.ilike(search_term)
+            | Opportunity.description.ilike(search_term)
         )
 
     # Count total
@@ -83,7 +88,9 @@ async def matched_opportunities(
     items = []
     for opp, ms in rows:
         scored = ScoredOpportunityOut(
-            **OpportunityOut.model_validate(opp).model_dump(),
+            **OpportunityOut.model_validate(opp).model_dump(
+                exclude={"match_score", "match_reasons"}
+            ),
             match_score=float(ms.overall_score),
             match_reasons=ms.reasons or [],
         )
@@ -127,5 +134,6 @@ async def refresh_opportunities(
 ):
     """Trigger an agent search to refresh opportunities."""
     from app.agents.graph import run_opportunity_scan
+
     task_id = await run_opportunity_scan(str(user.id))
     return {"task_id": task_id}

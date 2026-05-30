@@ -30,8 +30,8 @@ export function CommandPalette({ open, setOpen }: { open: boolean; setOpen: (o: 
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
         <CommandGroup heading="Quick Actions">
-          <CommandItem onSelect={() => go("/app/opportunities")}>
-            <Sparkles className="mr-2 h-4 w-4" /> Run opportunity scan
+          <CommandItem onSelect={() => go("/app/agents")}>
+            <Sparkles className="mr-2 h-4 w-4" /> Run scan
           </CommandItem>
           <CommandItem onSelect={() => go("/app/applications")}>
             <Plus className="mr-2 h-4 w-4" /> Add application

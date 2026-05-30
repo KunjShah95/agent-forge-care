@@ -9,6 +9,7 @@ import {
   Network, Bell, Zap, Layers3,
 } from "lucide-react";
 import { useAgentTasks } from "@/api/hooks";
+import type { AgentTask } from "@/api/client";
 
 const agentIcons: Record<string, React.ElementType> = {
   "Planner Agent": Brain,
@@ -104,10 +105,10 @@ export default function AgentConsole() {
             </div>
           ) : (
             <div className="space-y-2 max-h-[500px] overflow-y-auto scrollbar-thin">
-              {(tasksData?.items || []).map((t: any) => {
+              {(tasksData?.items || []).map((t: AgentTask) => {
                 const agentName = t.agent_type
                   ? t.agent_type.charAt(0).toUpperCase() + t.agent_type.slice(1) + " Agent"
-                  : t.agent;
+                  : "Agent";
                 const Icon = agentIcons[agentName] || Brain;
                 const taskStatus = t.status || t.status;
                 const status = statusConfig[taskStatus as keyof typeof statusConfig] || statusConfig.queued;
@@ -126,10 +127,10 @@ export default function AgentConsole() {
                         </Badge>
                       </div>
                       <p className="text-sm text-muted-foreground mt-0.5">
-                        {t.input?.goal || t.action || t.agent_type || "Processing..."}
+                        {t.input?.goal ? String(t.input.goal) : t.agent_type || "Processing..."}
                       </p>
                       <p className="text-[11px] text-muted-foreground/60 mt-0.5">
-                        {t.created_at ? new Date(t.created_at).toLocaleString() : t.timestamp}
+                        {t.created_at ? new Date(t.created_at).toLocaleString() : ""}
                       </p>
                     </div>
                     <Button variant="ghost" size="sm" className="opacity-0 group-hover:opacity-100 transition">
@@ -148,10 +149,10 @@ export default function AgentConsole() {
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               {[
-                { label: "Queued", value: tasksData?.items?.filter((t: any) => t.status === "queued").length || 3, color: "text-muted-foreground" },
-                { label: "Running", value: tasksData?.items?.filter((t: any) => t.status === "running").length || 1, color: "text-primary" },
-                { label: "Completed", value: tasksData?.items?.filter((t: any) => t.status === "completed").length || 847, color: "text-success" },
-                { label: "Failed", value: tasksData?.items?.filter((t: any) => t.status === "failed").length || 2, color: "text-destructive" },
+                { label: "Queued", value: tasksData?.items?.filter((t: AgentTask) => t.status === "queued").length ?? 0, color: "text-muted-foreground" },
+                { label: "Running", value: tasksData?.items?.filter((t: AgentTask) => t.status === "running").length ?? 0, color: "text-primary" },
+                { label: "Completed", value: tasksData?.items?.filter((t: AgentTask) => t.status === "completed").length ?? 0, color: "text-success" },
+                { label: "Failed", value: tasksData?.items?.filter((t: AgentTask) => t.status === "failed").length ?? 0, color: "text-destructive" },
               ].map((item) => (
                 <div key={item.label} className="p-3 rounded-xl bg-muted/30 text-center">
                   <div className={`text-2xl font-display font-bold ${item.color}`}>{item.value}</div>
@@ -162,11 +163,11 @@ export default function AgentConsole() {
 
             <div className="space-y-2">
               <div className="text-sm font-medium">Recent Tasks</div>
-              {(tasksData?.items || []).slice(0, 3).map((task: any) => (
+              {(tasksData?.items || []).slice(0, 3).map((task: AgentTask) => (
                 <div key={task.id} className="flex items-center gap-3 p-2.5 rounded-lg bg-muted/30 text-sm">
                   <Loader2 className={`h-3 w-3 ${task.status === "running" ? "animate-spin text-primary" : "text-muted-foreground"} shrink-0`} />
                   <div className="flex-1 min-w-0">
-                    <div className="truncate">{task.input?.goal || task.agent_type || "Task"}</div>
+                    <div className="truncate">{task.input?.goal ? String(task.input.goal) : task.agent_type || "Task"}</div>
                     <div className="text-xs text-muted-foreground">
                       {task.agent_type} · {task.status}
                     </div>

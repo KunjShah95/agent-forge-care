@@ -139,6 +139,18 @@ export const agents = {
 
   runMonitor: () =>
     request<{ task_id: string }>("/agents/monitor/run", { method: "POST" }),
+
+  interviewPrep: (data: { company: string; role: string; type?: string }) =>
+    request<{ questions: string[]; tips: string[] }>("/agents/interview-prep", { method: "POST", body: data }),
+
+  research: (data: { company: string }) =>
+    request<Record<string, unknown>>("/agents/research", { method: "POST", body: data }),
+
+  coverLetter: (data: { company: string; role: string; application_id?: string }) =>
+    request<{ cover_letter: string }>("/agents/cover-letter", { method: "POST", body: data }),
+
+  resumeTailor: (data: { role_type: string; target_company?: string; skills?: string[] }) =>
+    request<Record<string, unknown>>("/agents/resume-tailor", { method: "POST", body: data }),
 };
 
 // Memory
@@ -180,6 +192,7 @@ export const analytics = {
 export type Profile = {
   id: string;
   user_id: string;
+  full_name?: string;
   school?: string;
   graduation_date?: string;
   bio?: string;
@@ -256,6 +269,51 @@ export type AgentTask = {
   created_at: string;
   started_at?: string;
   completed_at?: string;
+};
+
+export type AlertConfig = {
+  id: string;
+  name: string;
+  keywords: string[];
+  locations: string[];
+  opportunity_types: string[];
+  min_match_score: number;
+  frequency: string;
+  is_active: boolean;
+  created_at: string;
+};
+
+export const monitor = {
+  listAlerts: () => request<AlertConfig[]>("/monitor/alerts"),
+  createAlert: (data: { name: string; keywords?: string[]; locations?: string[]; opportunity_types?: string[]; min_match_score?: number; frequency?: string }) =>
+    request<AlertConfig>("/monitor/alerts", { method: "POST", body: data }),
+  updateAlert: (id: string, data: Partial<AlertConfig>) =>
+    request<AlertConfig>(`/monitor/alerts/${id}`, { method: "PATCH", body: data }),
+  deleteAlert: (id: string) => request<void>(`/monitor/alerts/${id}`, { method: "DELETE" }),
+};
+
+export const resume = {
+  upload: async (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const headers: Record<string, string> = {};
+    const token = getAuthToken();
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    const response = await fetch(`${API_BASE}/resume/upload`, {
+      method: "POST",
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => null);
+      throw new ApiError(response.status, errorData?.detail || response.statusText, errorData);
+    }
+
+    return response.json() as Promise<{ filename: string; pages: number; characters: number; text: string }>;
+  },
 };
 
 export type MemoryEntry = {

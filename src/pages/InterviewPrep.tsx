@@ -1,10 +1,30 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Play, Mic, Trophy, Clock, BookOpen } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Play, Mic, Trophy, Clock, BookOpen, Loader2 } from "lucide-react";
+import { useInterviewPrep } from "@/api/hooks";
+import { toast } from "sonner";
 
 const questionBank: Record<string, string[]> = {
   Behavioral: [
@@ -45,7 +65,36 @@ const categoryStats = [
 ];
 
 export default function InterviewPrep() {
+  const navigate = useNavigate();
   const [category, setCategory] = useState<string>("Behavioral");
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [company, setCompany] = useState("");
+  const [role, setRole] = useState("");
+  const [type, setType] = useState("behavioral");
+  const [generatedQuestions, setGeneratedQuestions] = useState<string[]>([]);
+  const [generatedTips, setGeneratedTips] = useState<string[]>([]);
+
+  const interviewPrep = useInterviewPrep();
+
+  const handleGenerate = async () => {
+    if (!company || !role) {
+      toast.error("Please fill in company and role");
+      return;
+    }
+    try {
+      const result = await interviewPrep.mutateAsync({ company, role, type });
+      setGeneratedQuestions(result.questions);
+      setGeneratedTips(result.tips);
+      setDialogOpen(false);
+      toast.success("Questions generated!");
+    } catch {
+      toast.error("Failed to generate questions");
+    }
+  };
+
+  const displayQuestions = generatedQuestions.length > 0
+    ? { Generated: generatedQuestions, ...questionBank }
+    : questionBank;
 
   return (
     <div className="space-y-6 max-w-[1400px]">
@@ -54,7 +103,9 @@ export default function InterviewPrep() {
           <h1 className="font-display text-3xl font-bold">Interview Prep</h1>
           <p className="text-muted-foreground mt-1">Mock interviews, question banks, and skill tracking.</p>
         </div>
-        <Button className="bg-gradient-primary shadow-glow gap-2"><Mic className="h-4 w-4" /> Start mock interview</Button>
+        <Button className="bg-gradient-primary shadow-glow gap-2" onClick={() => setDialogOpen(true)}>
+          <Mic className="h-4 w-4" /> Start mock interview
+        </Button>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -74,16 +125,29 @@ export default function InterviewPrep() {
         ))}
       </div>
 
+      {generatedTips.length > 0 && (
+        <Card className="glass p-5 border-primary/30">
+          <h3 className="font-display font-semibold mb-2">AI Tips for {company} — {role}</h3>
+          <ul className="space-y-1">
+            {generatedTips.map((tip, i) => (
+              <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
+                <span className="text-primary mt-0.5">•</span> {tip}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
       <div className="grid lg:grid-cols-3 gap-6">
         <Card className="glass p-6 lg:col-span-2">
           <h2 className="font-display font-semibold mb-4">Question Bank</h2>
           <Tabs value={category} onValueChange={setCategory}>
             <TabsList className="glass">
-              {Object.keys(questionBank).map((c) => (
+              {Object.keys(displayQuestions).map((c) => (
                 <TabsTrigger key={c} value={c}>{c}</TabsTrigger>
               ))}
             </TabsList>
-            {Object.entries(questionBank).map(([cat, qs]) => (
+            {Object.entries(displayQuestions).map(([cat, qs]) => (
               <TabsContent key={cat} value={cat} className="mt-4 space-y-2">
                 {qs.map((q, i) => (
                   <div key={i} className="flex items-center gap-3 p-4 rounded-lg bg-muted/30 hover:bg-muted/50 transition cursor-pointer">
@@ -91,7 +155,9 @@ export default function InterviewPrep() {
                       Q{i + 1}
                     </div>
                     <div className="flex-1 text-sm">{q}</div>
-                    <Button variant="ghost" size="sm" className="gap-1"><Play className="h-3 w-3" /> Practice</Button>
+                    <Button variant="ghost" size="sm" className="gap-1" onClick={() => navigate("/app/agents")}>
+                      <Play className="h-3 w-3" /> Practice
+                    </Button>
                   </div>
                 ))}
               </TabsContent>
@@ -121,6 +187,47 @@ export default function InterviewPrep() {
           </Button>
         </Card>
       </div>
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Generate Interview Questions</DialogTitle>
+            <DialogDescription>
+              AI will generate tailored questions based on your target company and role.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Company</Label>
+              <Input placeholder="e.g. Stripe" value={company} onChange={(e) => setCompany(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Role</Label>
+              <Input placeholder="e.g. Senior Software Engineer" value={role} onChange={(e) => setRole(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Interview Type</Label>
+              <Select value={type} onValueChange={setType}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="behavioral">Behavioral</SelectItem>
+                  <SelectItem value="technical">Technical</SelectItem>
+                  <SelectItem value="system_design">System Design</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+            <Button className="bg-gradient-primary shadow-glow gap-2" onClick={handleGenerate} disabled={interviewPrep.isPending}>
+              {interviewPrep.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+              Generate
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -1,26 +1,44 @@
 from datetime import date
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, func
 
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User, Application, ApplicationStage, Opportunity
-from app.schemas.user import ApplicationCreate, ApplicationUpdate, ApplicationOut, ApplicationList, OpportunityOut
+from app.schemas.user import (
+    ApplicationCreate,
+    ApplicationUpdate,
+    ApplicationOut,
+    ApplicationList,
+    OpportunityOut,
+)
 
 router = APIRouter()
 
 
 @router.get("", response_model=ApplicationList)
 async def list_applications(
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """List all applications for the current user."""
+    count_result = await db.execute(
+        select(func.count())
+        .select_from(Application)
+        .where(Application.user_id == user.id)
+    )
+    total = count_result.scalar()
+
+    offset = (page - 1) * limit
     query = (
         select(Application)
         .where(Application.user_id == user.id)
         .order_by(desc(Application.created_at))
+        .offset(offset)
+        .limit(limit)
     )
     result = await db.execute(query)
     apps = result.scalars().all()
@@ -37,7 +55,7 @@ async def list_applications(
                 app_out.opportunity = OpportunityOut.model_validate(opp)
         items.append(app_out)
 
-    return ApplicationList(items=items)
+    return ApplicationList(items=items, total=total, page=page)
 
 
 @router.post("", response_model=ApplicationOut, status_code=201)
@@ -110,5 +128,6 @@ async def tailor_resume(
 ):
     """Trigger the resume agent to tailor a resume for this application."""
     from app.agents.graph import run_resume_tailoring
+
     task_id = await run_resume_tailoring(str(user.id), id)
     return {"task_id": task_id}

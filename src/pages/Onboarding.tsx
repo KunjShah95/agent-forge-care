@@ -7,6 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Sparkles, ArrowRight, ArrowLeft, X } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
+import { toast } from "sonner";
+import { useUpdateProfile } from "@/api/hooks";
 
 const steps = ["Welcome", "About You", "Skills", "Preferences", "Goals", "Launch"];
 
@@ -14,10 +16,48 @@ export default function Onboarding() {
   const [step, setStep] = useState(0);
   const [skills, setSkills] = useState<string[]>(["TypeScript", "React", "Python"]);
   const [skillInput, setSkillInput] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [school, setSchool] = useState("");
+  const [graduation, setGraduation] = useState("");
+  const [bio, setBio] = useState("");
+  const [locations, setLocations] = useState("");
+  const [salary, setSalary] = useState("");
+  const [roleTypes, setRoleTypes] = useState("");
+  const [companySizes, setCompanySizes] = useState("");
+  const [portfolio, setPortfolio] = useState("");
+  const [careerGoal, setCareerGoal] = useState("");
   const navigate = useNavigate();
+  const updateProfile = useUpdateProfile();
 
-  const next = () => step < steps.length - 1 ? setStep(s => s + 1) : navigate("/app");
-  const prev = () => setStep(s => Math.max(0, s - 1));
+  const handleComplete = () => {
+    updateProfile.mutate(
+      {
+        full_name: fullName || undefined,
+        school: school || undefined,
+        graduation_date: graduation || undefined,
+        bio: bio || undefined,
+        portfolio_url: portfolio || undefined,
+        target_locations: locations ? locations.split(",").map((s) => s.trim()).filter(Boolean) : [],
+        role_types: roleTypes ? roleTypes.split(",").map((s) => s.trim()).filter(Boolean) : [],
+        company_sizes: companySizes ? companySizes.split(",").map((s) => s.trim()).filter(Boolean) : [],
+        career_goal: careerGoal || undefined,
+        skills: skills.map((s) => ({ id: s.toLowerCase(), name: s, proficiency: "intermediate" })),
+      },
+      {
+        onSuccess: () => navigate("/app"),
+        onError: () => toast.error("Failed to save profile. Please try again."),
+      },
+    );
+  };
+
+  const next = () => {
+    if (step < steps.length - 1) {
+      setStep((s) => s + 1);
+    } else {
+      handleComplete();
+    }
+  };
+  const prev = () => setStep((s) => Math.max(0, s - 1));
   const addSkill = () => { if (skillInput.trim()) { setSkills([...skills, skillInput.trim()]); setSkillInput(""); } };
 
   return (
@@ -48,12 +88,11 @@ export default function Onboarding() {
             <div className="space-y-4 animate-fade-in">
               <h2 className="font-display text-2xl font-bold">Tell us about you</h2>
               <div className="grid grid-cols-2 gap-4">
-                <div><Label>Full name</Label><Input defaultValue="Alex Kim" className="mt-1.5" /></div>
-                <div><Label>Email</Label><Input defaultValue="alex@stanford.edu" className="mt-1.5" /></div>
-                <div><Label>School</Label><Input defaultValue="Stanford University" className="mt-1.5" /></div>
-                <div><Label>Graduation</Label><Input defaultValue="June 2026" className="mt-1.5" /></div>
+                <div><Label>Full name</Label><Input value={fullName} onChange={(e) => setFullName(e.target.value)} className="mt-1.5" /></div>
+                <div><Label>School</Label><Input value={school} onChange={(e) => setSchool(e.target.value)} className="mt-1.5" /></div>
+                <div><Label>Graduation</Label><Input value={graduation} onChange={(e) => setGraduation(e.target.value)} className="mt-1.5" /></div>
               </div>
-              <div><Label>Bio / pitch</Label><Textarea className="mt-1.5" defaultValue="CS major focused on AI infrastructure. Shipped 4 OSS projects, intern @ Meta '24." /></div>
+              <div><Label>Bio / pitch</Label><Textarea className="mt-1.5" value={bio} onChange={(e) => setBio(e.target.value)} /></div>
             </div>
           )}
 
@@ -85,12 +124,12 @@ export default function Onboarding() {
             <div className="space-y-4 animate-fade-in">
               <h2 className="font-display text-2xl font-bold">What are you looking for?</h2>
               <div className="grid grid-cols-2 gap-4">
-                <div><Label>Preferred locations</Label><Input defaultValue="SF, NYC, Remote" className="mt-1.5" /></div>
-                <div><Label>Salary expectation</Label><Input defaultValue="$150k+" className="mt-1.5" /></div>
-                <div><Label>Role types</Label><Input defaultValue="Internship, New Grad SWE" className="mt-1.5" /></div>
-                <div><Label>Company size</Label><Input defaultValue="Startup, Mid-size" className="mt-1.5" /></div>
+                <div><Label>Preferred locations</Label><Input value={locations} onChange={(e) => setLocations(e.target.value)} className="mt-1.5" /></div>
+                <div><Label>Salary expectation</Label><Input value={salary} onChange={(e) => setSalary(e.target.value)} className="mt-1.5" /></div>
+                <div><Label>Role types</Label><Input value={roleTypes} onChange={(e) => setRoleTypes(e.target.value)} className="mt-1.5" /></div>
+                <div><Label>Company size</Label><Input value={companySizes} onChange={(e) => setCompanySizes(e.target.value)} className="mt-1.5" /></div>
               </div>
-              <div><Label>Portfolio link</Label><Input defaultValue="https://alexkim.dev" className="mt-1.5" /></div>
+              <div><Label>Portfolio link</Label><Input value={portfolio} onChange={(e) => setPortfolio(e.target.value)} className="mt-1.5" /></div>
             </div>
           )}
 
@@ -100,7 +139,8 @@ export default function Onboarding() {
               <p className="text-sm text-muted-foreground">Your Planner Agent uses this to prioritize work.</p>
               <Textarea
                 rows={5}
-                defaultValue="Land an ML research internship at a frontier lab for Summer 2026, with an offer by mid-February."
+                value={careerGoal}
+                onChange={(e) => setCareerGoal(e.target.value)}
                 className="mt-1.5"
               />
             </div>
@@ -111,7 +151,7 @@ export default function Onboarding() {
               <div className="h-16 w-16 rounded-2xl bg-gradient-primary mx-auto flex items-center justify-center shadow-glow animate-pulse-glow">
                 <Sparkles className="h-8 w-8 text-primary-foreground" />
               </div>
-              <h2 className="font-display text-3xl font-bold mt-6">You're ready, Alex.</h2>
+              <h2 className="font-display text-3xl font-bold mt-6">You're ready{fullName ? `, ${fullName}` : ""}.</h2>
               <p className="mt-3 text-muted-foreground">Your 7 agents are spinning up now.</p>
             </div>
           )}
@@ -120,8 +160,8 @@ export default function Onboarding() {
             <Button variant="ghost" onClick={prev} disabled={step === 0} className="gap-2">
               <ArrowLeft className="h-4 w-4" /> Back
             </Button>
-            <Button onClick={next} className="bg-gradient-primary shadow-glow gap-2">
-              {step === steps.length - 1 ? "Enter dashboard" : "Continue"}
+            <Button onClick={next} className="bg-gradient-primary shadow-glow gap-2" disabled={step === steps.length - 1 && updateProfile.isPending}>
+              {step === steps.length - 1 ? (updateProfile.isPending ? "Saving…" : "Enter dashboard") : "Continue"}
               <ArrowRight className="h-4 w-4" />
             </Button>
           </div>

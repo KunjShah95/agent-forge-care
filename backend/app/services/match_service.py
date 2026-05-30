@@ -5,7 +5,10 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from app.models.user import (
-    Profile, Opportunity, MatchScore, MemoryEntry,
+    Profile,
+    Opportunity,
+    MatchScore,
+    MemoryEntry,
 )
 from app.services.profile_service import ProfileService
 from app.services.rerank_service import get_reranker
@@ -52,7 +55,11 @@ class MatchService:
         if opportunity.location:
             preferred = [l.lower() for l in (profile.target_locations or [])]
             opp_loc = opportunity.location.lower()
-            if "remote" not in opp_loc and opp_loc not in preferred and "remote" not in preferred:
+            if (
+                "remote" not in opp_loc
+                and opp_loc not in preferred
+                and "remote" not in preferred
+            ):
                 location_match = 40.0
 
         # Company size match
@@ -62,12 +69,24 @@ class MatchService:
             if opportunity.company_size not in pref_sizes:
                 company_match = 60.0
 
+        # Experience score
+        experience_match = (
+            skill_match * 0.6
+            + (len(profile_skills & required_skills) / max(len(profile_skills), 1)) * 40
+        )
+
         # Calculate weighted score
-        weights = {"skills": 0.35, "location": 0.20, "company": 0.15}
+        weights = {
+            "skills": 0.35,
+            "location": 0.20,
+            "company": 0.15,
+            "experience": 0.30,
+        }
         overall = (
             weights["skills"] * skill_match
             + weights["location"] * location_match
             + weights["company"] * company_match
+            + weights["experience"] * experience_match
         )
         overall = min(100.0, overall)
 
@@ -87,6 +106,7 @@ class MatchService:
                 "skills": round(skill_match, 1),
                 "location": round(location_match, 1),
                 "company": round(company_match, 1),
+                "experience": round(experience_match, 1),
             },
             "reasons": reasons[:5],
         }
@@ -118,6 +138,9 @@ class MatchService:
                 ms.skill_score = Decimal(str(match_data["breakdown"]["skills"]))
                 ms.location_score = Decimal(str(match_data["breakdown"]["location"]))
                 ms.company_score = Decimal(str(match_data["breakdown"]["company"]))
+                ms.experience_score = Decimal(
+                    str(match_data["breakdown"]["experience"])
+                )
                 ms.reasons = match_data["reasons"]
             else:
                 ms = MatchScore(
@@ -127,6 +150,9 @@ class MatchService:
                     skill_score=Decimal(str(match_data["breakdown"]["skills"])),
                     location_score=Decimal(str(match_data["breakdown"]["location"])),
                     company_score=Decimal(str(match_data["breakdown"]["company"])),
+                    experience_score=Decimal(
+                        str(match_data["breakdown"]["experience"])
+                    ),
                     reasons=match_data["reasons"],
                 )
                 self.db.add(ms)
@@ -188,7 +214,10 @@ class MatchService:
 
         logger.debug(
             "Reranked %d items for user %s (query=%s, blend=%.1f)",
-            len(reranked), user_id, query[:50], blend_weight,
+            len(reranked),
+            user_id,
+            query[:50],
+            blend_weight,
         )
 
         return reranked

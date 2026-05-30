@@ -12,11 +12,14 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 
+from decimal import Decimal
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.models.user import (
-    Opportunity, MatchScore,
+    Opportunity,
+    MatchScore,
 )
 from app.services.profile_service import ProfileService
 from app.services.memory_service import MemoryService
@@ -95,30 +98,33 @@ async def discover_internships(
         ms = MatchScore(
             opportunity_id=opp.id,
             user_id=user_id,
-            overall_score=__import__("decimal").Decimal(str(match_data["overall"])),
-            skill_score=__import__("decimal").Decimal(str(match_data["breakdown"]["skills"])),
-            location_score=__import__("decimal").Decimal(str(match_data["breakdown"]["location"])),
-            company_score=__import__("decimal").Decimal(str(match_data["breakdown"]["company"])),
+            overall_score=Decimal(str(match_data["overall"])),
+            skill_score=Decimal(str(match_data["breakdown"]["skills"])),
+            location_score=Decimal(str(match_data["breakdown"]["location"])),
+            company_score=Decimal(str(match_data["breakdown"]["company"])),
+            experience_score=Decimal(str(match_data["breakdown"]["experience"])),
             reasons=match_data["reasons"],
         )
         db.add(ms)
 
         # Store vector embedding in Qdrant
-        _store_opportunity_embedding(user_id, opp, match_data)
+        await _store_opportunity_embedding(user_id, opp, match_data)
 
         opp_id = str(opp.id)
         opp_map[opp_id] = opp
 
-        items.append({
-            "id": opp_id,
-            "title": opp.title,
-            "company": opp.company,
-            "location": opp.location,
-            "description": opp.description or "",
-            "skills_required": opp.skills_required or [],
-            "match_score": match_data["overall"],
-            "reason": match_data["reasons"][0] if match_data["reasons"] else "",
-        })
+        items.append(
+            {
+                "id": opp_id,
+                "title": opp.title,
+                "company": opp.company,
+                "location": opp.location,
+                "description": opp.description or "",
+                "skills_required": opp.skills_required or [],
+                "match_score": match_data["overall"],
+                "reason": match_data["reasons"][0] if match_data["reasons"] else "",
+            }
+        )
 
     # ── Rerank with Cohere and blend scores ──
     if items and query:
@@ -187,12 +193,14 @@ async def get_internship_recommendations(
     ]
 
 
-def _store_opportunity_embedding(user_id: str, opp: Opportunity, match_data: dict):
+async def _store_opportunity_embedding(
+    user_id: str, opp: Opportunity, match_data: dict
+):
     """Store opportunity as a vector embedding for semantic retrieval."""
     try:
         agent_memory = AgentMemory(user_id)
         text = f"{opp.title} at {opp.company}. {opp.description or ''}"
-        vector = get_text_embedding(text)
+        vector = await get_text_embedding(text)
         agent_memory.store_vector(
             collection="opportunity_embeddings",
             text=text,

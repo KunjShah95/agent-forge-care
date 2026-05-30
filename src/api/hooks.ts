@@ -212,3 +212,69 @@ export function useAnalyticsSkillsDemand() {
     queryFn: api.analytics.skillsDemand,
   });
 }
+
+// ─── Interview Prep ─────────────────────────────────────
+
+export function useInterviewPrep() {
+  return useMutation({
+    mutationFn: api.agents.interviewPrep,
+  });
+}
+
+// ─── Research ───────────────────────────────────────────
+
+export function useResearch() {
+  return useMutation({
+    mutationFn: api.agents.research,
+  });
+}
+
+// ─── Cover Letter ───────────────────────────────────────
+
+export function useCoverLetter() {
+  return useMutation({
+    mutationFn: api.agents.coverLetter,
+  });
+}
+
+// ─── Resume Tailor ──────────────────────────────────────
+
+export function useResumeTailor() {
+  return useMutation({
+    mutationFn: api.agents.resumeTailor,
+  });
+}
+
+// ─── Monitor Alerts ─────────────────────────────────────
+
+export function useAlertConfigs() {
+  return useQuery({
+    queryKey: ["monitor", "alerts"],
+    queryFn: api.monitor.listAlerts,
+  });
+}
+
+export function useCreateAlert() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.monitor.createAlert,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["monitor"] }),
+  });
+}
+
+export function useUpdateAlert() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<import("./client").AlertConfig> }) =>
+      api.monitor.updateAlert(id, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["monitor"] }),
+  });
+}
+
+export function useDeleteAlert() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.monitor.deleteAlert,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["monitor"] }),
+  });
+}

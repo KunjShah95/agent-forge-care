@@ -2,9 +2,18 @@ import { useState, useMemo } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Plus, Calendar, FileText } from "lucide-react";
+import { toast } from "sonner";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 
-import { useApplications, useUpdateApplication } from "@/api/hooks";
+import { useApplications, useUpdateApplication, useCreateApplication, useOpportunities } from "@/api/hooks";
 import { CardSkeleton } from "@/components/ui/skeleton";
 
 type Stage = "Saved" | "Applied" | "OA" | "Interview" | "Offer" | "Rejected";
@@ -22,7 +31,12 @@ const stageColor: Record<Stage, string> = {
 export default function Applications() {
   const { data, isLoading } = useApplications();
   const updateApp = useUpdateApplication();
+  const createApp = useCreateApplication();
+  const { data: oppsData } = useOpportunities();
   const [dragId, setDragId] = useState<string | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [newOppId, setNewOppId] = useState("");
+  const [newNotes, setNewNotes] = useState("");
 
   const apps = useMemo(
     () =>
@@ -53,7 +67,7 @@ export default function Applications() {
             {isLoading ? "Loading…" : `Drag cards between stages. ${apps.length} total applications.`}
           </p>
         </div>
-        <Button className="bg-gradient-primary shadow-glow gap-2">
+        <Button className="bg-gradient-primary shadow-glow gap-2" onClick={() => setDialogOpen(true)}>
           <Plus className="h-4 w-4" /> New application
         </Button>
       </div>
@@ -125,6 +139,63 @@ export default function Applications() {
           })}
         </div>
       )}
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="glass">
+          <DialogHeader>
+            <DialogTitle className="font-display">New Application</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium">Opportunity</label>
+              <Select value={newOppId} onValueChange={setNewOppId}>
+                <SelectTrigger className="mt-1.5">
+                  <SelectValue placeholder="Select an opportunity" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(oppsData?.items || []).map((o) => (
+                    <SelectItem key={o.id} value={o.id}>
+                      {o.title} — {o.company}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Notes</label>
+              <Textarea
+                className="mt-1.5"
+                placeholder="Any notes about this application…"
+                value={newNotes}
+                onChange={(e) => setNewNotes(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+            <Button
+              className="bg-gradient-primary"
+              disabled={!newOppId || createApp.isPending}
+              onClick={() => {
+                createApp.mutate(
+                  { opportunity_id: newOppId, notes: newNotes || undefined },
+                  {
+                    onSuccess: () => {
+                      toast.success("Application created");
+                      setDialogOpen(false);
+                      setNewOppId("");
+                      setNewNotes("");
+                    },
+                    onError: () => toast.error("Failed to create application"),
+                  },
+                );
+              }}
+            >
+              {createApp.isPending ? "Creating…" : "Create"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

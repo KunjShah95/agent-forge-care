@@ -1,13 +1,19 @@
-import { useMemo } from "react";
+import { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Mail, Plus, Search, Send, Sparkles } from "lucide-react";
+import { toast } from "sonner";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
 
-import { useContacts } from "@/api/hooks";
+import { useContacts, useCreateContact } from "@/api/hooks";
 import { ListSkeleton } from "@/components/ui/skeleton";
 
 const templates = [
@@ -35,9 +41,27 @@ function initials(name: string): string {
 }
 
 export default function NetworkingHub() {
+  const navigate = useNavigate();
   const { data, isLoading } = useContacts();
+  const createContact = useCreateContact();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newRole, setNewRole] = useState("");
+  const [newCompany, setNewCompany] = useState("");
+  const [newEmail, setNewEmail] = useState("");
 
-  const contacts = useMemo(() => data?.items || [], [data]);
+  const contacts = useMemo(() => {
+    const items = data?.items || [];
+    if (!searchQuery.trim()) return items;
+    const q = searchQuery.toLowerCase();
+    return items.filter(
+      (c) =>
+        c.name.toLowerCase().includes(q) ||
+        (c.company || "").toLowerCase().includes(q) ||
+        (c.role || "").toLowerCase().includes(q),
+    );
+  }, [data, searchQuery]);
 
   return (
     <div className="space-y-6 max-w-[1400px]">
@@ -47,8 +71,8 @@ export default function NetworkingHub() {
           <p className="text-muted-foreground mt-1">Track recruiters, draft outreach, manage relationships.</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" className="gap-2"><Plus className="h-4 w-4" /> Add contact</Button>
-          <Button className="bg-gradient-primary shadow-glow gap-2"><Sparkles className="h-4 w-4" /> Draft outreach</Button>
+          <Button variant="outline" className="gap-2" onClick={() => setDialogOpen(true)}><Plus className="h-4 w-4" /> Add contact</Button>
+          <Button className="bg-gradient-primary shadow-glow gap-2" onClick={() => navigate("/app/agents")}><Sparkles className="h-4 w-4" /> Draft outreach</Button>
         </div>
       </div>
 
@@ -63,7 +87,12 @@ export default function NetworkingHub() {
             <div className="p-4 border-b border-border/50 flex gap-3">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input placeholder="Search contacts…" className="pl-9" />
+                <Input
+                  placeholder="Search contacts…"
+                  className="pl-9"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
               </div>
             </div>
             {isLoading ? (
@@ -92,7 +121,7 @@ export default function NetworkingHub() {
                     <div className="hidden md:block text-xs text-muted-foreground">{c.email}</div>
                     <Badge className={`${statusColors[c.status] || ""} text-[10px]`} variant="outline">{c.status}</Badge>
                     <div className="text-xs text-muted-foreground w-16 text-right">{c.last_contact || "—"}</div>
-                    <Button variant="ghost" size="icon"><Mail className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" onClick={() => navigate("/app/agents")}><Mail className="h-4 w-4" /></Button>
                   </div>
                 ))}
               </div>
@@ -115,6 +144,59 @@ export default function NetworkingHub() {
           </div>
         </TabsContent>
       </Tabs>
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="glass">
+          <DialogHeader>
+            <DialogTitle className="font-display">Add Contact</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Name</Label>
+              <Input className="mt-1.5" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Jane Doe" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Role</Label>
+                <Input className="mt-1.5" value={newRole} onChange={(e) => setNewRole(e.target.value)} placeholder="Recruiter" />
+              </div>
+              <div>
+                <Label>Company</Label>
+                <Input className="mt-1.5" value={newCompany} onChange={(e) => setNewCompany(e.target.value)} placeholder="Acme Inc" />
+              </div>
+            </div>
+            <div>
+              <Label>Email</Label>
+              <Input className="mt-1.5" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="jane@acme.com" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+            <Button
+              className="bg-gradient-primary"
+              disabled={!newName.trim() || createContact.isPending}
+              onClick={() => {
+                createContact.mutate(
+                  { name: newName, role: newRole || undefined, company: newCompany || undefined, email: newEmail || undefined },
+                  {
+                    onSuccess: () => {
+                      toast.success("Contact added");
+                      setDialogOpen(false);
+                      setNewName("");
+                      setNewRole("");
+                      setNewCompany("");
+                      setNewEmail("");
+                    },
+                    onError: () => toast.error("Failed to add contact"),
+                  },
+                );
+              }}
+            >
+              {createContact.isPending ? "Adding…" : "Add"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

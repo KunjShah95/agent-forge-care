@@ -17,3 +17,9 @@ redis>=5.2.0
 python-multipart>=0.0.12
 cohere>=5.0.0
 langsmith>=0.4.0
+langgraph
+langchain-openai
+langchain-core
+email-validator
+slowapi>=0.1.9
+PyPDF2>=3.0.0

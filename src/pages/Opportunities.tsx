@@ -13,7 +13,9 @@ import { Progress } from "@/components/ui/progress";
 import { CardSkeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/EmptyState";
 
-import { useMatches, useRefreshOpportunities } from "@/api/hooks";
+import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
+import { useMatches, useRefreshOpportunities, useCreateApplication } from "@/api/hooks";
 import type { ScoredOpportunity } from "@/api/client";
 
 const typeFilters = ["All", "Internship", "Full-time", "Hackathon", "Scholarship", "Fellowship", "Research"];
@@ -26,8 +28,10 @@ export default function Opportunities() {
   const [remoteOnly, setRemoteOnly] = useState(false);
   const [selected, setSelected] = useState<ScoredOpportunity | null>(null);
 
+  const navigate = useNavigate();
   const { data, isLoading, error, refetch } = useMatches();
   const refreshMutation = useRefreshOpportunities();
+  const createApp = useCreateApplication();
 
   const filtered = useMemo(() => {
     if (!data?.items) return [];
@@ -249,8 +253,27 @@ export default function Opportunities() {
                   </div>
                 </div>
                 <div className="flex gap-2 pt-2">
-                  <Button className="bg-gradient-primary shadow-glow flex-1">Save to pipeline</Button>
-                  <Button variant="outline" className="flex-1">Tailor resume</Button>
+                  <Button
+                    className="bg-gradient-primary shadow-glow flex-1"
+                    disabled={createApp.isPending}
+                    onClick={() => {
+                      createApp.mutate(
+                        { opportunity_id: selected.id },
+                        {
+                          onSuccess: () => {
+                            toast.success("Saved to pipeline");
+                            setSelected(null);
+                          },
+                          onError: () => toast.error("Failed to save to pipeline"),
+                        },
+                      );
+                    }}
+                  >
+                    {createApp.isPending ? "Saving…" : "Save to pipeline"}
+                  </Button>
+                  <Button variant="outline" className="flex-1" onClick={() => { setSelected(null); navigate("/app/resume"); }}>
+                    Tailor resume
+                  </Button>
                 </div>
               </div>
             </>

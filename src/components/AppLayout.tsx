@@ -8,9 +8,14 @@ import { Button } from "@/components/ui/button";
 import { Search } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { useAuth } from "@/api/hooks";
 
 export default function AppLayout() {
   const [cmdOpen, setCmdOpen] = useState(false);
+  const { data: user } = useAuth();
+  const initials = user?.full_name
+    ? user.full_name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase()
+    : "?";
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -46,7 +51,7 @@ export default function AppLayout() {
               <NotificationCenter />
               <ThemeToggle />
               <Avatar className="h-8 w-8 ml-2 border-2 border-primary/30">
-                <AvatarFallback className="bg-gradient-primary text-primary-foreground text-xs font-semibold">AK</AvatarFallback>
+                <AvatarFallback className="bg-gradient-primary text-primary-foreground text-xs font-semibold">{initials}</AvatarFallback>
               </Avatar>
             </div>
           </header>
