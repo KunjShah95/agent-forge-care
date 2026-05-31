@@ -192,8 +192,10 @@ Add integration tests for agent behaviors and the RAG/memory pipeline.
 
 ## Deployment & operations
 
-- Build and containerize with the provided Dockerfiles (`Dockerfile.frontend`, `backend/Dockerfile`).
-- Use CI to run tests, build images, and push to a registry; deploy to Kubernetes or managed app services.
+- Frontend deployment: Vercel via `vercel.json` (SPA rewrite to `index.html`).
+- Backend deployment: Render via `render.yaml` or Railway using the same Python entrypoint (`uvicorn app.main:app`).
+- Build and containerize with the provided Dockerfiles (`Dockerfile.frontend`, `backend/Dockerfile`) when you want image-based hosting.
+- Use CI to run tests, build images, and push to a registry; deploy backend and frontend independently.
 - Recommended production components: managed Postgres, managed Redis, managed Vector DB (Pinecone/Weaviate) or durable Faiss/Chroma, secrets manager, observability (Prometheus/Grafana, Sentry).
 
 ## Roadmap (suggested)
