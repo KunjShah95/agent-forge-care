@@ -30,19 +30,28 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.database import async_session_factory
 from app.models.user import (
-    AgentTask, AgentType, TaskStatus, PlannerGoal, Opportunity,
+    AgentTask,
+    AgentType,
+    TaskStatus,
+    PlannerGoal,
+    Opportunity,
 )
 from app.agents.planner import decompose_goal_with_llm, format_planner_response
 from app.agents.internship_agent import discover_internships
 from app.agents.job_agent import discover_jobs
 from app.agents.research_agent import conduct_research
 from app.agents.assistant_agent import (
-    tailor_resume, generate_cover_letter, prepare_interview,
-    generate_outreach, run_daily_scan, get_career_guidance,
+    tailor_resume,
+    generate_cover_letter,
+    prepare_interview,
+    generate_outreach,
+    run_daily_scan,
+    get_career_guidance,
 )
 from app.utils.demo_data import generate_demo_opportunities
 from app.services.profile_service import ProfileService
 from app.services.memory_service import MemoryService
+from app.services.notification_service import create_notification
 
 logger = logging.getLogger("agentforge.graph")
 
@@ -64,10 +73,15 @@ def configure_langsmith() -> None:
     """
     if settings.langchain_api_key:
         import os
+
         os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
-        os.environ.setdefault("LANGCHAIN_PROJECT", settings.app_name.replace(" ", "-").lower())
+        os.environ.setdefault(
+            "LANGCHAIN_PROJECT", settings.app_name.replace(" ", "-").lower()
+        )
         os.environ["LANGCHAIN_API_KEY"] = settings.langchain_api_key
-        logger.info("LangSmith tracing enabled (project=%s)", os.environ["LANGCHAIN_PROJECT"])
+        logger.info(
+            "LangSmith tracing enabled (project=%s)", os.environ["LANGCHAIN_PROJECT"]
+        )
 
 
 def gen_id() -> str:
@@ -75,6 +89,9 @@ def gen_id() -> str:
 
 
 # ─── Agent Map (shared across nodes) ────────────────────────
+
+AGENT_TIMEOUT = 120  # seconds — per-agent timeout for asyncio.gather()
+AGENT_MAX_RETRIES = 2  # retry attempts with exponential backoff
 
 AGENT_HANDLERS = {
     AgentType.internship: discover_internships,
@@ -93,6 +110,7 @@ AGENT_HANDLERS = {
 
 class PlannerGraphState(TypedDict):
     """Shared state passed through the LangGraph."""
+
     user_id: str
     goal: str
     profile: dict
@@ -103,6 +121,9 @@ class PlannerGraphState(TypedDict):
     error: Optional[str]
     planner_goal_id: Optional[str]
     planner_task_id: Optional[str]
+    reflection_scores: dict[str, dict]
+    reflection_iterations: int
+    needs_regeneration: bool
 
 
 # ─── Node: Decompose Goal ───────────────────────────────────
@@ -154,10 +175,59 @@ async def decompose_goal_node(state: PlannerGraphState) -> dict:
     }
 
 
+# ─── Retry / Timeout Helpers ─────────────────────────────────
+
+
+async def _execute_with_retry(
+    agent_str: str,
+    user_id: str,
+    params: dict,
+    planner_goal_id: str | None,
+) -> dict:
+    """
+    Execute a single agent with exponential backoff retry.
+
+    Retry schedule: attempt 0 (immediate), attempt 1 (2s wait), attempt 2 (4s wait).
+    Each attempt is individually timed out via asyncio.wait_for.
+    """
+    last_error: Exception | None = None
+    for attempt in range(AGENT_MAX_RETRIES + 1):
+        try:
+            coro = _execute_single_agent_inner(
+                agent_str, user_id, params, planner_goal_id
+            )
+            return await asyncio.wait_for(coro, timeout=AGENT_TIMEOUT)
+        except asyncio.TimeoutError:
+            last_error = TimeoutError(
+                f"Agent {agent_str} timed out after {AGENT_TIMEOUT}s"
+            )
+            logger.warning(
+                "Agent %s timed out (attempt %d/%d)",
+                agent_str,
+                attempt + 1,
+                AGENT_MAX_RETRIES + 1,
+            )
+        except Exception as e:
+            last_error = e
+            logger.warning(
+                "Agent %s failed (attempt %d/%d): %s",
+                agent_str,
+                attempt + 1,
+                AGENT_MAX_RETRIES + 1,
+                e,
+            )
+
+        if attempt < AGENT_MAX_RETRIES:
+            wait = 2**attempt  # 1s, 2s, 4s
+            await asyncio.sleep(wait)
+
+    return {agent_str: {"error": str(last_error)}}
+
+
 # ─── Parallel Agent Dispatch Helpers ────────────────────────
 
 
-async def _execute_single_agent(
+async def _execute_single_agent_inner(
     agent_str: str,
     user_id: str,
     params: dict,
@@ -202,6 +272,14 @@ async def _execute_single_agent(
             spec_task.output = agent_result
             spec_task.completed_at = datetime.now(timezone.utc)
 
+            await create_notification(
+                db,
+                user_id,
+                title=f"{agent_type.value.title()} task completed",
+                body=f"Your {agent_type.value} task finished successfully.",
+                type="success",
+            )
+
             return {agent_str: agent_result}
 
         except Exception as e:
@@ -210,42 +288,127 @@ async def _execute_single_agent(
             spec_task.error = str(e)
             spec_task.completed_at = datetime.now(timezone.utc)
 
+            await create_notification(
+                db,
+                user_id,
+                title=f"{agent_type.value.title()} task failed",
+                body=str(e)[:200],
+                type="error",
+            )
+
             return {agent_str: {"error": str(e)}}
 
-    # Should not reach here, but just in case
     return {agent_str: {"error": "Unknown execution error"}}
+
+
+# ─── Dynamic Agent Routing ──────────────────────────────────
+
+
+def _filter_tasks_by_context(tasks: list[dict], profile: dict) -> list[dict]:
+    """
+    Dynamically filter agent tasks based on user profile context.
+
+    - Skip internship agent if user's role types explicitly exclude internships.
+    - Skip job agent if user only wants internships.
+    - Skip research agent with default params if the user has no target companies.
+    """
+    role_types = profile.get("role_types", [])
+    target_companies = profile.get("target_locations", [])
+    career_goal = profile.get("career_goal", "").lower()
+
+    filtered: list[dict] = []
+    for task in tasks:
+        agent = task.get("agent", "")
+        action = task.get("action", "")
+
+        # Skip internship if role types exclude internship
+        if agent == "internship" and role_types:
+            if all("intern" not in rt.lower() for rt in role_types):
+                logger.info(
+                    "Dynamic routing: skipping internship agent (role types: %s)",
+                    role_types,
+                )
+                continue
+
+        # Skip job agent if user only wants internships
+        if agent == "job" and role_types:
+            if all(
+                "full" not in rt.lower() and "job" not in rt.lower()
+                for rt in role_types
+            ):
+                if any("intern" in rt.lower() for rt in role_types):
+                    logger.info(
+                        "Dynamic routing: skipping job agent (role types: %s)",
+                        role_types,
+                    )
+                    continue
+
+        # Skip research agent with empty company if no target companies
+        if agent == "research":
+            company = task.get("params", {}).get("company", "")
+            if not company and not target_companies:
+                logger.info(
+                    "Dynamic routing: skipping research agent (no target company)"
+                )
+                continue
+
+        # Enrich task with user context for downstream agents
+        params = task.get("params", {})
+        if career_goal and "career_goal" not in params:
+            params["career_goal"] = career_goal
+        task["params"] = params
+
+        filtered.append(task)
+
+    return filtered
 
 
 async def dispatch_all_agents_node(state: PlannerGraphState) -> dict:
     """
     Graph node: dispatch all specialist agents in parallel using asyncio.gather().
 
-    Each agent runs with its own database session to allow true parallel execution.
-    Results are aggregated into a single dict keyed by agent name.
-    Falls back to sequential execution if tasks are empty.
+    Features:
+      - Retry with exponential backoff per agent
+      - Timeout per agent via asyncio.wait_for
+      - Priority-based task ordering
+      - Dynamic routing: skips irrelevant agents based on user profile
     """
     user_id = state["user_id"]
     tasks = state.get("tasks", [])
+    profile = state.get("profile", {})
     planner_goal_id = state.get("planner_goal_id")
 
     if not tasks:
         return {"results": {}}
 
-    logger.info("Dispatching %d specialist agents in parallel", len(tasks))
+    # 1. Dynamic routing — filter irrelevant tasks based on user context
+    tasks = _filter_tasks_by_context(tasks, profile)
 
-    # Create coroutines for all agents
+    if not tasks:
+        logger.info("All tasks filtered out by dynamic routing")
+        return {"results": {}}
+
+    # 2. Priority sort — highest priority first (lower number = higher priority)
+    tasks.sort(key=lambda t: t.get("priority", 5))
+
+    logger.info(
+        "Dispatching %d specialist agents in parallel (with retry+timeout)",
+        len(tasks),
+    )
+
+    # 3. Create retry-wrapped coroutines for all agents
     coros = []
     for task_def in tasks:
         agent_str = task_def.get("agent", "monitor")
         params = task_def.get("params", {})
-        coro = _execute_single_agent(agent_str, user_id, params, planner_goal_id)
+        coro = _execute_with_retry(agent_str, user_id, params, planner_goal_id)
         coros.append(coro)
 
-    # Execute all agents in parallel — use return_exceptions=True so one
-    # agent crash doesn't discard results from all other agents
+    # 4. Execute all agents in parallel — return_exceptions=True so one
+    #    agent crash doesn't discard results from all other agents
     results_list = await asyncio.gather(*coros, return_exceptions=True)
 
-    # Merge individual results into a single dict, handling exceptions
+    # 5. Merge individual results into a single dict, handling exceptions
     merged_results: dict[str, Any] = {}
     for result_item in results_list:
         if isinstance(result_item, Exception):
@@ -256,7 +419,11 @@ async def dispatch_all_agents_node(state: PlannerGraphState) -> dict:
 
     logger.info(
         "Parallel dispatch complete: %d succeeded, %d failed",
-        sum(1 for v in merged_results.values() if isinstance(v, dict) and "error" not in v),
+        sum(
+            1
+            for v in merged_results.values()
+            if isinstance(v, dict) and "error" not in v
+        ),
         sum(1 for v in merged_results.values() if isinstance(v, dict) and "error" in v),
     )
 
@@ -315,6 +482,186 @@ async def dispatch_agent(
     return await _fallback_search(user_id, params, db, agent_type)
 
 
+# ─── Reflection Scoring ─────────────────────────────────────
+
+REFLECTION_RUBRIC = {
+    "accuracy": "No hallucinations, sources verifiable",
+    "specificity": "Tailored to user, not generic",
+    "actionability": "Contains next steps the user can actually take",
+    "tone_match": "Matches the user's communication preferences",
+    "format_quality": "Correct structure, no broken JSON, readable",
+}
+
+
+async def _score_agent_output(
+    agent_type: str,
+    result: dict,
+    goal: str,
+    profile: dict,
+) -> dict:
+    """Score an agent's output against the reflection rubric (0-10 each)."""
+    scores = {}
+    total = 0
+
+    if not result or "error" in result:
+        for dim in REFLECTION_RUBRIC:
+            scores[dim] = 0
+        scores["total"] = 0
+        scores["feedback"] = "Agent returned error or empty result"
+        return scores
+
+    # Heuristic scoring (always available, no LLM needed)
+    result_str = str(result)
+    items = result.get("items", [])
+    message = result.get("message", "")
+
+    # Accuracy: penalize generic error messages, reward structured data
+    error_keywords = ["information not available", "error", "unavailable", "unknown"]
+    accuracy = 10
+    for kw in error_keywords:
+        if kw in result_str.lower():
+            accuracy -= 3
+    if items:
+        accuracy = min(10, accuracy + 2)
+    if result.get("summary") and len(result.get("summary", "")) > 50:
+        accuracy = min(10, accuracy + 1)
+    scores["accuracy"] = max(1, accuracy)
+
+    # Specificity: check for skill references, company names, concrete details
+    profile_skills = profile.get("skills", [])
+    specificity = 4
+    for skill in profile_skills:
+        if isinstance(skill, str) and skill.lower() in result_str.lower():
+            specificity += 1
+    if message and len(message) > 30:
+        specificity += 2
+    if items:
+        specificity += 2
+    if goal.lower() in result_str.lower():
+        specificity += 1
+    scores["specificity"] = min(10, specificity)
+
+    # Actionability: contains next steps or concrete items
+    actionability = 5
+    if items:
+        actionability = 8
+    if result.get("action_items"):
+        actionability = min(10, actionability + 2)
+    if result.get("next_steps"):
+        actionability = min(10, actionability + 2)
+    if result.get("tips"):
+        actionability = min(10, actionability + 1)
+    if result.get("suggestions"):
+        actionability = min(10, actionability + 1)
+    scores["actionability"] = actionability
+
+    # Tone match: check for professional tone indicators
+    tone_markers = [
+        "recommend",
+        "suggest",
+        "consider",
+        "based on",
+        "opportunity",
+        "skill",
+    ]
+    tone = 6
+    for marker in tone_markers:
+        if marker in result_str.lower():
+            tone += 1
+    if any(c.isupper() for c in message[:3] if c.isalpha()):
+        tone += 1
+    scores["tone_match"] = min(10, tone)
+
+    # Format quality: check structure
+    fmt = 8
+    if isinstance(result, dict):
+        fmt = 8
+        if "message" in result:
+            fmt += 1
+        if "items" in result or "questions" in result or "guidance" in result:
+            fmt += 1
+        if isinstance(result.get("items"), list) or isinstance(
+            result.get("questions"), list
+        ):
+            fmt += 0
+    else:
+        fmt = 4
+    scores["format_quality"] = min(10, fmt)
+
+    total = sum(v for k, v in scores.items() if k != "total")
+    scores["total"] = total
+    scores["feedback"] = _generate_reflection_feedback(scores, agent_type, result)
+    return scores
+
+
+def _generate_reflection_feedback(
+    scores: dict,
+    agent_type: str,
+    result: dict,
+) -> str:
+    """Generate human-readable reflection feedback."""
+    weaknesses = []
+    for dim, score in scores.items():
+        if dim == "total" or dim == "feedback":
+            continue
+        if score < 5:
+            weaknesses.append(f"{dim} is low ({score}/10)")
+    if weaknesses:
+        return f"{agent_type}: " + "; ".join(weaknesses)
+    return f"{agent_type}: Output quality acceptable"
+
+
+async def reflect_on_results_node(state: PlannerGraphState) -> dict:
+    """
+    Graph node: score all agent results against the reflection rubric.
+
+    Identifies underperforming agents and triggers regeneration
+    if scores fall below the threshold.
+    """
+    results = state.get("results", {})
+    goal = state.get("goal", "")
+    profile = state.get("profile", {})
+    iteration = state.get("reflection_iterations", 0)
+
+    reflection_scores = {}
+    needs_regeneration = False
+
+    for agent_type, result in results.items():
+        scores = await _score_agent_output(agent_type, result, goal, profile)
+        reflection_scores[agent_type] = scores
+
+        if scores["total"] < 35 and iteration < 2:
+            needs_regeneration = True
+            logger.info(
+                "Reflection: %s scored %d/50 (iteration %d) — will regenerate",
+                agent_type,
+                scores["total"],
+                iteration,
+            )
+
+    passed = sum(1 for s in reflection_scores.values() if s["total"] >= 35)
+    total_agents = len(reflection_scores)
+    logger.info(
+        "Reflection complete: %d/%d agents passed (iteration %d)",
+        passed,
+        total_agents,
+        iteration,
+    )
+
+    return {
+        "reflection_scores": reflection_scores,
+        "needs_regeneration": needs_regeneration,
+        "reflection_iterations": iteration + 1,
+    }
+
+
+def should_regenerate(state: PlannerGraphState) -> str:
+    """Conditional edge: regenerate or proceed to final response."""
+    if state.get("needs_regeneration") and state.get("reflection_iterations", 0) < 2:
+        return "dispatch_all_agents"
+    return "generate_final_response"
+
+
 # ─── Node: Generate Final Response ──────────────────────────
 
 
@@ -322,6 +669,7 @@ async def generate_final_response_node(state: PlannerGraphState) -> dict:
     """
     Graph node: produce the final planner response and update DB records.
     """
+    user_id = state["user_id"]
     goal = state["goal"]
     results = state.get("results", {})
 
@@ -356,6 +704,14 @@ async def generate_final_response_node(state: PlannerGraphState) -> dict:
                 }
                 planner_task.completed_at = datetime.now(timezone.utc)
 
+                await create_notification(
+                    db,
+                    user_id,
+                    title="Goal completed",
+                    body=f"Your goal has been processed.",
+                    type="success",
+                )
+
         await db.flush()
 
     return {
@@ -382,11 +738,20 @@ def build_planner_graph() -> StateGraph:
 
     builder.add_node("decompose_goal", decompose_goal_node)
     builder.add_node("dispatch_all_agents", dispatch_all_agents_node)
+    builder.add_node("reflect_on_results", reflect_on_results_node)
     builder.add_node("generate_final_response", generate_final_response_node)
 
     builder.add_edge(START, "decompose_goal")
     builder.add_edge("decompose_goal", "dispatch_all_agents")
-    builder.add_edge("dispatch_all_agents", "generate_final_response")
+    builder.add_edge("dispatch_all_agents", "reflect_on_results")
+    builder.add_conditional_edges(
+        "reflect_on_results",
+        should_regenerate,
+        {
+            "dispatch_all_agents": "dispatch_all_agents",
+            "generate_final_response": "generate_final_response",
+        },
+    )
     builder.add_edge("generate_final_response", END)
 
     graph = builder.compile()
@@ -450,6 +815,9 @@ async def run_planner_agent(user_id: str, goal: str) -> str:
         "error": None,
         "planner_goal_id": None,
         "planner_task_id": None,
+        "reflection_scores": {},
+        "reflection_iterations": 0,
+        "needs_regeneration": False,
     }
 
     # Invoke the LangGraph (lazy-compiled singleton)
@@ -487,11 +855,27 @@ async def run_opportunity_scan(user_id: str) -> str:
             task.completed_at = datetime.now(timezone.utc)
             await db.flush()
 
+            await create_notification(
+                db,
+                user_id,
+                title="Opportunity scan complete",
+                body="New opportunities may be available. Check your matches!",
+                type="info",
+            )
+
         except Exception as e:
             task.status = TaskStatus.failed
             task.error = str(e)
             task.completed_at = datetime.now(timezone.utc)
             await db.flush()
+
+            await create_notification(
+                db,
+                user_id,
+                title="Opportunity scan failed",
+                body=str(e)[:200],
+                type="error",
+            )
 
     return task_id
 
@@ -525,12 +909,16 @@ async def run_resume_tailoring(user_id: str, application_id: str) -> str:
                 select(Opportunity).where(Opportunity.id == app.opportunity_id)
             )
             opp = opp_result.scalar_one_or_none()
-            result = await tailor_resume(user_id, {
-                "role_type": opp.type.lower() if opp else "internship",
-                "target_company": opp.company if opp else None,
-                "skills": opp.skills_required if opp else [],
-                "application_id": application_id,
-            }, db)
+            result = await tailor_resume(
+                user_id,
+                {
+                    "role_type": opp.type.lower() if opp else "internship",
+                    "target_company": opp.company if opp else None,
+                    "skills": opp.skills_required if opp else [],
+                    "application_id": application_id,
+                },
+                db,
+            )
             task.output = result
         else:
             task.output = {"error": "Application not found"}

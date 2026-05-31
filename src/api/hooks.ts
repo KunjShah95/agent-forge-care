@@ -262,6 +262,38 @@ export function useCoverLetter() {
   });
 }
 
+// ─── Career Guidance ────────────────────────────────────
+
+export function useCareerGuidance() {
+  return useMutation({
+    mutationFn: api.agents.careerGuidance,
+  });
+}
+
+// ─── Networking Outreach ─────────────────────────────────
+
+export function useNetworkingOutreach() {
+  return useMutation({
+    mutationFn: api.agents.networkingOutreach,
+  });
+}
+
+// ─── Internship Discovery ───────────────────────────────
+
+export function useInternshipDiscovery() {
+  return useMutation({
+    mutationFn: api.agents.internshipDiscover,
+  });
+}
+
+// ─── Job Discovery ──────────────────────────────────────
+
+export function useJobDiscovery() {
+  return useMutation({
+    mutationFn: api.agents.jobDiscover,
+  });
+}
+
 // ─── Resume Tailor ──────────────────────────────────────
 
 export function useResumeTailor() {

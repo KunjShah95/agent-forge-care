@@ -6,29 +6,13 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Clock, CheckCircle2, AlertCircle, Loader2, Brain,
-  Target, FileSearch, MessageSquare, Network, Bell,
-  Sparkles, Zap, Trash2, Play, XCircle,
+  Clock, CheckCircle2, AlertCircle, Loader2,
+  Trash2, Play, XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAgentTasks, useRunPlanner, useRunMonitor, useDeleteTask } from "@/api/hooks";
 import type { AgentTask } from "@/api/client";
-
-const agentTypeDisplayMap: Record<string, { name: string; icon: React.ElementType }> = {
-  planner: { name: "Planner Agent", icon: Brain },
-  internship: { name: "Internship Agent", icon: Target },
-  job: { name: "Job Agent", icon: Zap },
-  research: { name: "Research Agent", icon: FileSearch },
-  resume: { name: "Resume Agent", icon: Sparkles },
-  interview: { name: "Interview Agent", icon: MessageSquare },
-  networking: { name: "Networking Agent", icon: Network },
-  monitor: { name: "Opportunity Monitor", icon: Bell },
-  memory: { name: "Memory Layer", icon: Brain },
-};
-
-function getAgentDisplay(agentType: string) {
-  return agentTypeDisplayMap[agentType] || { name: `${agentType} Agent`, icon: Brain };
-}
+import { getAgentInfo } from "@/lib/agent-types";
 
 function formatTimeAgo(dateStr: string) {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -41,9 +25,9 @@ function formatTimeAgo(dateStr: string) {
 }
 
 function AgentQueueItem({ item, onRun, onDelete }: { item: AgentTask; onRun?: (item: AgentTask) => void; onDelete?: (id: string) => void }) {
-  const display = getAgentDisplay(item.agent_type);
-  const Icon = display.icon;
-  const taskDescription = item.input?.goal as string || item.input?.task as string || display.name + " task";
+  const info = getAgentInfo(item.agent_type);
+  const Icon = info.icon;
+  const taskDescription = item.input?.goal as string || item.input?.task as string || info.name + " task";
 
   return (
     <div className="flex items-start gap-3 p-4 rounded-xl bg-muted/30 hover:bg-muted/50 transition group">
@@ -79,7 +63,7 @@ function AgentQueueItem({ item, onRun, onDelete }: { item: AgentTask; onRun?: (i
           </Badge>
         </div>
         <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-          <span>{display.name}</span>
+          <span>{info.name}</span>
           <span>·</span>
           <span>{formatTimeAgo(item.created_at)}</span>
         </div>

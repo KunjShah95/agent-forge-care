@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
@@ -8,10 +8,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Camera, Loader2, CreditCard } from "lucide-react";
 import { useProfile, useUpdateProfile, useMemory, useCreateMemory } from "@/api/hooks";
+import { profile as profileApi } from "@/api/client";
+import { AGENT_LABELS } from "@/lib/agent-types";
 
 type ProfileFormValues = {
   school: string;
@@ -28,17 +31,19 @@ type ProfileFormValues = {
   company_sizes: string;
 };
 
-const agentNames = ["Planner", "Internship", "Job", "Research", "Resume", "Interview", "Networking", "Opportunity Monitor"];
+const agentNames = AGENT_LABELS;
 
 export default function Settings() {
   const { data: profile, isLoading } = useProfile();
   const updateProfile = useUpdateProfile();
-  const [agentToggles, setAgentToggles] = useState<Record<string, boolean>>(
-    Object.fromEntries(agentNames.map((a) => [a, true]))
-  );
+  const [agentToggles, setAgentToggles] = useState<Record<string, boolean>>({});
+  const [togglesLoaded, setTogglesLoaded] = useState(false);
+  const [avatarUploading, setAvatarUploading] = useState(false);
   const queryClient = useQueryClient();
   const { data: memoryData } = useMemory();
   const createMemory = useCreateMemory();
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const apiBase = import.meta.env.VITE_API_URL?.replace("/api/v1", "") || "http://localhost:8000";
 
   const { register, handleSubmit, reset, formState: { isDirty } } = useForm<ProfileFormValues>({
     defaultValues: {
@@ -77,13 +82,32 @@ export default function Settings() {
   }, [profile, reset]);
 
   useEffect(() => {
-    if (memoryData?.items) {
+    if (!togglesLoaded && memoryData?.items) {
       const entry = memoryData.items.find((m) => m.key === "agent_toggles");
       if (entry && entry.value && typeof entry.value === "object") {
         setAgentToggles(entry.value as Record<string, boolean>);
+      } else {
+        setAgentToggles(Object.fromEntries(agentNames.map((a) => [a, true])));
       }
+      setTogglesLoaded(true);
     }
-  }, [memoryData]);
+  }, [memoryData, togglesLoaded]);
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setAvatarUploading(true);
+    try {
+      await profileApi.uploadAvatar(file);
+      await queryClient.invalidateQueries({ queryKey: ["profile"] });
+      toast.success("Photo updated");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setAvatarUploading(false);
+      if (avatarInputRef.current) avatarInputRef.current.value = "";
+    }
+  };
 
   const onSubmit = (data: ProfileFormValues) => {
     updateProfile.mutate(
@@ -126,11 +150,34 @@ export default function Settings() {
           <Card className="glass p-6 space-y-4">
             <div className="flex items-center gap-4">
               <Avatar className="h-16 w-16 border-2 border-primary/30">
+                {profile?.avatar_url ? (
+                  <AvatarImage src={`${apiBase}${profile.avatar_url}`} alt="Avatar" />
+                ) : null}
                 <AvatarFallback className="bg-gradient-primary text-primary-foreground text-lg font-display">
                   {isLoading ? "..." : "U"}
                 </AvatarFallback>
               </Avatar>
-              <Button variant="outline" size="sm">Upload photo</Button>
+              <div>
+                <input
+                  type="file"
+                  ref={avatarInputRef}
+                  className="hidden"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  onChange={handleAvatarUpload}
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => avatarInputRef.current?.click()}
+                  disabled={avatarUploading}
+                >
+                  {avatarUploading ? (
+                    <><Loader2 className="h-3 w-3 mr-1.5 animate-spin" />Uploading</>
+                  ) : (
+                    <><Camera className="h-3 w-3 mr-1.5" />Upload photo</>
+                  )}
+                </Button>
+              </div>
             </div>
             {isLoading ? (
               <div className="grid grid-cols-2 gap-4">
@@ -177,7 +224,7 @@ export default function Settings() {
               </div>
               <div className="flex-1">
                 <div className="font-medium">{a} Agent</div>
-                <div className="text-xs text-muted-foreground">Active · Last run 12 min ago</div>
+
               </div>
               <Badge variant="outline" className="bg-success/10 text-success border-success/20">Healthy</Badge>
               <Switch
@@ -193,19 +240,12 @@ export default function Settings() {
         </TabsContent>
 
         <TabsContent value="billing" className="mt-4">
-          <Card className="glass p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <div className="font-display font-semibold text-lg">Pro Plan</div>
-                <div className="text-xs text-muted-foreground">$19/mo · Renews Jan 14</div>
-              </div>
-              <Badge className="bg-gradient-primary border-0 text-primary-foreground">Active</Badge>
-            </div>
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between"><span className="text-muted-foreground">Agent runs this month</span><span>1,247</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">AI tokens used</span><span>2.4M / 5M</span></div>
-            </div>
-            <Button variant="outline" className="w-full mt-4">Manage subscription</Button>
+          <Card className="glass p-6 text-center py-12">
+            <CreditCard className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+            <div className="font-display font-semibold text-lg mb-1">Billing coming soon</div>
+            <p className="text-sm text-muted-foreground max-w-md mx-auto">
+              Subscription management, usage tracking, and plan upgrades will be available in a future release.
+            </p>
           </Card>
         </TabsContent>
       </Tabs>

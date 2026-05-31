@@ -1,5 +1,6 @@
 import os
 import uuid
+import time
 import pytest
 import pytest_asyncio
 from datetime import datetime, timezone, date
@@ -8,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 os.environ.setdefault("DEBUG", "true")
 os.environ.setdefault("JWT_SECRET", "test-secret-key-for-testing-only")
+os.environ.setdefault("FIREBASE_PROJECT_ID", "test-firebase-project")
 
 from httpx import AsyncClient, ASGITransport
 from passlib.context import CryptContext
@@ -34,10 +36,11 @@ from app.models.user import (
     PlannerGoal,
 )
 from sqlalchemy import DateTime, ARRAY as SA_ARRAY, Boolean, Integer
-from app.services.auth_service import AuthService
-
-create_access_token = AuthService.create_access_token
-create_refresh_token = AuthService.create_refresh_token
+from jose import jws
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.backends import default_backend
+from app.config import settings
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -46,8 +49,54 @@ TEST_USER_EMAIL = "test@example.com"
 TEST_USER_PASSWORD = "password123"
 TEST_USER_HASH = pwd_context.hash(TEST_USER_PASSWORD)
 TEST_USER_NAME = "Test User"
+TEST_FIREBASE_UID = "firebase-uid-12345"
 
 OTHER_USER_ID = str(uuid.uuid4())
+OTHER_FIREBASE_UID = "firebase-uid-other"
+
+
+def _generate_rsa_keypair():
+    private_key = rsa.generate_private_key(
+        public_exponent=65537,
+        key_size=2048,
+        backend=default_backend(),
+    )
+    public_key = private_key.public_key()
+    pem_private = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+    pem_public = public_key.public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo,
+    )
+    return pem_private, pem_public
+
+
+TEST_PRIVATE_KEY, TEST_PUBLIC_KEY = _generate_rsa_keypair()
+
+
+def create_firebase_token(
+    uid: str = TEST_FIREBASE_UID,
+    email: str = TEST_USER_EMAIL,
+    name: str = TEST_USER_NAME,
+) -> str:
+    now = time.time()
+    payload = {
+        "sub": uid,
+        "email": email,
+        "name": name,
+        "aud": settings.firebase_project_id,
+        "iss": f"https://securetoken.google.com/{settings.firebase_project_id}",
+        "iat": int(now),
+        "exp": int(now) + 3600,
+        "uid": uid,
+    }
+    kid = "test-kid-001"
+    header = {"alg": "RS256", "kid": kid, "typ": "JWT"}
+    token = jws.sign(payload, TEST_PRIVATE_KEY, algorithm="RS256", headers=header)
+    return token
 
 
 def _uid():
@@ -58,7 +107,8 @@ def make_user(**overrides) -> User:
     defaults = dict(
         id=TEST_USER_ID,
         email=TEST_USER_EMAIL,
-        password_hash=TEST_USER_HASH,
+        password_hash=None,
+        firebase_uid=TEST_FIREBASE_UID,
         full_name=TEST_USER_NAME,
         avatar_url=None,
         created_at=datetime.now(timezone.utc),
@@ -291,7 +341,8 @@ def mock_db():
     session.flush = AsyncMock()
     session.close = AsyncMock()
     session.delete = AsyncMock()
-    session.execute = AsyncMock()
+    default_result = MockResult(scalar_value=None)
+    session.execute = AsyncMock(return_value=default_result)
     return session
 
 
@@ -302,13 +353,15 @@ def test_user():
 
 @pytest.fixture
 def auth_headers(test_user):
-    token = create_access_token(str(test_user.id))
+    token = create_firebase_token()
     return {"Authorization": f"Bearer {token}"}
 
 
 @pytest.fixture
 def other_user_auth():
-    token = create_access_token(str(OTHER_USER_ID))
+    token = create_firebase_token(
+        uid=OTHER_FIREBASE_UID, email="other@example.com", name="Other User"
+    )
     return {"Authorization": f"Bearer {token}"}
 
 

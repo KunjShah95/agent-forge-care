@@ -3,38 +3,15 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import AgentChat from "@/components/AgentChat";
-import {
-  Brain, Sparkles, Clock, CheckCircle2,
-  AlertCircle, Loader2, Target, FileSearch, MessageSquare,
-  Network, Bell, Zap, Layers3,
-} from "lucide-react";
+import { Brain, Layers3, Loader2 } from "lucide-react";
 import { useAgentTasks } from "@/api/hooks";
 import type { AgentTask } from "@/api/client";
-
-const agentIcons: Record<string, React.ElementType> = {
-  "Planner Agent": Brain,
-  "Internship Agent": Target,
-  "Job Agent": Zap,
-  "Research Agent": FileSearch,
-  "Resume Agent": Sparkles,
-  "Interview Agent": MessageSquare,
-  "Networking Agent": Network,
-  "Opportunity Monitor": Bell,
-  "Memory Layer": Layers3,
-};
-
-const statusConfig = {
-  running: { icon: Loader2, className: "text-primary animate-spin", label: "Running" },
-  completed: { icon: CheckCircle2, className: "text-success", label: "Complete" },
-  queued: { icon: Clock, className: "text-muted-foreground", label: "Queued" },
-  failed: { icon: AlertCircle, className: "text-destructive", label: "Failed" },
-};
+import { AGENT_TYPE_MAP, AGENT_KEYS, STATUS_CONFIG, getAgentInfo } from "@/lib/agent-types";
 
 export default function AgentConsole() {
   const { data: tasksData, isLoading: tasksLoading } = useAgentTasks();
 
-  const agentTypes = ["planner", "internship", "job", "research", "resume", "interview", "networking", "monitor"];
-  const agentMetrics = agentTypes.map((type) => {
+  const agentMetrics = AGENT_KEYS.map((type) => {
     const tasks = (tasksData?.items || []).filter(
       (t: AgentTask) => t.agent_type === type
     );
@@ -74,7 +51,7 @@ export default function AgentConsole() {
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
                   {(() => {
-                    const Icon = agentIcons[`${m.agent} Agent`] || Brain;
+                    const Icon = getAgentInfo(m.agent.toLowerCase()).icon;
                     return <Icon className="h-4 w-4 text-primary" />;
                   })()}
                   <span className="font-medium text-sm">{m.agent}</span>
@@ -113,12 +90,9 @@ export default function AgentConsole() {
           ) : (
             <div className="space-y-2 max-h-[500px] overflow-y-auto scrollbar-thin">
               {(tasksData?.items || []).map((t: AgentTask) => {
-                const agentName = t.agent_type
-                  ? t.agent_type.charAt(0).toUpperCase() + t.agent_type.slice(1) + " Agent"
-                  : "Agent";
-                const Icon = agentIcons[agentName] || Brain;
-                const taskStatus = t.status || t.status;
-                const status = statusConfig[taskStatus as keyof typeof statusConfig] || statusConfig.queued;
+                const info2 = getAgentInfo(t.agent_type);
+                const Icon = info2.icon;
+                const status = STATUS_CONFIG[t.status as keyof typeof STATUS_CONFIG] || STATUS_CONFIG.queued;
                 const StatusIcon = status.icon;
                 return (
                   <div key={t.id} className="flex items-start gap-3 p-3 rounded-lg hover:bg-muted/30 transition group">
@@ -127,7 +101,7 @@ export default function AgentConsole() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="font-medium text-sm">{agentName}</span>
+                        <span className="font-medium text-sm">{info2.name}</span>
                         <Badge variant="outline" className={`text-[10px] ${status.className}`}>
                           <StatusIcon className={`h-3 w-3 mr-0.5 ${t.status === "running" ? "animate-spin" : ""}`} />
                           {status.label}

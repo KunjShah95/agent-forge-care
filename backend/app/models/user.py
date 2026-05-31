@@ -1,8 +1,20 @@
 import uuid
 from datetime import datetime, date, timezone
 from sqlalchemy import (
-    Column, String, Text, Boolean, Integer, Float, Date, DateTime,
-    ForeignKey, Enum, ARRAY, JSON, UniqueConstraint, DECIMAL,
+    Column,
+    String,
+    Text,
+    Boolean,
+    Integer,
+    Float,
+    Date,
+    DateTime,
+    ForeignKey,
+    Enum,
+    ARRAY,
+    JSON,
+    UniqueConstraint,
+    DECIMAL,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -15,6 +27,7 @@ def gen_uuid():
 
 
 # ─── Enums ──────────────────────────────────────────────────
+
 
 class ApplicationStage(str, enum.Enum):
     saved = "saved"
@@ -63,35 +76,67 @@ class OpportunityType(str, enum.Enum):
 
 # ─── Users ──────────────────────────────────────────────────
 
+
 class User(Base):
     __tablename__ = "users"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=gen_uuid)
     email = Column(String(255), unique=True, nullable=False, index=True)
-    password_hash = Column(String(255), nullable=False)
+    password_hash = Column(String(255), nullable=True)
+    firebase_uid = Column(String(255), unique=True, nullable=True, index=True)
     full_name = Column(String(255), nullable=False)
     avatar_url = Column(Text, nullable=True)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
 
-    profile = relationship("Profile", back_populates="user", uselist=False, cascade="all, delete-orphan")
-    opportunities = relationship("Opportunity", back_populates="user", cascade="all, delete-orphan")
-    applications = relationship("Application", back_populates="user", cascade="all, delete-orphan")
-    contacts = relationship("Contact", back_populates="user", cascade="all, delete-orphan")
-    agent_tasks = relationship("AgentTask", back_populates="user", cascade="all, delete-orphan")
-    memory_entries = relationship("MemoryEntry", back_populates="user", cascade="all, delete-orphan")
-    planner_goals = relationship("PlannerGoal", back_populates="user", cascade="all, delete-orphan")
-    match_scores = relationship("MatchScore", back_populates="user", cascade="all, delete-orphan")
-    alert_configs = relationship("AlertConfig", back_populates="user", cascade="all, delete-orphan")
+    profile = relationship(
+        "Profile", back_populates="user", uselist=False, cascade="all, delete-orphan"
+    )
+    opportunities = relationship(
+        "Opportunity", back_populates="user", cascade="all, delete-orphan"
+    )
+    applications = relationship(
+        "Application", back_populates="user", cascade="all, delete-orphan"
+    )
+    contacts = relationship(
+        "Contact", back_populates="user", cascade="all, delete-orphan"
+    )
+    agent_tasks = relationship(
+        "AgentTask", back_populates="user", cascade="all, delete-orphan"
+    )
+    memory_entries = relationship(
+        "MemoryEntry", back_populates="user", cascade="all, delete-orphan"
+    )
+    planner_goals = relationship(
+        "PlannerGoal", back_populates="user", cascade="all, delete-orphan"
+    )
+    match_scores = relationship(
+        "MatchScore", back_populates="user", cascade="all, delete-orphan"
+    )
+    alert_configs = relationship(
+        "AlertConfig", back_populates="user", cascade="all, delete-orphan"
+    )
 
 
 # ─── Profiles ───────────────────────────────────────────────
+
 
 class Profile(Base):
     __tablename__ = "profiles"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=gen_uuid)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False)
+    user_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        unique=True,
+        nullable=False,
+    )
     school = Column(String(255), nullable=True)
     graduation_date = Column(Date, nullable=True)
     bio = Column(Text, nullable=True)
@@ -105,11 +150,19 @@ class Profile(Base):
     company_sizes = Column(ARRAY(String), default=list)
     career_goal = Column(Text, nullable=True)
     is_onboarded = Column(Boolean, default=False)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
 
     user = relationship("User", back_populates="profile")
-    skills = relationship("ProfileSkill", back_populates="profile", cascade="all, delete-orphan")
+    skills = relationship(
+        "ProfileSkill", back_populates="profile", cascade="all, delete-orphan"
+    )
 
 
 class Skill(Base):
@@ -122,8 +175,16 @@ class Skill(Base):
 class ProfileSkill(Base):
     __tablename__ = "profile_skills"
 
-    profile_id = Column(UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="CASCADE"), primary_key=True)
-    skill_id = Column(UUID(as_uuid=True), ForeignKey("skills.id", ondelete="CASCADE"), primary_key=True)
+    profile_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("profiles.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    skill_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("skills.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
     proficiency = Column(String(20), default="intermediate")
 
     profile = relationship("Profile", back_populates="skills")
@@ -132,11 +193,17 @@ class ProfileSkill(Base):
 
 # ─── Opportunities ──────────────────────────────────────────
 
+
 class Opportunity(Base):
     __tablename__ = "opportunities"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=gen_uuid)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     title = Column(String(255), nullable=False)
     company = Column(String(255), nullable=False)
     company_logo = Column(Text, nullable=True)
@@ -155,12 +222,22 @@ class Opportunity(Base):
     source = Column(String(100), nullable=True)
     source_url = Column(Text, nullable=True)
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
 
     user = relationship("User", back_populates="opportunities")
-    match_scores = relationship("MatchScore", back_populates="opportunity", cascade="all, delete-orphan")
-    applications = relationship("Application", back_populates="opportunity", cascade="all, delete-orphan")
+    match_scores = relationship(
+        "MatchScore", back_populates="opportunity", cascade="all, delete-orphan"
+    )
+    applications = relationship(
+        "Application", back_populates="opportunity", cascade="all, delete-orphan"
+    )
 
 
 class MatchScore(Base):
@@ -168,15 +245,23 @@ class MatchScore(Base):
     __table_args__ = (UniqueConstraint("opportunity_id", "user_id"),)
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=gen_uuid)
-    opportunity_id = Column(UUID(as_uuid=True), ForeignKey("opportunities.id", ondelete="CASCADE"), nullable=False)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    opportunity_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("opportunities.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    user_id = Column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
     overall_score = Column(DECIMAL(5, 2), nullable=False)
     skill_score = Column(DECIMAL(5, 2), nullable=True)
     location_score = Column(DECIMAL(5, 2), nullable=True)
     experience_score = Column(DECIMAL(5, 2), nullable=True)
     company_score = Column(DECIMAL(5, 2), nullable=True)
     reasons = Column(JSON, default=list)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
 
     opportunity = relationship("Opportunity", back_populates="match_scores")
     user = relationship("User", back_populates="match_scores")
@@ -184,12 +269,22 @@ class MatchScore(Base):
 
 # ─── Applications ───────────────────────────────────────────
 
+
 class Application(Base):
     __tablename__ = "applications"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=gen_uuid)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    opportunity_id = Column(UUID(as_uuid=True), ForeignKey("opportunities.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    opportunity_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("opportunities.id", ondelete="CASCADE"),
+        nullable=False,
+    )
     stage = Column(Enum(ApplicationStage), default=ApplicationStage.saved, index=True)
     applied_date = Column(Date, nullable=True)
     next_step = Column(Text, nullable=True)
@@ -197,8 +292,14 @@ class Application(Base):
     notes = Column(Text, nullable=True)
     resume_version = Column(Text, nullable=True)
     cover_letter = Column(Text, nullable=True)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
 
     user = relationship("User", back_populates="applications")
     opportunity = relationship("Opportunity", back_populates="applications")
@@ -206,11 +307,17 @@ class Application(Base):
 
 # ─── Contacts ───────────────────────────────────────────────
 
+
 class Contact(Base):
     __tablename__ = "contacts"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=gen_uuid)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     name = Column(String(255), nullable=False)
     role = Column(String(255), nullable=True)
     company = Column(String(255), nullable=True)
@@ -220,19 +327,31 @@ class Contact(Base):
     status = Column(Enum(ContactStatus), default=ContactStatus.new, index=True)
     last_contact = Column(Date, nullable=True)
     notes = Column(Text, nullable=True)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
 
     user = relationship("User", back_populates="contacts")
 
 
 # ─── Agent Tasks ────────────────────────────────────────────
 
+
 class AgentTask(Base):
     __tablename__ = "agent_tasks"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=gen_uuid)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     agent_type = Column(Enum(AgentType), nullable=False)
     goal_id = Column(UUID(as_uuid=True), nullable=True)
     input = Column(JSON, default=dict)
@@ -241,22 +360,29 @@ class AgentTask(Base):
     error = Column(Text, nullable=True)
     started_at = Column(DateTime(timezone=True), nullable=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
 
     user = relationship("User", back_populates="agent_tasks")
 
 
 # ─── Planner Goals ──────────────────────────────────────────
 
+
 class PlannerGoal(Base):
     __tablename__ = "planner_goals"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=gen_uuid)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
     goal_text = Column(Text, nullable=False)
     plan = Column(JSON, default=list)
     status = Column(String(20), default="active")
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
     completed_at = Column(DateTime(timezone=True), nullable=True)
 
     user = relationship("User", back_populates="planner_goals")
@@ -264,27 +390,45 @@ class PlannerGoal(Base):
 
 # ─── Memory Entries ─────────────────────────────────────────
 
+
 class MemoryEntry(Base):
     __tablename__ = "memory_entries"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=gen_uuid)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     key = Column(String(255), nullable=False)
     value = Column(JSON, nullable=False)
     weight = Column(DECIMAL(3, 2), default=1.0)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
 
     user = relationship("User", back_populates="memory_entries")
 
 
 # ─── Alert Configs ──────────────────────────────────────────
 
+
 class AlertConfig(Base):
     __tablename__ = "alert_configs"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=gen_uuid)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     name = Column(String(255), nullable=False)
     keywords = Column(ARRAY(String), default=list)
     locations = Column(ARRAY(String), default=list)
@@ -292,7 +436,13 @@ class AlertConfig(Base):
     min_match_score = Column(Integer, default=80)
     frequency = Column(String(20), default="daily")
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
 
     user = relationship("User", back_populates="alert_configs")

@@ -15,6 +15,7 @@ const mainNav = [
   { title: "Applications", url: "/app/applications", icon: Kanban },
   { title: "Resume Studio", url: "/app/resume", icon: FileText },
   { title: "Interview Prep", url: "/app/interview", icon: MessageSquare },
+  { title: "Career Coach", url: "/app/coach", icon: Sparkles },
 ];
 
 const intelligenceNav = [

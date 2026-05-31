@@ -1,87 +1,47 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from jose import jwt
 
-from app.config import settings
 from app.database import get_db
-from app.dependencies import get_current_user, limiter
+from app.dependencies import get_current_user
 from app.models.user import User
 from app.schemas.user import (
     RegisterRequest,
     LoginRequest,
     RefreshRequest,
-    TokenResponse,
     UserOut,
     UserUpdate,
 )
-from app.services.auth_service import AuthService
 
 router = APIRouter()
 
 
 @router.post(
-    "/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED
+    "/register",
+    status_code=status.HTTP_400_BAD_REQUEST,
 )
-@limiter.limit("5/minute")
-async def register(
-    request: Request, data: RegisterRequest, db: AsyncSession = Depends(get_db)
-):
-    """Create a new user account."""
-    result = await db.execute(select(User).where(User.email == data.email))
-    if result.scalar_one_or_none():
-        raise HTTPException(status_code=409, detail="Email already registered")
-
-    user = User(
-        email=data.email,
-        password_hash=AuthService.hash_password(data.password),
-        full_name=data.full_name,
-    )
-    db.add(user)
-    await db.flush()
-
-    return TokenResponse(
-        access_token=AuthService.create_access_token(str(user.id)),
-        refresh_token=AuthService.create_refresh_token(str(user.id)),
+async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
+    """Registration is handled via Firebase. This endpoint exists for backward compatibility."""
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="Registration is handled via Firebase. Use POST /auth/me to sync your profile.",
     )
 
 
-@router.post("/login", response_model=TokenResponse)
-@limiter.limit("5/minute")
-async def login(
-    request: Request, data: LoginRequest, db: AsyncSession = Depends(get_db)
-):
-    """Authenticate and get JWT tokens."""
-    result = await db.execute(select(User).where(User.email == data.email))
-    user = result.scalar_one_or_none()
-    if not user or not AuthService.verify_password(data.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Invalid email or password")
-
-    return TokenResponse(
-        access_token=AuthService.create_access_token(str(user.id)),
-        refresh_token=AuthService.create_refresh_token(str(user.id)),
+@router.post("/login")
+async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
+    """Login is handled via Firebase. This endpoint exists for backward compatibility."""
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="Login is handled via Firebase. Authenticate with Firebase and use the returned ID token as a Bearer token.",
     )
 
 
-@router.post("/refresh", response_model=TokenResponse)
-@limiter.limit("5/minute")
-async def refresh_token(
-    request: Request, data: RefreshRequest, db: AsyncSession = Depends(get_db)
-):
-    """Refresh an access token using a valid refresh token."""
-    try:
-        payload = jwt.decode(
-            data.token, settings.jwt_secret, algorithms=[settings.jwt_algorithm]
-        )
-        if payload.get("type") != "refresh":
-            raise HTTPException(status_code=401, detail="Invalid token type")
-        user_id = payload.get("sub")
-    except Exception:
-        raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
-
-    return TokenResponse(
-        access_token=AuthService.create_access_token(user_id),
-        refresh_token=AuthService.create_refresh_token(user_id),
+@router.post("/refresh")
+async def refresh_token(data: RefreshRequest, db: AsyncSession = Depends(get_db)):
+    """Token refresh is handled via Firebase. This endpoint exists for backward compatibility."""
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="Token refresh is handled via Firebase SDK on the client side.",
     )
 
 

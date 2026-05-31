@@ -26,21 +26,11 @@ import { Upload, Sparkles, FileText, Download, CheckCircle2, AlertCircle, Loader
 import { useResumeTailor, useCoverLetter, useResumes, useDeleteResume } from "@/api/hooks";
 import { resume } from "@/api/client";
 import { toast } from "sonner";
-
-const keywordGap = [
-  { keyword: "Distributed Systems", inJob: true, inResume: false, weight: "High" },
-  { keyword: "Kubernetes", inJob: true, inResume: true, weight: "Medium" },
-  { keyword: "Go", inJob: true, inResume: false, weight: "Medium" },
-  { keyword: "React", inJob: true, inResume: true, weight: "High" },
-  { keyword: "Postgres", inJob: true, inResume: true, weight: "Low" },
-  { keyword: "GraphQL", inJob: true, inResume: false, weight: "Low" },
-];
-
 export default function ResumeStudio() {
   const [tailorDialogOpen, setTailorDialogOpen] = useState(false);
   const [tailorCompany, setTailorCompany] = useState("");
   const [tailorRole, setTailorRole] = useState("software_engineering");
-  const [tailorResult, setTailorResult] = useState<Record<string, unknown> | null>(null);
+  const [tailorResult, setTailorResult] = useState<{ suggestions: string[]; action_items: string[]; ats_keywords: string[]; summary: string; message: string } | null>(null);
   const [uploadResult, setUploadResult] = useState<{ filename: string; pages: number; characters: number; text: string } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -51,7 +41,7 @@ export default function ResumeStudio() {
 
   const [coverCompany, setCoverCompany] = useState("");
   const [coverRole, setCoverRole] = useState("");
-  const [coverLetter, setCoverLetter] = useState(`Dear Stripe Recruiting Team,\n\nWhen I built a payments-style ledger for my CS370 final project, I obsessed over the same idempotency primitives that power Stripe's reliability. That curiosity is why I'm applying for the New Grad SWE role.\n\nAt Meta last summer, I shipped a TypeScript service that processed 2M events/day with p99 < 40ms. I want to bring that bias for instrumented, well-tested systems to Stripe…`);
+  const [coverLetter, setCoverLetter] = useState("");
 
   const resumeTailor = useResumeTailor();
   const coverLetterGen = useCoverLetter();
@@ -123,9 +113,39 @@ export default function ResumeStudio() {
             <h3 className="font-display font-semibold">AI Tailoring Suggestions</h3>
             <Badge variant="outline">AI Generated</Badge>
           </div>
-          <pre className="text-xs text-muted-foreground whitespace-pre-wrap font-mono bg-muted/30 p-4 rounded-lg overflow-auto max-h-64">
-            {JSON.stringify(tailorResult, null, 2)}
-          </pre>
+          {tailorResult.summary && (
+            <div className="p-4 rounded-lg bg-primary/5 border border-primary/10 mb-4">
+              <p className="text-sm text-muted-foreground">{tailorResult.summary}</p>
+            </div>
+          )}
+          <div className="grid md:grid-cols-2 gap-4">
+            {tailorResult.suggestions && tailorResult.suggestions.length > 0 && (
+              <div>
+                <h4 className="text-xs font-semibold text-primary mb-2">Suggestions</h4>
+                <ul className="space-y-2">
+                  {tailorResult.suggestions.slice(0, 5).map((s, i) => (
+                    <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                      <span className="text-primary mt-1.5 h-1.5 w-1.5 rounded-full bg-primary flex-shrink-0" />
+                      {s}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {tailorResult.action_items && tailorResult.action_items.length > 0 && (
+              <div>
+                <h4 className="text-xs font-semibold text-warning mb-2">Action Items</h4>
+                <ul className="space-y-2">
+                  {tailorResult.action_items.slice(0, 5).map((a, i) => (
+                    <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                      <span className="text-warning mt-1.5 h-1.5 w-1.5 rounded-full bg-warning flex-shrink-0" />
+                      {a}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
         </Card>
       )}
 
@@ -225,17 +245,19 @@ export default function ResumeStudio() {
 
         <TabsContent value="gap">
           <Card className="glass p-6">
-            <div className="text-sm text-muted-foreground mb-4">Comparing your resume vs <span className="text-foreground font-medium">Stripe — SWE New Grad</span></div>
+            <div className="text-sm text-muted-foreground mb-4">
+              {tailorResult
+                ? `Keyword gap analysis from AI tailoring`
+                : `Upload a resume and run AI tailoring to see keyword gaps`}
+            </div>
             <div className="space-y-2">
-              {keywordGap.map((k) => (
-                <div key={k.keyword} className="flex items-center gap-3 p-3 rounded-lg bg-muted/30">
-                  <span className="flex-1 font-medium text-sm">{k.keyword}</span>
-                  <Badge variant="outline" className="text-[10px]">{k.weight}</Badge>
-                  {k.inResume ? (
-                    <Badge className="bg-success/10 text-success border-success/20">In resume</Badge>
-                  ) : (
-                    <Badge variant="destructive" className="bg-destructive/10 text-destructive border-destructive/20">Missing</Badge>
-                  )}
+              {(tailorResult?.ats_keywords || []).map((kw, i) => (
+                <div key={typeof kw === "string" ? kw : i} className="flex items-center gap-3 p-3 rounded-lg bg-muted/30">
+                  <span className="flex-1 font-medium text-sm">{typeof kw === "string" ? kw : kw.keyword}</span>
+                  <Badge variant="outline" className="text-[10px]">
+                    {typeof kw === "string" ? "High" : kw.weight}
+                  </Badge>
+                  <Badge className="bg-success/10 text-success border-success/20">In resume</Badge>
                 </div>
               ))}
             </div>

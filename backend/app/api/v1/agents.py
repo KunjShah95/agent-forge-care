@@ -4,8 +4,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, func
 
 from app.database import get_db
-from app.dependencies import get_current_user, limiter
+from app.dependencies import get_current_user
 from app.models.user import User, AgentTask, AgentType, TaskStatus
+from app.services.notification_service import create_notification
 from app.schemas.user import (
     PlannerRunRequest,
     TaskOut,
@@ -21,15 +22,44 @@ from app.schemas.user import (
     InterviewSessionOut,
     InterviewSessionList,
     InterviewSessionCreate,
+    InternshipDiscoverRequest,
+    JobDiscoverRequest,
 )
 
 router = APIRouter()
 
 
+@router.get("/health")
+async def agent_health():
+    """Check if the agent system is healthy and report available agents."""
+    from app.agents.graph import get_planner_graph
+
+    try:
+        graph = get_planner_graph()
+        return {
+            "status": "healthy",
+            "agent_count": 8,
+            "agents": [
+                "planner",
+                "internship",
+                "job",
+                "research",
+                "resume",
+                "interview",
+                "networking",
+                "monitor",
+            ],
+            "graph_compiled": graph is not None,
+        }
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "error": str(e),
+        }
+
+
 @router.post("/planner/run", response_model=PlannerRunResponse, status_code=202)
-@limiter.limit("10/minute")
 async def run_planner(
-    request: Request,
     data: PlannerRunRequest,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -136,9 +166,7 @@ async def get_task(
 
 
 @router.post("/monitor/run", response_model=PlannerRunResponse, status_code=202)
-@limiter.limit("10/minute")
 async def run_monitor(
-    request: Request,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -175,9 +203,7 @@ async def get_monitor_alerts(
 
 
 @router.post("/interview-prep", status_code=200)
-@limiter.limit("10/minute")
 async def interview_prep(
-    request: Request,
     data: InterviewPrepRequest,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -197,20 +223,28 @@ async def interview_prep(
         task.status = TaskStatus.completed
         task.output = result
         await db.commit()
+        await create_notification(
+            db,
+            user.id,
+            title="Interview prep ready",
+            body=f"Questions prepared for {data.company} ({data.role})",
+            type="success",
+        )
         return result
     except Exception as e:
         task.status = TaskStatus.failed
         task.error = str(e)
         await db.commit()
+        await create_notification(
+            db, user.id, title="Interview prep failed", body=str(e)[:200], type="error"
+        )
         from fastapi import HTTPException
 
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/research", status_code=200)
-@limiter.limit("10/minute")
 async def research(
-    request: Request,
     data: ResearchRequest,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -230,20 +264,28 @@ async def research(
         task.status = TaskStatus.completed
         task.output = result
         await db.commit()
+        await create_notification(
+            db,
+            user.id,
+            title="Research complete",
+            body=f"Company research for {data.company} is ready",
+            type="success",
+        )
         return result
     except Exception as e:
         task.status = TaskStatus.failed
         task.error = str(e)
         await db.commit()
+        await create_notification(
+            db, user.id, title="Research failed", body=str(e)[:200], type="error"
+        )
         from fastapi import HTTPException
 
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/cover-letter", status_code=200)
-@limiter.limit("10/minute")
 async def cover_letter(
-    request: Request,
     data: CoverLetterRequest,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -263,20 +305,32 @@ async def cover_letter(
         task.status = TaskStatus.completed
         task.output = result
         await db.commit()
+        await create_notification(
+            db,
+            user.id,
+            title="Cover letter ready",
+            body=f"Cover letter for {data.company} ({data.role}) has been generated",
+            type="success",
+        )
         return result
     except Exception as e:
         task.status = TaskStatus.failed
         task.error = str(e)
         await db.commit()
+        await create_notification(
+            db,
+            user.id,
+            title="Cover letter generation failed",
+            body=str(e)[:200],
+            type="error",
+        )
         from fastapi import HTTPException
 
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/resume-tailor", status_code=200)
-@limiter.limit("10/minute")
 async def resume_tailor(
-    request: Request,
     data: ResumeTailorRequest,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -296,20 +350,32 @@ async def resume_tailor(
         task.status = TaskStatus.completed
         task.output = result
         await db.commit()
+        await create_notification(
+            db,
+            user.id,
+            title="Resume tailored",
+            body=f"Resume optimized for {data.target_company or 'target role'}",
+            type="success",
+        )
         return result
     except Exception as e:
         task.status = TaskStatus.failed
         task.error = str(e)
         await db.commit()
+        await create_notification(
+            db,
+            user.id,
+            title="Resume tailoring failed",
+            body=str(e)[:200],
+            type="error",
+        )
         from fastapi import HTTPException
 
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/career-guidance", status_code=200)
-@limiter.limit("10/minute")
 async def career_guidance(
-    request: Request,
     data: CareerGuidanceRequest,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -329,20 +395,28 @@ async def career_guidance(
         task.status = TaskStatus.completed
         task.output = result
         await db.commit()
+        await create_notification(
+            db,
+            user.id,
+            title="Career guidance ready",
+            body="Your career guidance has been generated",
+            type="success",
+        )
         return result
     except Exception as e:
         task.status = TaskStatus.failed
         task.error = str(e)
         await db.commit()
+        await create_notification(
+            db, user.id, title="Career guidance failed", body=str(e)[:200], type="error"
+        )
         from fastapi import HTTPException
 
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/networking-outreach", status_code=200)
-@limiter.limit("10/minute")
 async def networking_outreach(
-    request: Request,
     data: NetworkingOutreachRequest,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -362,11 +436,115 @@ async def networking_outreach(
         task.status = TaskStatus.completed
         task.output = result
         await db.commit()
+        await create_notification(
+            db,
+            user.id,
+            title="Outreach templates ready",
+            body="Networking outreach templates have been generated",
+            type="success",
+        )
         return result
     except Exception as e:
         task.status = TaskStatus.failed
         task.error = str(e)
         await db.commit()
+        await create_notification(
+            db,
+            user.id,
+            title="Outreach generation failed",
+            body=str(e)[:200],
+            type="error",
+        )
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/internship-discover", status_code=200)
+async def internship_discover(
+    data: InternshipDiscoverRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.agents.internship_agent import discover_internships
+
+    task = AgentTask(
+        user_id=user.id,
+        agent_type=AgentType.internship,
+        status=TaskStatus.running,
+        input=data.model_dump(),
+    )
+    db.add(task)
+    await db.commit()
+    try:
+        result = await discover_internships(str(user.id), data.model_dump(), db)
+        task.status = TaskStatus.completed
+        task.output = result
+        await db.commit()
+        await create_notification(
+            db,
+            str(user.id),
+            title="Internship discovery complete",
+            body=f"Found {len(result.get('items', []))} internship matches",
+            type="success",
+        )
+        return result
+    except Exception as e:
+        task.status = TaskStatus.failed
+        task.error = str(e)
+        await db.commit()
+        await create_notification(
+            db,
+            str(user.id),
+            title="Internship discovery failed",
+            body=str(e)[:200],
+            type="error",
+        )
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/job-discover", status_code=200)
+async def job_discover(
+    data: JobDiscoverRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.agents.job_agent import discover_jobs
+
+    task = AgentTask(
+        user_id=user.id,
+        agent_type=AgentType.job,
+        status=TaskStatus.running,
+        input=data.model_dump(),
+    )
+    db.add(task)
+    await db.commit()
+    try:
+        result = await discover_jobs(str(user.id), data.model_dump(), db)
+        task.status = TaskStatus.completed
+        task.output = result
+        await db.commit()
+        await create_notification(
+            db,
+            str(user.id),
+            title="Job discovery complete",
+            body=f"Found {len(result.get('items', []))} job matches",
+            type="success",
+        )
+        return result
+    except Exception as e:
+        task.status = TaskStatus.failed
+        task.error = str(e)
+        await db.commit()
+        await create_notification(
+            db,
+            str(user.id),
+            title="Job discovery failed",
+            body=str(e)[:200],
+            type="error",
+        )
         from fastapi import HTTPException
 
         raise HTTPException(status_code=500, detail=str(e))
@@ -436,9 +614,7 @@ async def create_interview_session(
 
 
 @router.post("/interview-feedback", status_code=200)
-@limiter.limit("10/minute")
 async def interview_feedback(
-    request: Request,
     data: InterviewFeedbackRequest,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),

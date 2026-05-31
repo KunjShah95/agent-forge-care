@@ -27,38 +27,6 @@ import { Play, Mic, Trophy, Clock, BookOpen, Loader2, MessageSquare, Send, Spark
 import { useInterviewPrep, useInterviewSessions, useCreateInterviewSession, useInterviewFeedback } from "@/api/hooks";
 import { toast } from "sonner";
 
-const questionBank: Record<string, string[]> = {
-  Behavioral: [
-    "Tell me about a time you led a team through ambiguity.",
-    "Describe your most impactful project and the tradeoffs.",
-    "How do you handle disagreement with a manager?",
-    "Walk me through a failure and what you learned.",
-  ],
-  Technical: [
-    "Design a URL shortener that handles 1B requests/day.",
-    "Implement LRU cache in TypeScript.",
-    "Explain how React reconciliation works.",
-    "Find the longest palindromic substring.",
-  ],
-  "System Design": [
-    "Design Twitter's timeline service.",
-    "How would you build a real-time collaborative editor?",
-    "Architect a global CDN.",
-  ],
-  "ML/AI": [
-    "Explain attention vs convolution.",
-    "How do you evaluate an LLM?",
-    "Design a recommendation system for opportunities.",
-  ],
-};
-
-const categoryStats = [
-  { name: "Behavioral", done: 24, total: 40, score: 82 },
-  { name: "Technical", done: 38, total: 60, score: 76 },
-  { name: "System Design", done: 12, total: 20, score: 88 },
-  { name: "ML/AI", done: 18, total: 30, score: 79 },
-];
-
 export default function InterviewPrep() {
   const navigate = useNavigate();
   const [category, setCategory] = useState<string>("Behavioral");
@@ -66,7 +34,7 @@ export default function InterviewPrep() {
   const [company, setCompany] = useState("");
   const [role, setRole] = useState("");
   const [type, setType] = useState("behavioral");
-  const [generatedQuestions, setGeneratedQuestions] = useState<string[]>([]);
+  const [generatedQuestions, setGeneratedQuestions] = useState<{ skill: string; question: string; type: string; tips: string }[]>([]);
   const [generatedTips, setGeneratedTips] = useState<string[]>([]);
   const [selectedQuestion, setSelectedQuestion] = useState<string | null>(null);
   const [userAnswer, setUserAnswer] = useState("");
@@ -87,7 +55,7 @@ export default function InterviewPrep() {
     try {
       const result = await interviewPrep.mutateAsync({ company, role, type });
       setGeneratedQuestions(result.questions);
-      setGeneratedTips(result.tips);
+      setGeneratedTips(result.prep_tips);
       setDialogOpen(false);
       toast.success("Questions generated!");
     } catch {
@@ -129,8 +97,8 @@ export default function InterviewPrep() {
   };
 
   const displayQuestions = generatedQuestions.length > 0
-    ? { Generated: generatedQuestions, ...questionBank }
-    : questionBank;
+    ? { Generated: generatedQuestions.map(q => q.question) }
+    : {};
 
   return (
     <div className="space-y-6 max-w-[1400px]">
@@ -145,7 +113,7 @@ export default function InterviewPrep() {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {categoryStats.map((c) => (
+        {[].map((c) => (
           <Card key={c.name} className="glass p-5">
             <div className="text-xs text-muted-foreground">{c.name}</div>
             <div className="flex items-baseline gap-2 mt-1">

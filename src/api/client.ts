@@ -70,9 +70,11 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
 
 // Auth
 export const auth = {
+  // Deprecated: sign-in now handled via Firebase SDK in auth-context.tsx
   register: (data: { email: string; password: string; full_name: string }) =>
     request<{ access_token: string; refresh_token: string }>("/auth/register", { method: "POST", body: data }),
 
+  // Deprecated: sign-in now handled via Firebase SDK in auth-context.tsx
   login: (data: { email: string; password: string }) =>
     request<{ access_token: string; refresh_token: string }>("/auth/login", { method: "POST", body: data }),
 
@@ -84,6 +86,27 @@ export const profile = {
   get: () => request<Profile>("/profile"),
   update: (data: Partial<Profile>) =>
     request<Profile>("/profile", { method: "PUT", body: data }),
+  uploadAvatar: async (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const headers: Record<string, string> = {};
+    const token = getAuthToken();
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    const response = await fetch(`${API_BASE}/profile/avatar`, {
+      method: "POST",
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => null);
+      throw new ApiError(response.status, errorData?.detail || response.statusText, errorData);
+    }
+
+    return response.json() as Promise<Profile>;
+  },
 };
 
 // Opportunities
@@ -141,18 +164,32 @@ export const agents = {
     request<{ task_id: string }>("/agents/monitor/run", { method: "POST" }),
 
   interviewPrep: (data: { company: string; role: string; type?: string }) =>
-    request<{ questions: string[]; tips: string[] }>("/agents/interview-prep", { method: "POST", body: data }),
+    request<{ questions: { skill: string; question: string; type: string; tips: string }[]; prep_tips: string[]; total_questions: number; focus_areas: string[]; message: string }>("/agents/interview-prep", { method: "POST", body: data }),
 
-  research: (data: { company: string }) =>
+  research: (data: { company: string; focus?: string; topics?: string[] }) =>
     request<Record<string, unknown>>("/agents/research", { method: "POST", body: data }),
 
   coverLetter: (data: { company: string; role: string; application_id?: string }) =>
     request<{ cover_letter: string }>("/agents/cover-letter", { method: "POST", body: data }),
 
   resumeTailor: (data: { role_type: string; target_company?: string; skills?: string[] }) =>
-    request<Record<string, unknown>>("/agents/resume-tailor", { method: "POST", body: data }),
+    request<{ suggestions: string[]; action_items: string[]; ats_keywords: string[]; summary: string; message: string }>("/agents/resume-tailor", { method: "POST", body: data }),
 
   deleteTask: (id: string) => request<void>(`/agents/tasks/${id}`, { method: "DELETE" }),
+
+  careerGuidance: (data: { query: string; context?: Record<string, unknown> }) =>
+    request<{ guidance: Record<string, unknown>; message: string }>("/agents/career-guidance", { method: "POST", body: data }),
+
+  networkingOutreach: (data: { target_companies?: string[]; role?: string; skills?: string[] }) =>
+    request<{ templates: { type: string; subject: string; message: string }[]; best_practices: string[]; message: string }>(
+      "/agents/networking-outreach", { method: "POST", body: data }
+    ),
+
+  internshipDiscover: (data: { query?: string; location?: string; skills?: string[] }) =>
+    request<Record<string, unknown>>("/agents/internship-discover", { method: "POST", body: data }),
+
+  jobDiscover: (data: { query?: string; location?: string; skills?: string[] }) =>
+    request<Record<string, unknown>>("/agents/job-discover", { method: "POST", body: data }),
 };
 
 // Memory
@@ -201,6 +238,7 @@ export type Profile = {
   portfolio_url?: string;
   linkedin_url?: string;
   github_url?: string;
+  avatar_url?: string;
   target_locations: string[];
   salary_min?: number;
   salary_max?: number;

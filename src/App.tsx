@@ -24,6 +24,7 @@ import Settings from "./pages/Settings";
 import AgentConsole from "./pages/AgentConsole";
 import TaskQueue from "./pages/TaskQueue";
 import MemoryViewer from "./pages/MemoryViewer";
+import CareerCoach from "./pages/CareerCoach";
 import NotFound from "./pages/NotFound";
 import ErrorBoundary from "@/components/ErrorBoundary";
 
@@ -59,6 +60,7 @@ const App = () => (
                   <Route path="research" element={<ResearchCenter />} />
                   <Route path="networking" element={<NetworkingHub />} />
                   <Route path="monitor" element={<OpportunityMonitor />} />
+                  <Route path="coach" element={<CareerCoach />} />
                   <Route path="analytics" element={<Analytics />} />
                   <Route path="agents" element={<AgentConsole />} />
                   <Route path="tasks" element={<TaskQueue />} />

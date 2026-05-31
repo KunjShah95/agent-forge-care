@@ -1,5 +1,5 @@
 services:
-  app:
+  backend:
     build:
       context: ./backend
     ports:
@@ -8,7 +8,7 @@ services:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/agentforge
       - QDRANT_URL=http://qdrant:6333
       - REDIS_URL=redis://redis:6379
-      - JWT_SECRET=${JWT_SECRET:-dev-secret-change-in-production}
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
       - GOOGLE_CSE_ID=${GOOGLE_CSE_ID:-}
@@ -17,9 +17,9 @@ services:
       - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY:-}
       - LANGCHAIN_TRACING_V2=${LANGCHAIN_TRACING_V2:-true}
       - LANGCHAIN_PROJECT=${LANGCHAIN_PROJECT:-agentforge-career-os}
-      - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID:-agentforge-career-os}
-      - DEBUG=${DEBUG:-true}
-      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:5173}
+      - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID:?FIREBASE_PROJECT_ID is required}
+      - DEBUG=false
+      - CORS_ORIGINS=${CORS_ORIGINS:-https://your-domain.com}
     depends_on:
       db:
         condition: service_healthy
@@ -27,15 +27,23 @@ services:
         condition: service_started
       redis:
         condition: service_started
-    volumes:
-      - ./backend:/app
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
     restart: unless-stopped
 
   db:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       POSTGRES_DB: agentforge
     ports:
       - "5432:5432"
@@ -52,7 +60,6 @@ services:
     image: qdrant/qdrant:latest
     ports:
       - "6333:6333"
-      - "6334:6334"
     volumes:
       - qdrant_data:/qdrant/storage
     restart: unless-stopped

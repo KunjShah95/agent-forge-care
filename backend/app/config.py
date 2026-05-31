@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 7
 
+    # Firebase
+    firebase_project_id: str = "agentforge-career-os"
+
     # Qdrant
     qdrant_url: str = "http://localhost:6333"
 

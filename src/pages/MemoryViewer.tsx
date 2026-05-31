@@ -167,7 +167,13 @@ export default function MemoryViewer() {
           { label: "Memory Entries", value: entries.length, icon: Database },
           { label: "Skills Tracked", value: skills.length, icon: Zap },
           { label: "Learning Points", value: learningEntries.length, icon: BookOpen },
-          { label: "Context Score", value: entries.length > 0 ? "94%" : "—", icon: Brain },
+          {
+            label: "Context Score",
+            value: entries.length > 0
+              ? Math.round(entries.reduce((s, e) => s + e.weight, 0) / entries.length * 100) / 100 + "/10"
+              : "—",
+            icon: Brain,
+          },
         ].map((s) => (
           <Card key={s.label} className="glass p-5">
             <div className="flex items-center justify-between">

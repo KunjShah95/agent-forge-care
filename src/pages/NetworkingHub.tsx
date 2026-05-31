@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Mail, Plus, Search, Send, Sparkles, Trash2 } from "lucide-react";
+import { Mail, Plus, Search, Send, Sparkles, Trash2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -16,7 +16,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 
-import { useContacts, useCreateContact, useUpdateContact, useDeleteContact } from "@/api/hooks";
+import { useContacts, useCreateContact, useUpdateContact, useDeleteContact, useNetworkingOutreach } from "@/api/hooks";
 import { ListSkeleton } from "@/components/ui/skeleton";
 
 const templates = [
@@ -60,6 +60,11 @@ export default function NetworkingHub() {
 
   const updateContact = useUpdateContact();
   const deleteContact = useDeleteContact();
+  const outreach = useNetworkingOutreach();
+  const [outreachDialogOpen, setOutreachDialogOpen] = useState(false);
+  const [outreachTargets, setOutreachTargets] = useState("");
+  const [outreachRole, setOutreachRole] = useState("");
+  const [outreachResult, setOutreachResult] = useState<{ templates: { type: string; subject: string; message: string }[]; best_practices: string[] } | null>(null);
 
   const resetForm = () => {
     setNewName("");
@@ -93,7 +98,7 @@ export default function NetworkingHub() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" className="gap-2" onClick={() => { resetForm(); setDialogOpen(true); }}><Plus className="h-4 w-4" /> Add contact</Button>
-          <Button className="bg-gradient-primary shadow-glow gap-2" onClick={() => navigate("/app/agents")}><Sparkles className="h-4 w-4" /> Draft outreach</Button>
+          <Button className="bg-gradient-primary shadow-glow gap-2" onClick={() => { setOutreachDialogOpen(true); setOutreachResult(null); }}><Sparkles className="h-4 w-4" /> Draft outreach</Button>
         </div>
       </div>
 
@@ -284,6 +289,87 @@ export default function NetworkingHub() {
                 : (createContact.isPending ? "Adding…" : "Add")}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={outreachDialogOpen} onOpenChange={(open) => { if (!open) { setOutreachDialogOpen(false); setOutreachResult(null); } }}>
+        <DialogContent className="glass max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="font-display">Draft AI Outreach</DialogTitle>
+          </DialogHeader>
+          {!outreachResult ? (
+            <div className="space-y-4">
+              <div>
+                <Label>Target Companies (comma-separated)</Label>
+                <Input
+                  className="mt-1.5"
+                  placeholder="e.g. Stripe, Anthropic, Vercel"
+                  value={outreachTargets}
+                  onChange={(e) => setOutreachTargets(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label>Target Role</Label>
+                <Input
+                  className="mt-1.5"
+                  placeholder="e.g. Software Engineer"
+                  value={outreachRole}
+                  onChange={(e) => setOutreachRole(e.target.value)}
+                />
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setOutreachDialogOpen(false)}>Cancel</Button>
+                <Button
+                  className="bg-gradient-primary shadow-glow gap-2"
+                  disabled={!outreachTargets.trim() || outreach.isPending}
+                  onClick={async () => {
+                    try {
+                      const targets = outreachTargets.split(",").map((s) => s.trim()).filter(Boolean);
+                      const result = await outreach.mutateAsync({
+                        target_companies: targets,
+                        role: outreachRole || undefined,
+                      });
+                      setOutreachResult(result);
+                      toast.success("Outreach templates generated!");
+                    } catch {
+                      toast.error("Failed to generate outreach");
+                    }
+                  }}
+                >
+                  {outreach.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                  Generate
+                </Button>
+              </DialogFooter>
+            </div>
+          ) : (
+            <div className="space-y-4 max-h-96 overflow-y-auto">
+              {outreachResult.templates.map((t, i) => (
+                <Card key={i} className="p-4 bg-muted/20">
+                  <div className="flex items-center justify-between mb-2">
+                    <Badge variant="outline">{t.type.replace("_", " ")}</Badge>
+                    {t.subject && <span className="text-xs font-medium">{t.subject}</span>}
+                  </div>
+                  <p className="text-xs text-muted-foreground whitespace-pre-wrap font-mono bg-muted/30 p-3 rounded">{t.message}</p>
+                </Card>
+              ))}
+              {outreachResult.best_practices.length > 0 && (
+                <Card className="p-4 bg-primary/5 border-primary/20">
+                  <div className="text-xs font-semibold text-primary mb-2">Best Practices</div>
+                  <ul className="space-y-1">
+                    {outreachResult.best_practices.map((bp, i) => (
+                      <li key={i} className="text-xs text-muted-foreground flex items-start gap-2">
+                        <span className="text-primary mt-1">•</span> {bp}
+                      </li>
+                    ))}
+                  </ul>
+                </Card>
+              )}
+              <DialogFooter>
+                <Button variant="outline" onClick={() => { setOutreachResult(null); setOutreachDialogOpen(false); }}>Close</Button>
+                <Button variant="outline" onClick={() => setOutreachResult(null)}>Generate again</Button>
+              </DialogFooter>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

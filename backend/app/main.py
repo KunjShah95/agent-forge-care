@@ -1,18 +1,18 @@
 import logging
 from contextlib import asynccontextmanager
 
+from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from slowapi.errors import RateLimitExceeded
-from slowapi.middleware import SlowAPIMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
 from app.database import init_db, close_db
 from app.api.router import router as api_router
-from app.dependencies import limiter
 from app.middleware.auth import RequestLogMiddleware
 from app.memory.qdrant_client import init_collections
+from app.dependencies import rate_limiter, _get_rate_limit_key
 
 # Configure logging
 logging.basicConfig(
@@ -46,19 +46,9 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
 )
-app.state.limiter = limiter
-
-
-@app.exception_handler(RateLimitExceeded)
-async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
-    return JSONResponse(
-        status_code=429,
-        content={"detail": str(exc)},
-    )
 
 
 # Middleware
-app.add_middleware(SlowAPIMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
@@ -67,6 +57,30 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.add_middleware(RequestLogMiddleware)
+
+
+@app.middleware("http")
+async def rate_limit_middleware(request: Request, call_next):
+    if settings.debug:
+        return await call_next(request)
+    try:
+        limiter = await rate_limiter()
+        key = _get_rate_limit_key(request)
+        if await limiter.is_rate_limited(key, max_requests=100, window_seconds=60):
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Too many requests. Please slow down."},
+            )
+    except Exception:
+        logger.warning("Rate limiter unavailable (Redis down?) — allowing request")
+    return await call_next(request)
+
+
+# Static files (avatars)
+UPLOAD_DIR = Path(__file__).resolve().parent.parent / "uploads"
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+(UPLOAD_DIR / "avatars").mkdir(exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 
 # Routes
 app.include_router(api_router)

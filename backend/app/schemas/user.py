@@ -21,12 +21,6 @@ class RefreshRequest(BaseModel):
     token: str
 
 
-class TokenResponse(BaseModel):
-    access_token: str
-    refresh_token: str
-    token_type: str = "bearer"
-
-
 # ─── Users ──────────────────────────────────────────────────
 
 
@@ -371,6 +365,20 @@ class InterviewPrepRequest(BaseModel):
 
 class ResearchRequest(BaseModel):
     company: str
+    focus: str = "company"
+    topics: list[str] = []
+
+
+class InternshipDiscoverRequest(BaseModel):
+    query: str = "internship"
+    location: Optional[str] = None
+    skills: list[str] = []
+
+
+class JobDiscoverRequest(BaseModel):
+    query: str = "software engineer"
+    location: Optional[str] = None
+    skills: list[str] = []
 
 
 class CoverLetterRequest(BaseModel):

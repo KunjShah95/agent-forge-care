@@ -103,7 +103,7 @@ export default function Landing() {
           <div className="flex items-center gap-2">
             <ThemeToggle />
             <Button variant="ghost" size="sm" asChild>
-              <Link to="/onboarding">Sign in</Link>
+              <Link to="/login">Sign in</Link>
             </Button>
             <Button size="sm" className="bg-gradient-primary shadow-glow" asChild>
               <Link to="/onboarding">Get started</Link>

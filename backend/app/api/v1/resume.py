@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from app.database import get_db
-from app.dependencies import get_current_user, limiter
+from app.dependencies import get_current_user
 from app.models.user import User, MemoryEntry
 from app.schemas.user import ResumeOut, ResumeList
 import PyPDF2
@@ -58,9 +58,7 @@ async def delete_resume(
 
 
 @router.post("/upload")
-@limiter.limit("5/minute")
 async def upload_resume(
-    request: Request,
     file: UploadFile = File(...),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),

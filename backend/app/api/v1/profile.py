@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+import uuid
+from pathlib import Path
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -11,6 +13,10 @@ from app.schemas.user import (
     ProfileSkillOut,
     SkillOut,
     AddSkillRequest,
+)
+
+AVATAR_DIR = (
+    Path(__file__).resolve().parent.parent.parent.parent / "uploads" / "avatars"
 )
 
 router = APIRouter()
@@ -47,6 +53,42 @@ async def update_profile(
 
     for key, value in data.model_dump(exclude_unset=True).items():
         setattr(profile, key, value)
+    await db.flush()
+    return profile
+
+
+ALLOWED_AVATAR_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+MAX_AVATAR_SIZE = 2 * 1024 * 1024  # 2MB
+
+
+@router.post("/avatar", response_model=ProfileOut)
+async def upload_avatar(
+    file: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if file.content_type not in ALLOWED_AVATAR_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type. Allowed: {', '.join(ALLOWED_AVATAR_TYPES)}",
+        )
+    content = await file.read()
+    if len(content) > MAX_AVATAR_SIZE:
+        raise HTTPException(status_code=400, detail="File too large (max 2MB)")
+
+    ext = file.filename.rsplit(".", 1)[-1] if file.filename else "png"
+    filename = f"{uuid.uuid4().hex}.{ext}"
+    filepath = AVATAR_DIR / filename
+    filepath.write_bytes(content)
+
+    result = await db.execute(select(Profile).where(Profile.user_id == user.id))
+    profile = result.scalar_one_or_none()
+    if not profile:
+        profile = Profile(user_id=user.id)
+        db.add(profile)
+        await db.flush()
+
+    profile.avatar_url = f"/uploads/avatars/{filename}"
     await db.flush()
     return profile
 
