@@ -8,6 +8,7 @@ import {
   signOut,
 } from "firebase/auth";
 import { auth } from "@/lib/firebase";
+import { firebaseConfigError, isFirebaseConfigured } from "@/lib/firebase";
 import { setAuthToken } from "@/api/client";
 import { auth as authApi, profile } from "@/api/client";
 
@@ -36,8 +37,21 @@ function clearAuthState() {
 }
 
 export function getFirebaseErrorMessage(error: unknown): string {
+  if (!isFirebaseConfigured) {
+    return firebaseConfigError || "Firebase is not configured for this environment";
+  }
+
   if (error instanceof Error) {
-    const msg = error.message;
+    const msg = (error.message || "").trim();
+
+    if (!msg) {
+      return "Sign-in failed. Please try again or disable browser extensions that may interfere with the login page.";
+    }
+
+    if (msg.toLowerCase().includes("token required")) {
+      return "A browser extension or sign-in session interrupted the flow. Try disabling extensions, then sign in again.";
+    }
+
     const match = msg.match(/\(auth\/([^)]+)\)/);
     if (match) {
       const code = match[1];
@@ -56,11 +70,18 @@ export function getFirebaseErrorMessage(error: unknown): string {
         "account-exists-with-different-credential":
           "An account already exists with a different sign-in method",
       };
-      return messages[code] || msg.replace("Firebase: ", "").replace(/\(auth\/[^)]+\)/g, "").trim();
+      const cleaned = msg.replace("Firebase: ", "").replace(/\(auth\/[^)]+\)/g, "").trim();
+      return messages[code] || cleaned || "Sign-in failed. Please try again.";
     }
-    return msg;
+    return msg || "Sign-in failed. Please try again.";
   }
   return "An unexpected error occurred";
+}
+
+function assertFirebaseConfigured() {
+  if (!isFirebaseConfigured) {
+    throw new Error(firebaseConfigError || "Firebase is not configured for this environment");
+  }
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -107,6 +128,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = async (email: string, password: string) => {
+    assertFirebaseConfigured();
     isHandlingAuth.current = true;
     setIsLoading(true);
     try {
@@ -130,6 +152,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const register = async (email: string, password: string, full_name: string) => {
+    assertFirebaseConfigured();
     isHandlingAuth.current = true;
     setIsLoading(true);
     try {
@@ -157,6 +180,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signInWithGoogle = async () => {
+    assertFirebaseConfigured();
     if (isGoogleSignInInProgress.current) {
       return;
     }

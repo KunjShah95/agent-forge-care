@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Sparkles, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuthContext, getFirebaseErrorMessage } from "@/lib/auth-context";
+import { firebaseConfigError, isFirebaseConfigured } from "@/lib/firebase";
 
 const GoogleIcon = () => (
   <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
@@ -83,6 +84,12 @@ export default function Login() {
             Sign in to your career OS
           </p>
 
+          {!isFirebaseConfigured && firebaseConfigError && (
+            <p className="text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2 mb-4">
+              {firebaseConfigError}
+            </p>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <Label htmlFor="email">Email</Label>
@@ -116,7 +123,7 @@ export default function Login() {
             <Button
               type="submit"
               className="w-full bg-gradient-primary shadow-glow"
-              disabled={isSubmitting}
+              disabled={isSubmitting || !isFirebaseConfigured}
             >
               {isSubmitting ? (
                 <>
@@ -134,7 +141,7 @@ export default function Login() {
           <button
             type="button"
             onClick={handleGoogleSignIn}
-            disabled={isSubmitting || isLoading}
+            disabled={isSubmitting || isLoading || !isFirebaseConfigured}
             className="flex items-center justify-center gap-2.5 w-full rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 active:scale-[0.98] transition-all duration-150 py-2.5 px-4 text-sm font-medium text-foreground"
           >
             <GoogleIcon />

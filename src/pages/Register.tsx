@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Sparkles, Loader2, User, Mail, Lock, Eye, EyeOff, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuthContext, getFirebaseErrorMessage } from "@/lib/auth-context";
+import { firebaseConfigError, isFirebaseConfigured } from "@/lib/firebase";
 
 const GoogleIcon = () => (
   <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
@@ -128,12 +129,18 @@ export default function Register() {
             Your AI career team starts here
           </p>
 
+          {!isFirebaseConfigured && firebaseConfigError && (
+            <p className="text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2 mb-4">
+              {firebaseConfigError}
+            </p>
+          )}
+
           <div className="space-y-2.5">
             <SocialButton
               icon={<GoogleIcon />}
               label="Sign up with Google"
               onClick={handleSocialSignup}
-              disabled={isSubmitting || isLoading}
+              disabled={isSubmitting || isLoading || !isFirebaseConfigured}
             />
           </div>
 
@@ -221,7 +228,7 @@ export default function Register() {
               </p>
             )}
 
-            <Button type="submit" className="w-full bg-gradient-primary shadow-glow" disabled={isSubmitting || isLoading}>
+            <Button type="submit" className="w-full bg-gradient-primary shadow-glow" disabled={isSubmitting || isLoading || !isFirebaseConfigured}>
               {isSubmitting ? (
                 <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Creating account…</>
               ) : (

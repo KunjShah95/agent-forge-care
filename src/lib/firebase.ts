@@ -12,7 +12,28 @@ const firebaseConfig = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 };
 
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+const requiredFirebaseKeys = [
+  "apiKey",
+  "authDomain",
+  "projectId",
+  "storageBucket",
+  "messagingSenderId",
+  "appId",
+] as const;
+
+const missingFirebaseKeys = requiredFirebaseKeys.filter(
+  (key) => !firebaseConfig[key],
+);
+
+export const isFirebaseConfigured = missingFirebaseKeys.length === 0;
+export const firebaseConfigError = isFirebaseConfigured
+  ? null
+  : `Missing Firebase env vars: ${missingFirebaseKeys.join(", ")}`;
+
+const app =
+  getApps().length === 0
+    ? initializeApp(firebaseConfig)
+    : getApps()[0];
 export const auth = getAuth(app);
 
 export const analytics =
