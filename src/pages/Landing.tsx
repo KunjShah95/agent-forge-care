@@ -106,7 +106,7 @@ export default function Landing() {
               <Link to="/login">Sign in</Link>
             </Button>
             <Button size="sm" className="bg-gradient-primary shadow-glow" asChild>
-              <Link to="/onboarding">Get started</Link>
+              <Link to="/register">Get started</Link>
             </Button>
           </div>
         </div>
@@ -131,7 +131,7 @@ export default function Landing() {
 
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <Button size="lg" className="bg-gradient-primary shadow-glow gap-2" asChild>
-                <Link to="/onboarding">Launch your career OS <ArrowRight className="h-4 w-4" /></Link>
+                <Link to="/register">Launch your career OS <ArrowRight className="h-4 w-4" /></Link>
               </Button>
               <Button size="lg" variant="outline" className="glass" asChild>
                 <Link to="/app">Open the dashboard</Link>
@@ -310,7 +310,7 @@ export default function Landing() {
           </p>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
             <Button size="lg" className="bg-gradient-primary shadow-glow gap-2" asChild>
-              <Link to="/onboarding">Build your profile <ArrowRight className="h-4 w-4" /></Link>
+              <Link to="/register">Build your profile <ArrowRight className="h-4 w-4" /></Link>
             </Button>
             <Button size="lg" variant="outline" className="glass" asChild>
               <Link to="/app">See the dashboard</Link>

@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     app_name: str = "AgentForge Career OS"
     debug: bool = False
     port: int = 8000
-    cors_origins: str = "http://localhost:5173"
+    cors_origins: str = "http://localhost:5173,http://localhost:8080"
 
     @property
     def cors_origin_list(self) -> List[str]:
@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     refresh_token_expire_days: int = 7
 
     # Firebase
-    firebase_project_id: str = "agentforge-career-os"
+    firebase_project_id: str = "developer-portfolio-aggregator"
 
     # Qdrant
     qdrant_url: str = "http://localhost:6333"

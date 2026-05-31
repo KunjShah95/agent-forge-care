@@ -17,7 +17,7 @@ services:
       - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY:-}
       - LANGCHAIN_TRACING_V2=${LANGCHAIN_TRACING_V2:-true}
       - LANGCHAIN_PROJECT=${LANGCHAIN_PROJECT:-agentforge-career-os}
-      - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID:-agentforge-career-os}
+      - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID:-marine-order-481405-m2}
       - DEBUG=${DEBUG:-true}
       - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:5173}
     depends_on:

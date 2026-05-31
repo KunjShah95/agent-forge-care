@@ -3,6 +3,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.dependencies import get_current_user
@@ -28,12 +29,22 @@ async def get_profile(
     db: AsyncSession = Depends(get_db),
 ):
     """Get the current user's full profile with skills."""
-    result = await db.execute(select(Profile).where(Profile.user_id == user.id))
+    result = await db.execute(
+        select(Profile)
+        .options(selectinload(Profile.skills).selectinload(ProfileSkill.skill))
+        .where(Profile.user_id == user.id)
+    )
     profile = result.scalar_one_or_none()
     if not profile:
         profile = Profile(user_id=user.id)
         db.add(profile)
         await db.flush()
+        result = await db.execute(
+            select(Profile)
+            .options(selectinload(Profile.skills).selectinload(ProfileSkill.skill))
+            .where(Profile.id == profile.id)
+        )
+        profile = result.scalar_one_or_none() or profile
     return profile
 
 
@@ -43,7 +54,10 @@ async def update_profile(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Update user profile."""
+    """Update user profile (and optionally user's full_name and skills)."""
+    if data.full_name is not None:
+        user.full_name = data.full_name
+
     result = await db.execute(select(Profile).where(Profile.user_id == user.id))
     profile = result.scalar_one_or_none()
     if not profile:
@@ -51,9 +65,60 @@ async def update_profile(
         db.add(profile)
         await db.flush()
 
-    for key, value in data.model_dump(exclude_unset=True).items():
+    update_data = data.model_dump(exclude_unset=True)
+    update_data.pop("full_name", None)
+    skills_data = update_data.pop("skills", None)
+
+    for key, value in update_data.items():
         setattr(profile, key, value)
+
+    if skills_data:
+        existing = await db.execute(
+            select(ProfileSkill).where(ProfileSkill.profile_id == profile.id)
+        )
+        existing_skills = {ps.skill_id: ps for ps in existing.scalars().all()}
+
+        for skill_req in skills_data:
+            skill_name = getattr(skill_req, "name", None)
+            if skill_name is None and isinstance(skill_req, dict):
+                skill_name = skill_req.get("name")
+
+            proficiency = getattr(skill_req, "proficiency", None)
+            if proficiency is None and isinstance(skill_req, dict):
+                proficiency = skill_req.get("proficiency", "intermediate")
+            if proficiency is None:
+                proficiency = "intermediate"
+
+            if not skill_name:
+                continue
+
+            skill_result = await db.execute(
+                select(Skill).where(Skill.name == skill_name)
+            )
+            skill = skill_result.scalar_one_or_none()
+            if not skill:
+                skill = Skill(name=skill_name)
+                db.add(skill)
+                await db.flush()
+
+            if skill.id in existing_skills:
+                existing_skills[skill.id].proficiency = proficiency
+                continue
+
+            ps = ProfileSkill(
+                profile_id=profile.id,
+                skill_id=skill.id,
+                proficiency=proficiency,
+            )
+            db.add(ps)
+
     await db.flush()
+    result = await db.execute(
+        select(Profile)
+        .options(selectinload(Profile.skills).selectinload(ProfileSkill.skill))
+        .where(Profile.id == profile.id)
+    )
+    profile = result.scalar_one_or_none() or profile
     return profile
 
 
@@ -81,7 +146,11 @@ async def upload_avatar(
     filepath = AVATAR_DIR / filename
     filepath.write_bytes(content)
 
-    result = await db.execute(select(Profile).where(Profile.user_id == user.id))
+    result = await db.execute(
+        select(Profile)
+        .options(selectinload(Profile.skills).selectinload(ProfileSkill.skill))
+        .where(Profile.user_id == user.id)
+    )
     profile = result.scalar_one_or_none()
     if not profile:
         profile = Profile(user_id=user.id)
@@ -101,6 +170,7 @@ async def get_skills(
     """List all skills for the current user."""
     result = await db.execute(
         select(ProfileSkill)
+        .options(selectinload(ProfileSkill.skill))
         .join(Skill, ProfileSkill.skill_id == Skill.id)
         .join(Profile, ProfileSkill.profile_id == Profile.id)
         .where(Profile.user_id == user.id)

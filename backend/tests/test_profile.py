@@ -85,6 +85,33 @@ async def test_update_profile_partial(auth_client, mock_db):
 
 
 @pytest.mark.asyncio
+async def test_update_profile_with_skills_dict_payload(auth_client, mock_db):
+    profile = make_profile()
+    profile.skills = []
+    setup_mock_execute(
+        mock_db,
+        [
+            MockResult(scalar_value=profile),
+            MockResult(scalars_list=[]),
+            MockResult(scalar_value=None),
+            MockResult(scalar_value=profile),
+        ],
+    )
+
+    response = await auth_client.put(
+        "/api/v1/profile",
+        json={
+            "skills": [
+                {"name": "Python", "proficiency": "advanced"},
+            ]
+        },
+    )
+
+    assert response.status_code == 200
+    mock_db.add.assert_called()
+
+
+@pytest.mark.asyncio
 async def test_update_profile_onboarded(auth_client, mock_db):
     profile = make_profile(is_onboarded=False)
     profile.skills = []

@@ -104,6 +104,7 @@ docker compose up --build
 ```
 
 Starts:
+
 - **FastAPI** (port 8000)
 - **PostgreSQL** (port 5432)
 - **Qdrant** (port 6333)

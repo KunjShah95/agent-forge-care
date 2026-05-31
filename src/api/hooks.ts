@@ -9,6 +9,7 @@ export function useAuth() {
     queryFn: api.auth.me,
     retry: false,
     staleTime: 5 * 60 * 1000,
+    enabled: !!api.getAuthToken(),
   });
 }
 
@@ -391,6 +392,14 @@ export function useDeleteResume() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: api.resume.delete,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["resumes"] }),
+  });
+}
+
+export function useUploadResume() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (file: File) => api.resume.upload(file),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["resumes"] }),
   });
 }

@@ -1,5 +1,6 @@
 from datetime import date, datetime
 from typing import Optional, Any
+from uuid import UUID
 from pydantic import BaseModel, EmailStr, Field
 
 
@@ -25,7 +26,7 @@ class RefreshRequest(BaseModel):
 
 
 class UserOut(BaseModel):
-    id: str
+    id: UUID
     email: str
     full_name: str
     avatar_url: Optional[str] = None
@@ -42,8 +43,13 @@ class UserUpdate(BaseModel):
 # ─── Skills ─────────────────────────────────────────────────
 
 
+class AddSkillRequest(BaseModel):
+    name: str
+    proficiency: str = "intermediate"
+
+
 class SkillOut(BaseModel):
-    id: str
+    id: UUID
     name: str
 
     model_config = {"from_attributes": True}
@@ -60,6 +66,7 @@ class ProfileSkillOut(BaseModel):
 
 
 class ProfileUpdate(BaseModel):
+    full_name: Optional[str] = None
     school: Optional[str] = None
     graduation_date: Optional[date] = None
     bio: Optional[str] = None
@@ -73,11 +80,12 @@ class ProfileUpdate(BaseModel):
     company_sizes: Optional[list[str]] = None
     career_goal: Optional[str] = None
     is_onboarded: Optional[bool] = None
+    skills: Optional[list[AddSkillRequest]] = None
 
 
 class ProfileOut(BaseModel):
-    id: str
-    user_id: str
+    id: UUID
+    user_id: UUID
     school: Optional[str] = None
     graduation_date: Optional[date] = None
     bio: Optional[str] = None
@@ -94,11 +102,6 @@ class ProfileOut(BaseModel):
     skills: list[ProfileSkillOut] = []
 
     model_config = {"from_attributes": True}
-
-
-class AddSkillRequest(BaseModel):
-    name: str
-    proficiency: str = "intermediate"
 
 
 # ─── Opportunities ──────────────────────────────────────────

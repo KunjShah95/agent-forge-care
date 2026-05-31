@@ -20,6 +20,10 @@ class ApiError extends Error {
 
 let authToken: string | null = null;
 
+if (typeof window !== "undefined") {
+  authToken = localStorage.getItem("auth_token");
+}
+
 export function setAuthToken(token: string | null) {
   authToken = token;
 }
@@ -245,7 +249,7 @@ export type Profile = {
   role_types: string[];
   company_sizes: string[];
   career_goal?: string;
-  skills: { id: string; name: string; proficiency: string }[];
+  skills: { id?: string; name: string; proficiency: string }[];
 };
 
 export type Opportunity = {
