@@ -1,0 +1,66 @@
+# AgentForge Career OS
+
+> An AI-powered career operating system that functions as your personal career team. Eight specialized agents work continuously to discover opportunities, optimize your resume, prepare you for interviews, and grow your professional network.
+
+## What AgentForge Does
+
+AgentForge is a multi-agent AI system that automates the entire job search and career management workflow:
+
+- **Continuous Opportunity Monitoring**: 8 specialized agents scan 50+ sources 24/7 for jobs, internships, fellowships, and hackathons matched to your profile
+- **Intelligent Match Scoring**: AI analyzes your skills, experience, and preferences against opportunities to predict fit (not just keyword matching)
+- **Resume & Cover Letter Optimization**: ATS analysis, keyword gap identification, and AI-generated tailored application materials
+- **Interview Preparation**: Mock interviews with AI feedback, company research, and question prediction based on role and company
+- **Networking Automation**: Contact discovery, personalized outreach message generation, and relationship tracking
+- **Career Analytics**: Pipeline tracking, conversion metrics, and skill demand insights
+
+## Who It's For
+
+- **Students/Interns**: Find internships, fellowships, hackathons with deadline tracking
+- **New Graduates**: Land first full-time roles with interview prep and resume optimization
+- **Career Switchers**: Transition to tech/AI roles with skill gap analysis and tailored positioning
+- **Passive Job Seekers**: Background monitoring with intelligent alerts for perfect-fit opportunities
+- **Portfolio Builders**: Track hackathons and showcase projects
+
+## Key Differentiators
+
+| Feature | AgentForge | Traditional Tools |
+|---------|-----------|-------------------|
+| Architecture | Multi-agent system (8 specialized agents) | Single AI chatbot or rule-based |
+| Personalization | Memory-driven (learns from interactions) | Static profiles |
+| Monitoring | Always-on background scanning | Manual search required |
+| Approach | Planner-first reasoning | Reactive matching |
+| Integration | End-to-end workflow (discovery → application → interview → network) | Siloed tools |
+
+## Core Agents
+
+1. **Planner Agent**: Strategizes your job search, sets priorities, creates action plans
+2. **Opportunity Monitor**: Continuously scans for new openings across 50+ sources
+3. **Research Agent**: Deep company intelligence, interview insights, industry trends
+4. **Resume Agent**: ATS optimization, keyword analysis, tailored rewriting
+5. **Interview Agent**: Mock interviews, question prediction, feedback scoring
+6. **Networking Agent**: Contact discovery, outreach templates, relationship management
+7. **Job Application Agent**: Application tracking, deadline management, follow-ups
+8. **Internship Agent**: Specialized for student opportunities (internships, fellowships, hackathons)
+
+## Technical Architecture
+
+- **Frontend**: React + TypeScript + Vite + Tailwind CSS + shadcn/ui
+- **Backend**: Node.js + Express + TypeScript
+- **AI/ML**: Multi-agent orchestration with memory system
+- **Database**: MongoDB with vector storage for semantic matching
+- **Deployment**: Vercel (frontend), Render/Railway (backend)
+
+## Pricing
+
+See [pricing.md](./pricing.md) for complete pricing information.
+
+## Key Links
+
+- Website: https://agentforge.ai
+- Documentation: https://docs.agentforge.ai
+- GitHub: https://github.com/agentforge/career-os
+- Support: support@agentforge.ai
+
+## Date
+
+Last updated: 2025-01-15

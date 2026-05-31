@@ -1,0 +1,111 @@
+# AgentForge Career OS - robots.txt
+# Last updated: 2025-01-15
+
+# ============================================
+# AI SEARCH CRAWLERS - ALLOW ALL
+# ============================================
+
+# OpenAI (ChatGPT, GPTBot)
+User-agent: GPTBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+# Perplexity
+User-agent: PerplexityBot
+Allow: /
+
+# Anthropic (Claude)
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+# Google (Gemini, AI Overviews)
+User-agent: Google-Extended
+Allow: /
+
+# Microsoft (Copilot, Bing)
+User-agent: Bingbot
+Allow: /
+
+User-agent: MicrosoftPreview
+Allow: /
+
+# ============================================
+# TRADITIONAL SEARCH CRAWLERS
+# ============================================
+
+User-agent: Googlebot
+Allow: /
+
+User-agent: Googlebot-Image
+Allow: /
+
+User-agent: Googlebot-News
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: Slurp
+Allow: /
+
+User-agent: DuckDuckBot
+Allow: /
+
+User-agent: Baiduspider
+Allow: /
+
+User-agent: YandexBot
+Allow: /
+
+# ============================================
+# SOCIAL MEDIA CRAWLERS
+# ============================================
+
+User-agent: Twitterbot
+Allow: /
+
+User-agent: facebookexternalhit
+Allow: /
+
+User-agent: LinkedInBot
+Allow: /
+
+User-agent: Slackbot
+Allow: /
+
+User-agent: Discordbot
+Allow: /
+
+# ============================================
+# SEO TOOLS
+# ============================================
+
+User-agent: AhrefsBot
+Allow: /
+
+User-agent: SemrushBot
+Allow: /
+
+User-agent: MJ12bot
+Allow: /
+
+User-agent: DotBot
+Allow: /
+
+# ============================================
+# DEFAULT - ALLOW ALL
+# ============================================
+
+User-agent: *
+Allow: /
+
+# ============================================
+# SITEMAP
+# ============================================
+
+Sitemap: https://agentforge.ai/sitemap.xml

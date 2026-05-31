@@ -125,8 +125,7 @@ export default function Landing() {
               <span className="gradient-text">working before you even ask.</span>
             </h1>
             <p className="mt-6 text-lg text-muted-foreground max-w-2xl">
-              AgentForge is the orchestrator for your career search. It continuously finds opportunities,
-              scores the best matches, prepares your applications, and helps you network and interview with confidence.
+              AgentForge Career OS is an AI-powered career operating system that functions as your personal career team. Unlike traditional job boards or single AI chatbots, AgentForge uses 8 specialized AI agents working together to continuously discover job opportunities across 50+ sources, optimize your resume for ATS systems with 78%25 match accuracy, prepare you for interviews with AI-generated mock sessions, and help you build a professional network through automated outreach.
             </p>
 
             <div className="mt-8 flex flex-wrap items-center gap-3">
@@ -335,3 +334,4 @@ export default function Landing() {
     </div>
   );
 }
+
