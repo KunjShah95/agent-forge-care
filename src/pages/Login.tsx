@@ -29,7 +29,7 @@ function OrDivider() {
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const { login, signInWithGoogle } = useAuthContext();
+  const { login, signInWithGoogle, isLoading } = useAuthContext();
   const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -47,6 +47,19 @@ export default function Login() {
       setError(message);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setError("");
+    try {
+      await signInWithGoogle();
+      toast.success("Welcome back!");
+      navigate("/app");
+    } catch (err: unknown) {
+      const message = getFirebaseErrorMessage(err);
+      setError(message);
+      toast.error(message);
     }
   };
 
@@ -120,7 +133,8 @@ export default function Login() {
 
           <button
             type="button"
-            onClick={signInWithGoogle}
+            onClick={handleGoogleSignIn}
+            disabled={isSubmitting || isLoading}
             className="flex items-center justify-center gap-2.5 w-full rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 active:scale-[0.98] transition-all duration-150 py-2.5 px-4 text-sm font-medium text-foreground"
           >
             <GoogleIcon />

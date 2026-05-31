@@ -50,6 +50,11 @@ export function getFirebaseErrorMessage(error: unknown): string {
         "weak-password": "Password is too weak (min 6 characters)",
         "too-many-requests": "Too many attempts. Please try again later",
         "network-request-failed": "Network error. Please check your connection",
+        "cancelled-popup-request": "Google sign-in was canceled before it completed",
+        "popup-closed-by-user": "Google sign-in was closed before it completed",
+        "popup-blocked": "Your browser blocked the Google sign-in popup",
+        "account-exists-with-different-credential":
+          "An account already exists with a different sign-in method",
       };
       return messages[code] || msg.replace("Firebase: ", "").replace(/\(auth\/[^)]+\)/g, "").trim();
     }
@@ -63,6 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setTokenState] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const isHandlingAuth = useRef(false);
+  const isGoogleSignInInProgress = useRef(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -131,6 +137,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signInWithGoogle = async () => {
+    if (isGoogleSignInInProgress.current) {
+      return;
+    }
+
+    isGoogleSignInInProgress.current = true;
     isHandlingAuth.current = true;
     setIsLoading(true);
     try {
@@ -142,9 +153,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setTokenState(idToken);
       const userData = await authApi.me();
       setUser(userData);
+    } catch (error) {
+      throw new Error(getFirebaseErrorMessage(error));
     } finally {
       setIsLoading(false);
       isHandlingAuth.current = false;
+      isGoogleSignInInProgress.current = false;
     }
   };
 

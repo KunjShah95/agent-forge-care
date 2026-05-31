@@ -43,12 +43,23 @@ function OrDivider() {
   );
 }
 
-function SocialButton({ icon, label, onClick }: { icon: React.ReactNode; label: string; onClick: () => void }) {
+function SocialButton({
+  icon,
+  label,
+  onClick,
+  disabled,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="flex items-center justify-center gap-2.5 w-full rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 active:scale-[0.98] transition-all duration-150 py-2.5 px-4 text-sm font-medium text-foreground"
+      disabled={disabled}
+      className="flex items-center justify-center gap-2.5 w-full rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 active:scale-[0.98] transition-all duration-150 py-2.5 px-4 text-sm font-medium text-foreground disabled:opacity-60 disabled:cursor-not-allowed"
     >
       {icon}
       {label}
@@ -63,7 +74,7 @@ export default function Register() {
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const { register, signInWithGoogle } = useAuthContext();
+  const { register, signInWithGoogle, isLoading } = useAuthContext();
   const navigate = useNavigate();
 
   const strength = getPasswordStrength(password);
@@ -89,6 +100,7 @@ export default function Register() {
   };
 
   const handleSocialSignup = async () => {
+    setError("");
     try {
       await signInWithGoogle();
       toast.success("Welcome! Let's set up your profile.");
@@ -96,6 +108,7 @@ export default function Register() {
     } catch (err: unknown) {
       const message = getFirebaseErrorMessage(err);
       setError(message);
+      toast.error(message);
     }
   };
 
@@ -116,7 +129,12 @@ export default function Register() {
           </p>
 
           <div className="space-y-2.5">
-            <SocialButton icon={<GoogleIcon />} label="Sign up with Google" onClick={handleSocialSignup} />
+            <SocialButton
+              icon={<GoogleIcon />}
+              label="Sign up with Google"
+              onClick={handleSocialSignup}
+              disabled={isSubmitting || isLoading}
+            />
           </div>
 
           <OrDivider />
@@ -203,7 +221,7 @@ export default function Register() {
               </p>
             )}
 
-            <Button type="submit" className="w-full bg-gradient-primary shadow-glow" disabled={isSubmitting}>
+            <Button type="submit" className="w-full bg-gradient-primary shadow-glow" disabled={isSubmitting || isLoading}>
               {isSubmitting ? (
                 <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Creating account…</>
               ) : (
