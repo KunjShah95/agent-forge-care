@@ -80,8 +80,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           localStorage.setItem("auth_token", idToken);
           setAuthToken(idToken);
           setTokenState(idToken);
-          const userData = await authApi.me();
-          setUser(userData);
+
+          // Try to load full user profile from backend. If the backend is
+          // unavailable, fall back to a minimal user object derived from
+          // the Firebase user so the frontend remains usable.
+          try {
+            const userData = await authApi.me();
+            setUser(userData);
+          } catch (err) {
+            // Backend unavailable or returned error — fallback to minimal user
+            setUser({ id: firebaseUser.uid, email: firebaseUser.email || "", full_name: firebaseUser.displayName || "" });
+          }
         } catch {
           clearAuthState();
           setTokenState(null);
@@ -106,8 +115,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.setItem("auth_token", idToken);
       setAuthToken(idToken);
       setTokenState(idToken);
-      const userData = await authApi.me();
-      setUser(userData);
+      try {
+        const userData = await authApi.me();
+        setUser(userData);
+      } catch {
+        // If backend /auth/me fails, still treat the user as authenticated
+        // using Firebase-provided identity to avoid redirect loops.
+        setUser({ id: cred.user.uid, email: cred.user.email || "", full_name: cred.user.displayName || "" });
+      }
     } finally {
       setIsLoading(false);
       isHandlingAuth.current = false;
@@ -123,13 +138,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.setItem("auth_token", idToken);
       setAuthToken(idToken);
       setTokenState(idToken);
-      const userData = await authApi.me();
       try {
-        await profile.update({ full_name });
+        const userData = await authApi.me();
+        try {
+          await profile.update({ full_name });
+        } catch {
+          // Profile endpoint may not exist yet; full_name will be captured during onboarding
+        }
+        setUser({ ...userData, full_name: full_name || userData.full_name });
       } catch {
-        // Profile endpoint may not exist yet; full_name will be captured during onboarding
+        // Backend may not be available — fall back to Firebase-derived user
+        setUser({ id: cred.user.uid, email: cred.user.email || "", full_name });
       }
-      setUser({ ...userData, full_name: full_name || userData.full_name });
     } finally {
       setIsLoading(false);
       isHandlingAuth.current = false;
@@ -151,10 +171,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.setItem("auth_token", idToken);
       setAuthToken(idToken);
       setTokenState(idToken);
-      const userData = await authApi.me();
-      setUser(userData);
-    } catch (error) {
-      throw new Error(getFirebaseErrorMessage(error));
+      try {
+        const userData = await authApi.me();
+        setUser(userData);
+      } catch {
+        setUser({ id: cred.user.uid, email: cred.user.email || "", full_name: cred.user.displayName || "" });
+      }
     } finally {
       setIsLoading(false);
       isHandlingAuth.current = false;
