@@ -1,4 +1,8 @@
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000/api/v1";
+const API_BASE = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? "http://localhost:8000/api/v1" : "");
+
+export const apiConfigError = import.meta.env.DEV || import.meta.env.VITE_API_URL
+  ? null
+  : "Missing VITE_API_URL. Set it in Vercel to your deployed backend, e.g. https://your-backend.example.com/api/v1";
 
 type RequestOptions = {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -33,6 +37,10 @@ export function getAuthToken(): string | null {
 }
 
 async function request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
+  if (!API_BASE) {
+    throw new Error(apiConfigError || "API base URL is not configured");
+  }
+
   const { method = "GET", body, params, headers = {} } = options;
 
   let url = `${API_BASE}${endpoint}`;

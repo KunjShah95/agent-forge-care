@@ -7,6 +7,7 @@ import { Sparkles, Loader2, User, Mail, Lock, Eye, EyeOff, CheckCircle2 } from "
 import { toast } from "sonner";
 import { useAuthContext, getFirebaseErrorMessage } from "@/lib/auth-context";
 import { firebaseConfigError, isFirebaseConfigured } from "@/lib/firebase";
+import { apiConfigError } from "@/api/client";
 
 const GoogleIcon = () => (
   <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
@@ -132,6 +133,12 @@ export default function Register() {
           {!isFirebaseConfigured && firebaseConfigError && (
             <p className="text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2 mb-4">
               {firebaseConfigError}
+            </p>
+          )}
+
+          {apiConfigError && (
+            <p className="text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2 mb-4">
+              {apiConfigError}
             </p>
           )}
 
