@@ -93,6 +93,20 @@ async def conduct_research(
     for topic in topics:
         await _store_research_embedding(user_id, agent_memory, topic, results)
 
+
+async def _store_research_embedding(user_id: str, agent_memory: AgentMemory, topic: str, results: dict) -> None:
+    try:
+        vec = await get_text_embedding(topic)
+        # AgentMemory.store_vector is synchronous
+        agent_memory.store_vector(
+            collection="research_embeddings",
+            text=topic,
+            vector=vec,
+            metadata={"user_id": user_id, "type": "topic"},
+        )
+    except Exception:
+        logger.exception("Failed to store research embedding for topic: %s", topic)
+
     # Build summary
     sections = []
     if results.get("company_info"):

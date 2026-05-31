@@ -199,4 +199,16 @@ export default function Onboarding() {
           )}
 
           <div className="flex justify-between mt-8 pt-6 border-t border-border/50">
-            <Button variant="ghos
+            <Button variant="ghost" onClick={prev} disabled={step === 0} className="gap-2">
+              <ArrowLeft className="h-4 w-4" /> Back
+            </Button>
+            <Button onClick={next} className="bg-gradient-primary shadow-glow gap-2" disabled={step === steps.length - 1 && updateProfile.isPending}>
+              {step === steps.length - 1 ? (updateProfile.isPending ? "Saving…" : "Enter dashboard") : "Continue"}
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

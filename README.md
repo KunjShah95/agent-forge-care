@@ -222,7 +222,7 @@ If you'd like, I can also:
 - add a rendered Mermaid SVG to `docs/` (requires a Mermaid renderer), or
 - create a concise one-page architecture PDF for stakeholders.
 
-# AgentForge Career OS
+## AgentForge Career OS
 
 AgentForge is an AI-powered career operating system that helps people discover internships, jobs, research programs, hackathons, scholarships, and networking opportunities — then turns those results into a guided action plan.
 

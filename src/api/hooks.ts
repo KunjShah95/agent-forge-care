@@ -404,6 +404,14 @@ export function useUploadResume() {
   });
 }
 
+export function useResumeSearch(q?: string) {
+  return useQuery({
+    queryKey: ["resume-search", q],
+    queryFn: () => api.resume.search(q || ""),
+    enabled: !!q,
+  });
+}
+
 // ─── Interview Sessions ──────────────────────────────────
 
 export function useInterviewSessions() {

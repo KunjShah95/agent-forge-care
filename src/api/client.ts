@@ -371,6 +371,8 @@ export const resume = {
     return response.json() as Promise<{ filename: string; pages: number; characters: number; text: string }>;
   },
 
+  search: (q: string) => request<{ items: { text: string; filename?: string; chunk_index?: number; pages?: number; characters?: number; score?: number }[] }>(`/resume/search`, { method: "GET", params: { q } }),
+
   list: () => request<{ items: ResumeItem[]; total: number }>("/resume"),
 
   delete: (filename: string) => request<void>(`/resume/${encodeURIComponent(filename)}`, { method: "DELETE" }),

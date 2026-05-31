@@ -12,6 +12,7 @@ from app.memory.memory_layer import AgentMemory
 from app.models.user import AgentTask, AgentType, TaskStatus, Profile
 from app.agents.research_agent import conduct_research
 from app.services.notification_service import create_notification
+from fastapi import Query
 
 router = APIRouter()
 
@@ -42,6 +43,32 @@ async def list_resumes(
             )
         )
     return ResumeList(items=items, total=len(items))
+
+
+@router.get("/search")
+async def search_resume(
+    q: str = Query(..., min_length=2),
+    user: User = Depends(get_current_user),
+):
+    """Search resume chunks using Qdrant and return top matches."""
+    try:
+        vector = await get_text_embedding(q)
+        agent_memory = AgentMemory(str(user.id))
+        results = agent_memory.search_vectors("resume_embeddings", vector, limit=10)
+        items = []
+        for r in results:
+            payload = r.payload if hasattr(r, "payload") else {}
+            items.append({
+                "text": payload.get("text", "")[:800],
+                "filename": payload.get("filename"),
+                "chunk_index": payload.get("chunk_index"),
+                "pages": payload.get("pages"),
+                "characters": payload.get("characters"),
+                "score": getattr(r, "score", None),
+            })
+        return {"items": items}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.delete("/{filename:path}", status_code=204)
@@ -120,62 +147,65 @@ async def upload_resume(
         db.add(entry)
     await db.flush()
 
-    # --- Index resume text in Qdrant (vector store) ---
+    # --- Chunk resume text and index chunks in Qdrant (vector store) ---
     try:
-        vector = await get_text_embedding(text)
+        CHUNK_SIZE = 1000
+        CHUNK_OVERLAP = 200
         agent_memory = AgentMemory(str(user.id))
-        agent_memory.store_vector(
-            collection="resume_embeddings",
-            text=text,
-            vector=vector,
-            metadata={"filename": file.filename, "pages": pages, "characters": chars},
-        )
+        start = 0
+        idx = 0
+        while start < len(text):
+            end = min(start + CHUNK_SIZE, len(text))
+            chunk = text[start:end]
+            vector = await get_text_embedding(chunk)
+            agent_memory.store_vector(
+                collection="resume_embeddings",
+                text=chunk,
+                vector=vector,
+                metadata={
+                    "filename": file.filename,
+                    "pages": pages,
+                    "characters": chars,
+                    "chunk_index": idx,
+                },
+            )
+            idx += 1
+            start += CHUNK_SIZE - CHUNK_OVERLAP
     except Exception:
         # Do not fail the upload if embedding/indexing fails
         logger = __import__("logging").getLogger("agentforge.resume")
-        logger.exception("Failed to index resume into Qdrant")
+        logger.exception("Failed to index resume chunks into Qdrant")
 
-    # --- Optionally kick off background analysis tasks for GitHub / portfolio ---
+    # --- Enqueue background research tasks using RQ (reliable async processing) ---
     try:
+        from rq import Queue
+        from redis import Redis
+        from app.tasks.agent_tasks import process_research_task
+
+        redis = Redis.from_url(__import__("app").config.settings.redis_url)
+        q = Queue("default", connection=redis)
+
         # fetch latest profile for URLs
         p = await db.execute(select(Profile).where(Profile.user_id == user.id))
         profile = p.scalar_one_or_none()
-        # GitHub analysis
-        if profile and profile.github_url:
-            task = AgentTask(user_id=user.id, agent_type=AgentType.research, status=TaskStatus.running, input={"query": profile.github_url, "focus": "company"})
-            db.add(task)
-            await db.commit()
-            try:
-                res = await conduct_research(str(user.id), {"query": profile.github_url, "focus": "company"}, db)
-                task.status = TaskStatus.completed
-                task.output = res
-                await db.commit()
-                await create_notification(db, user.id, title="GitHub analysis complete", body=f"GitHub analysis for {profile.github_url} finished", type="success")
-            except Exception as e:
-                task.status = TaskStatus.failed
-                task.error = str(e)
-                await db.commit()
-                await create_notification(db, user.id, title="GitHub analysis failed", body=str(e)[:200], type="error")
 
-        # Portfolio analysis
-        if profile and profile.portfolio_url:
-            task = AgentTask(user_id=user.id, agent_type=AgentType.research, status=TaskStatus.running, input={"query": profile.portfolio_url, "focus": "company"})
+        if profile and profile.github_url:
+            # create AgentTask record in DB (queued)
+            task = AgentTask(user_id=user.id, agent_type=AgentType.research, status=TaskStatus.queued, input={"query": profile.github_url, "focus": "company"})
             db.add(task)
             await db.commit()
-            try:
-                res = await conduct_research(str(user.id), {"query": profile.portfolio_url, "focus": "company"}, db)
-                task.status = TaskStatus.completed
-                task.output = res
-                await db.commit()
-                await create_notification(db, user.id, title="Portfolio analysis complete", body=f"Portfolio analysis for {profile.portfolio_url} finished", type="success")
-            except Exception as e:
-                task.status = TaskStatus.failed
-                task.error = str(e)
-                await db.commit()
-                await create_notification(db, user.id, title="Portfolio analysis failed", body=str(e)[:200], type="error")
+            # enqueue background job with task id
+            q.enqueue(process_research_task, str(task.id), str(user.id), profile.github_url, "company")
+
+        if profile and profile.portfolio_url:
+            task = AgentTask(user_id=user.id, agent_type=AgentType.research, status=TaskStatus.queued, input={"query": profile.portfolio_url, "focus": "company"})
+            db.add(task)
+            await db.commit()
+            q.enqueue(process_research_task, str(task.id), str(user.id), profile.portfolio_url, "company")
     except Exception:
         # best-effort; don't block upload
-        pass
+        logger = __import__("logging").getLogger("agentforge.resume")
+        logger.exception("Failed to enqueue background research tasks")
 
     return {
         "filename": file.filename,

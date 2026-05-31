@@ -31,7 +31,7 @@ open http://localhost:8000/docs
 
 ## Project Structure
 
-```
+``` text
 backend/
 ├── app/
 │   ├── main.py                 # FastAPI application
