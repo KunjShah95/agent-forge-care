@@ -13,7 +13,12 @@ class Settings(BaseSettings):
 
     @property
     def cors_origin_list(self) -> List[str]:
-        return [o.strip() for o in self.cors_origins.split(",")]
+        origins = [o.strip() for o in self.cors_origins.split(",")]
+        # Allow all Vercel preview deployments dynamically
+        vercel_url = os.environ.get("VERCEL_URL")
+        if vercel_url and vercel_url not in origins:
+            origins.append(f"https://{vercel_url}")
+        return origins
 
     # Database
     database_url: str = (
