@@ -24,3 +24,8 @@ dist-ssr
 *.sw?
 .env
 docs/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo

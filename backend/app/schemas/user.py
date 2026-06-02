@@ -328,6 +328,7 @@ class AlertConfigCreate(BaseModel):
     min_match_score: int = 80
     frequency: str = "daily"
     is_active: bool = True
+    email_notify: bool = False
 
 
 class AlertConfigUpdate(BaseModel):
@@ -338,6 +339,7 @@ class AlertConfigUpdate(BaseModel):
     min_match_score: Optional[int] = None
     frequency: Optional[str] = None
     is_active: Optional[bool] = None
+    email_notify: Optional[bool] = None
 
 
 class AlertConfigOut(BaseModel):
@@ -349,6 +351,7 @@ class AlertConfigOut(BaseModel):
     min_match_score: int = 80
     frequency: str = "daily"
     is_active: bool = True
+    email_notify: bool = False
     created_at: datetime
 
     model_config = {"from_attributes": True}

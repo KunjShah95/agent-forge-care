@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, func
 
@@ -183,8 +183,6 @@ async def get_monitor_alerts(
     db: AsyncSession = Depends(get_db),
 ):
     """Get recent alerts from the opportunity monitor."""
-    from app.models.user import AgentType
-
     result = await db.execute(
         select(AgentTask)
         .where(

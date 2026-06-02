@@ -151,7 +151,7 @@ export const applications = {
 
 // Contacts
 export const contacts = {
-  list: () => request<{ items: Contact[] }>("/contacts"),
+  list: () => request<{ items: Contact[]; total: number; page: number }>("/contacts"),
 
   create: (data: { name: string; role?: string; company?: string; email?: string }) =>
     request<Contact>("/contacts", { method: "POST", body: data }),
@@ -356,7 +356,19 @@ export const monitor = {
     request<MonitorSettings>("/monitor/settings", { method: "PATCH", body: data }),
 };
 
+export type AtsAnalysis = {
+  format_score: number;
+  keyword_score: number;
+  action_verb_score: number;
+  missing_keywords: string[];
+  present_keywords: string[];
+  suggestions: string[];
+  summary: string;
+};
+
 export const resume = {
+  atsAnalysis: () => request<AtsAnalysis>("/resume/ats-analysis"),
+
   upload: async (file: File) => {
     const formData = new FormData();
     formData.append("file", file);

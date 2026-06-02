@@ -1,3 +1,4 @@
+import os
 import uuid
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
@@ -144,6 +145,7 @@ async def upload_avatar(
     ext = file.filename.rsplit(".", 1)[-1] if file.filename else "png"
     filename = f"{uuid.uuid4().hex}.{ext}"
     filepath = AVATAR_DIR / filename
+    os.makedirs(AVATAR_DIR, exist_ok=True)
     filepath.write_bytes(content)
 
     result = await db.execute(

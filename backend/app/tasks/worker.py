@@ -2,29 +2,8 @@
 
 Run as: python -m app.tasks.worker
 """
-import os
 import logging
 
-from rq import Worker, Queue
-from redis import Redis
-
-logging.basicConfig(level=logging.INFO)
-
-
-def main() -> None:
-    # read redis url from app settings
-    from app import config
-
-    redis = Redis.from_url(config.settings.redis_url)
-    q = Queue("default", connection=redis)
-    worker = Worker([q], connection=redis)
-    worker.work()
-
-
-if __name__ == "__main__":
-    main()
-import os
-import logging
 from redis import Redis
 from rq import Worker, Queue, Connection
 

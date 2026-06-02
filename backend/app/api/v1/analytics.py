@@ -111,7 +111,7 @@ async def get_funnel(
             FunnelPoint(
                 name=stage.value.capitalize(),
                 value=count,
-                rate=f"{count}/{len(stages)}",
+                rate=f"{count}",
             )
         )
     return funnel

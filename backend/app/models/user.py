@@ -404,6 +404,7 @@ class MemoryEntry(Base):
     key = Column(String(255), nullable=False)
     value = Column(JSON, nullable=False)
     weight = Column(DECIMAL(3, 2), default=1.0)
+    ttl_days = Column(Integer, nullable=True, default=None)
     created_at = Column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -436,6 +437,7 @@ class AlertConfig(Base):
     min_match_score = Column(Integer, default=80)
     frequency = Column(String(20), default="daily")
     is_active = Column(Boolean, default=True)
+    email_notify = Column(Boolean, default=False, nullable=False)
     created_at = Column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

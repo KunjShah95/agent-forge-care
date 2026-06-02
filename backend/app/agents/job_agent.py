@@ -51,7 +51,6 @@ async def discover_jobs(
 
     profile = await profile_service.get_or_create_profile(user_id)
     profile_skills = await profile_service.get_skill_names(profile.id)
-    memory_context = await memory_service.get_user_context(user_id)
 
     # Retrieve salary preferences from profile
     salary_min = profile.salary_min

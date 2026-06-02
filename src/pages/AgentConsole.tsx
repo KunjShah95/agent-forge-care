@@ -3,10 +3,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import AgentChat from "@/components/AgentChat";
-import { Brain, Layers3, Loader2 } from "lucide-react";
+import { Layers3, Loader2 } from "lucide-react";
 import { useAgentTasks } from "@/api/hooks";
 import type { AgentTask } from "@/api/client";
-import { AGENT_TYPE_MAP, AGENT_KEYS, STATUS_CONFIG, getAgentInfo } from "@/lib/agent-types";
+import { AGENT_KEYS, STATUS_CONFIG, getAgentInfo } from "@/lib/agent-types";
 
 export default function AgentConsole() {
   const { data: tasksData, isLoading: tasksLoading } = useAgentTasks();

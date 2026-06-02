@@ -44,10 +44,15 @@ class Settings(BaseSettings):
     # LangSmith
     langchain_api_key: str = ""
 
+    # SendGrid
+    sendgrid_api_key: str = ""
+    from_email: str = "noreply@agentforge.ai"
+
     # Search APIs
     google_api_key: str = ""
     google_cse_id: str = ""
     serpapi_key: str = ""
+    tavily_api_key: str = ""
 
     model_config = {
         "env_file": ".env",

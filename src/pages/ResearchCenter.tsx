@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,12 +26,15 @@ export default function ResearchCenter() {
   const createMemory = useCreateMemory();
   const { data: memoriesData } = useMemory();
 
+  const notesInitialized = useRef(false);
   useEffect(() => {
+    if (notesInitialized.current) return;
     const existing = memoriesData?.items?.find?.((m) => m.key === "research_notes");
-    if (existing && notes === "" && typeof existing.value === "string") {
+    if (existing && typeof existing.value === "string") {
       setNotes(existing.value);
+      notesInitialized.current = true;
     }
-  }, [memoriesData, notes]);
+  }, [memoriesData]);
 
   useEffect(() => {
     const fetchInsights = async () => {
@@ -49,8 +52,9 @@ export default function ResearchCenter() {
             date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" }),
           })));
         }
-      } catch {
-        // fallback data already set
+      } catch (err) {
+        console.error("Failed to load interview insights:", err);
+        toast.error("Could not load interview insights");
       } finally {
         setLoadingInsights(false);
       }
@@ -80,8 +84,9 @@ export default function ResearchCenter() {
             })) || []),
           ]);
         }
-      } catch {
-        // fallback data already set
+      } catch (err) {
+        console.error("Failed to load industry trends:", err);
+        toast.error("Could not load industry trends");
       } finally {
         setLoadingTrends(false);
       }

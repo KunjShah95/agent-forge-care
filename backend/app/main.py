@@ -1,30 +1,63 @@
+import asyncio
+import json
 import logging
+import time
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 
 from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import text
 
 from app.config import settings
-from app.database import init_db, close_db
+from app.database import init_db, close_db, get_db
 from app.api.router import router as api_router
 from app.middleware.auth import RequestLogMiddleware
-from app.memory.qdrant_client import init_collections
+from app.memory.qdrant_client import init_collections, get_qdrant_client
 from app.dependencies import rate_limiter, _get_rate_limit_key
+from app.tasks.memory_cleanup import cleanup_expired_memory
 
-# Configure logging
+class JSONFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        log_entry = {
+            "ts": datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
+            "level": record.levelname,
+            "logger": record.name,
+            "msg": record.getMessage(),
+        }
+        if record.exc_info and record.exc_info[0]:
+            log_entry["exc"] = self.formatException(record.exc_info)
+        return json.dumps(log_entry)
+
+handler = logging.StreamHandler()
+handler.setFormatter(JSONFormatter() if not settings.debug else logging.Formatter("%(asctime)s | %(name)-12s | %(levelname)-5s | %(message)s"))
 logging.basicConfig(
     level=logging.INFO if settings.debug else logging.WARNING,
-    format="%(asctime)s | %(name)-12s | %(levelname)-5s | %(message)s",
+    handlers=[handler],
 )
 logger = logging.getLogger("agentforge")
+
+
+_cleanup_task = None
+
+
+async def _run_memory_cleanup_loop():
+    """Run cleanup_expired_memory every hour."""
+    while True:
+        try:
+            await cleanup_expired_memory()
+        except Exception:
+            logger.exception("Memory cleanup cycle failed")
+        await asyncio.sleep(3600)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan: startup and shutdown events."""
+    global _cleanup_task
     logger.info("Starting %s...", settings.app_name)
     await init_db()
     logger.info("Database tables created / verified")
@@ -33,7 +66,11 @@ async def lifespan(app: FastAPI):
         logger.info("Qdrant collections initialized")
     except Exception as e:
         logger.warning("Qdrant init skipped: %s", e)
+    _cleanup_task = asyncio.create_task(_run_memory_cleanup_loop())
+    logger.info("Memory cleanup background task started")
     yield
+    if _cleanup_task:
+        _cleanup_task.cancel()
     await close_db()
     logger.info("Shutdown complete")
 
@@ -88,4 +125,35 @@ app.include_router(api_router)
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "service": settings.app_name}
+    checks = {}
+    healthy = True
+
+    # Database check
+    try:
+        async for session in get_db():
+            await session.execute(text("SELECT 1"))
+            break
+        checks["database"] = "ok"
+    except Exception as e:
+        checks["database"] = f"error: {e}"
+        healthy = False
+
+    # Qdrant check
+    try:
+        qdrant = get_qdrant_client()
+        qdrant.get_collections()
+        checks["qdrant"] = "ok"
+    except Exception as e:
+        checks["qdrant"] = f"unavailable: {e}"
+
+    # Redis check
+    try:
+        limiter = await rate_limiter()
+        r = await limiter._get_redis()
+        await r.ping()
+        checks["redis"] = "ok"
+    except Exception as e:
+        checks["redis"] = f"unavailable: {e}"
+
+    status = "healthy" if healthy else "degraded"
+    return {"status": status, "service": settings.app_name, "checks": checks, "timestamp": datetime.now(timezone.utc).isoformat()}

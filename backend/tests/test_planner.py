@@ -6,7 +6,8 @@ Uses mock database sessions and sample data.
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from app.agents.planner import decompose_goal, format_planner_response
+from app.agents.planner import _keyword_decompose, format_planner_response
+decompose_goal = _keyword_decompose
 from app.models.user import AgentType
 
 

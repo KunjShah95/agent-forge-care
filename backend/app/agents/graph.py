@@ -237,9 +237,6 @@ async def _execute_single_agent_inner(
     Execute a single specialist agent in its own DB session.
     This enables true parallel execution via asyncio.gather().
     """
-    from app.database import async_session_factory
-    from app.models.user import AgentTask, TaskStatus
-
     try:
         agent_type = AgentType(agent_str)
     except ValueError:
@@ -248,7 +245,6 @@ async def _execute_single_agent_inner(
     handler = AGENT_HANDLERS.get(agent_type)
     specialist_task_id = gen_id()
 
-    # Each agent gets its own DB session to avoid session sharing conflicts
     async with async_session_factory() as db:
         spec_task = AgentTask(
             id=specialist_task_id,
@@ -298,8 +294,6 @@ async def _execute_single_agent_inner(
 
             return {agent_str: {"error": str(e)}}
 
-    return {agent_str: {"error": "Unknown execution error"}}
-
 
 # ─── Dynamic Agent Routing ──────────────────────────────────
 
@@ -313,7 +307,7 @@ def _filter_tasks_by_context(tasks: list[dict], profile: dict) -> list[dict]:
     - Skip research agent with default params if the user has no target companies.
     """
     role_types = profile.get("role_types", [])
-    target_companies = profile.get("target_locations", [])
+    target_locations = profile.get("target_locations", [])
     career_goal = profile.get("career_goal", "").lower()
 
     filtered: list[dict] = []
@@ -343,12 +337,12 @@ def _filter_tasks_by_context(tasks: list[dict], profile: dict) -> list[dict]:
                     )
                     continue
 
-        # Skip research agent with empty company if no target companies
+        # Skip research agent if no query and no target locations
         if agent == "research":
-            company = task.get("params", {}).get("company", "")
-            if not company and not target_companies:
+            query = task.get("params", {}).get("query", "")
+            if not query and not target_locations:
                 logger.info(
-                    "Dynamic routing: skipping research agent (no target company)"
+                    "Dynamic routing: skipping research agent (no query or target location)"
                 )
                 continue
 
@@ -377,6 +371,7 @@ async def dispatch_all_agents_node(state: PlannerGraphState) -> dict:
     tasks = state.get("tasks", [])
     profile = state.get("profile", {})
     planner_goal_id = state.get("planner_goal_id")
+    memory_context = state.get("memory_context", {})
 
     if not tasks:
         return {"results": {}}
@@ -401,6 +396,7 @@ async def dispatch_all_agents_node(state: PlannerGraphState) -> dict:
     for task_def in tasks:
         agent_str = task_def.get("agent", "monitor")
         params = task_def.get("params", {})
+        params["memory_context"] = memory_context
         coro = _execute_with_retry(agent_str, user_id, params, planner_goal_id)
         coros.append(coro)
 
@@ -410,10 +406,10 @@ async def dispatch_all_agents_node(state: PlannerGraphState) -> dict:
 
     # 5. Merge individual results into a single dict, handling exceptions
     merged_results: dict[str, Any] = {}
-    for result_item in results_list:
+    for i, result_item in enumerate(results_list):
         if isinstance(result_item, Exception):
             logger.warning("Agent execution raised exception: %s", result_item)
-            merged_results["error"] = {"error": str(result_item)}
+            merged_results[f"error_{i}"] = {"error": str(result_item)}
         else:
             merged_results.update(result_item)
 
@@ -470,12 +466,18 @@ async def _fallback_search(
 
 
 async def dispatch_agent(
-    agent_type: AgentType, user_id: str, params: dict, db: AsyncSession
+    agent_type: AgentType,
+    user_id: str,
+    params: dict,
+    db: AsyncSession,
+    memory_context: dict | None = None,
 ) -> dict:
     """
     Dispatch a single specialist agent task and return its result.
     Used by the streaming chat endpoint (chat.py) for sequential dispatch.
     """
+    if memory_context:
+        params["memory_context"] = memory_context
     handler = AGENT_HANDLERS.get(agent_type)
     if handler:
         return await handler(user_id, params, db)
@@ -573,9 +575,9 @@ async def _score_agent_output(
     scores["tone_match"] = min(10, tone)
 
     # Format quality: check structure
-    fmt = 8
+    fmt = 4
     if isinstance(result, dict):
-        fmt = 8
+        fmt = 6
         if "message" in result:
             fmt += 1
         if "items" in result or "questions" in result or "guidance" in result:
@@ -583,9 +585,7 @@ async def _score_agent_output(
         if isinstance(result.get("items"), list) or isinstance(
             result.get("questions"), list
         ):
-            fmt += 0
-    else:
-        fmt = 4
+            fmt += 2
     scores["format_quality"] = min(10, fmt)
 
     total = sum(v for k, v in scores.items() if k != "total")
@@ -898,13 +898,11 @@ async def run_resume_tailoring(user_id: str, application_id: str) -> str:
             user_id=user_id,
             agent_type=AgentType.resume,
             input={"application_id": application_id},
-            status=TaskStatus.completed,
+            status=TaskStatus.running,
             started_at=datetime.now(timezone.utc),
-            completed_at=datetime.now(timezone.utc),
         )
 
         if app:
-            # Get opportunity details for context
             opp_result = await db.execute(
                 select(Opportunity).where(Opportunity.id == app.opportunity_id)
             )
@@ -923,6 +921,8 @@ async def run_resume_tailoring(user_id: str, application_id: str) -> str:
         else:
             task.output = {"error": "Application not found"}
 
+        task.status = TaskStatus.completed
+        task.completed_at = datetime.now(timezone.utc)
         db.add(task)
         await db.flush()
 

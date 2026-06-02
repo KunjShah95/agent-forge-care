@@ -381,6 +381,15 @@ export function useMarkAllNotificationsRead() {
 
 // ─── Resume ──────────────────────────────────────────────
 
+export function useResumeAnalysis(enabled: boolean) {
+  return useQuery({
+    queryKey: ["resume", "ats-analysis"],
+    queryFn: api.resume.atsAnalysis,
+    enabled,
+    staleTime: 0,
+  });
+}
+
 export function useResumes() {
   return useQuery({
     queryKey: ["resumes"],

@@ -37,6 +37,21 @@ export default function Onboarding() {
 
   const handleComplete = () => {
     const finish = (resumeUploaded = false) => {
+      const parseSalary = (s: string) => {
+        const clean = s.replace(/[$,\s]/g, "").toLowerCase();
+        const range = clean.match(/^(\d+)(?:k)?\s*[-–to]+\s*(\d+)(?:k)?$/);
+        if (range) {
+          const mult = clean.includes("k") || range[1].length <= 3 ? 1000 : 1;
+          return { min: parseInt(range[1]) * mult, max: parseInt(range[2]) * mult };
+        }
+        const single = clean.match(/^(\d+)(?:k)?$/);
+        if (single) {
+          const val = parseInt(single[1]) * (clean.includes("k") || single[1].length <= 3 ? 1000 : 1);
+          return { min: val, max: val };
+        }
+        return null;
+      };
+      const parsed = salary ? parseSalary(salary) : null;
       updateProfile.mutate(
         {
           full_name: fullName || undefined,
@@ -45,6 +60,8 @@ export default function Onboarding() {
           bio: bio || undefined,
           portfolio_url: portfolio || undefined,
           github_url: github || undefined,
+          salary_min: parsed?.min,
+          salary_max: parsed?.max,
           target_locations: locations ? locations.split(",").map((s) => s.trim()).filter(Boolean) : [],
           role_types: roleTypes ? roleTypes.split(",").map((s) => s.trim()).filter(Boolean) : [],
           company_sizes: companySizes ? companySizes.split(",").map((s) => s.trim()).filter(Boolean) : [],

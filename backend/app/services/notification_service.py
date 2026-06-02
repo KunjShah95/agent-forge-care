@@ -15,8 +15,10 @@ async def create_notification(
     title: str,
     body: str = "",
     type: NotificationType = "info",
+    to_email: str | None = None,
 ) -> None:
-    """Create an in-app notification for a user via the memory system."""
+    """Create an in-app notification for a user via the memory system.
+    Optionally delivers via email when to_email is provided."""
     memory = MemoryService(db)
     await memory.set_memory(
         user_id,
@@ -30,3 +32,7 @@ async def create_notification(
         weight=1.0,
     )
     logger.debug("Notification created for user %s: %s", user_id, title)
+
+    if to_email:
+        from app.services.email_service import send_email
+        await send_email(to_email=to_email, subject=title, body=body)

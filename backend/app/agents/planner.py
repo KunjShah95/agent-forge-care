@@ -6,7 +6,7 @@ using an LLM (when available), dispatches each to the appropriate
 specialist agent, and collects results.
 """
 
-from typing import TypedDict, Optional, Any
+from typing import TypedDict
 import json
 import logging
 
@@ -155,21 +155,6 @@ async def llm_decompose_goal(goal: str, profile: dict, memory_context: dict) -> 
 
 
 # ─── Keyword-based Goal Decomposition (Fallback) ───────────
-
-
-def decompose_goal(goal: str, profile: dict, memory_context: dict) -> list[Task]:
-    """
-    Decompose a user goal into a list of tasks for specialist agents.
-
-    Uses LLM when available (openai_api_key configured), otherwise
-    falls back to keyword/rules-based decomposition.
-    """
-    goal = goal.strip()
-    if not goal:
-        return []
-
-    # Proceed with keyword-based decomposition synchronously
-    return _keyword_decompose(goal, profile, memory_context)
 
 
 def _keyword_decompose(goal: str, profile: dict, memory_context: dict) -> list[Task]:

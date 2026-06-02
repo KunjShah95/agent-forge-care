@@ -121,6 +121,15 @@ class SearchAdapter:
             except Exception:
                 pass
 
+        # Try Tavily (AI-native search, great for research)
+        if settings.tavily_api_key:
+            try:
+                tavily_results = await self._search_tavily(query, limit)
+                results.extend(tavily_results)
+                logger.info("Tavily returned %d results", len(tavily_results))
+            except Exception as e:
+                logger.warning("Tavily search failed: %s", e)
+
         # Fallback: scrape search results
         if not results:
             try:
@@ -369,6 +378,39 @@ class SearchAdapter:
                 logger.debug("Research scrape failed: %s", e)
 
         return []
+
+    # ─── Tavily ────────────────────────────────────────────
+
+    async def _search_tavily(
+        self,
+        query: str,
+        limit: int = 5,
+    ) -> list[dict]:
+        """Search using Tavily API — purpose-built for AI research agents."""
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                "https://api.tavily.com/search",
+                json={
+                    "api_key": settings.tavily_api_key,
+                    "query": query,
+                    "search_depth": "basic",
+                    "max_results": limit,
+                    "include_answer": False,
+                },
+                timeout=15,
+            )
+            data = resp.json()
+
+        results = []
+        for r in data.get("results", []):
+            results.append({
+                "title": r.get("title", ""),
+                "snippet": r.get("content", ""),
+                "url": r.get("url", ""),
+                "source": "tavily",
+            })
+
+        return results
 
     # ─── Utilities ─────────────────────────────────────────
 

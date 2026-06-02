@@ -253,6 +253,7 @@ def make_alert_config(user_id=None, **overrides) -> AlertConfig:
         min_match_score=80,
         frequency="daily",
         is_active=True,
+        email_notify=False,
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
     )

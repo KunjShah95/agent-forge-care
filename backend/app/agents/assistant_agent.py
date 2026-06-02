@@ -11,6 +11,7 @@ Integrates with all memory layers and specialist outputs.
 
 import json
 import logging
+import uuid
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -162,13 +163,31 @@ Return ONLY valid JSON. No markdown, no explanations."""
         weight=0.9,
     )
 
-    return {
+    result = {
         "suggestions": suggestions[:7],
         "ats_keywords": all_skills[:5],
         "role_type": role_type,
         "message": f"Resume tailored for {role_type} roles. {len(suggestions)} suggestions generated.",
         "action_items": action_items,
     }
+
+    try:
+        agent_memory = AgentMemory(user_id)
+        vector = await get_text_embedding(result["message"])
+        agent_memory.store_vector(
+            collection="resume_embeddings",
+            text=result["message"],
+            vector=vector,
+            metadata={
+                "agent_type": "resume",
+                "key": params.get("role_type", ""),
+                "timestamp": str(datetime.now(timezone.utc)),
+            },
+        )
+    except Exception as e:
+        logger.debug("Failed to store memory vector: %s", e)
+
+    return result
 
 
 async def generate_cover_letter(
@@ -392,7 +411,7 @@ Return ONLY valid JSON. No markdown, no explanations."""
         weight=0.8,
     )
 
-    return {
+    result = {
         "questions": questions,
         "total_questions": len(questions),
         "prep_tips": prep_tips,
@@ -400,6 +419,24 @@ Return ONLY valid JSON. No markdown, no explanations."""
         + ["System Design Fundamentals", "Behavioral Storytelling"],
         "message": f"Generated {len(questions)} interview questions for preparation",
     }
+
+    try:
+        agent_memory = AgentMemory(user_id)
+        vector = await get_text_embedding(result["message"])
+        agent_memory.store_vector(
+            collection="memory_notes",
+            text=result["message"],
+            vector=vector,
+            metadata={
+                "agent_type": "interview",
+                "key": params.get("role_type", ""),
+                "timestamp": str(datetime.now(timezone.utc)),
+            },
+        )
+    except Exception as e:
+        logger.debug("Failed to store memory vector: %s", e)
+
+    return result
 
 
 # ─── Interview Answer Review ─────────────────────────────────
@@ -585,11 +622,29 @@ Return ONLY valid JSON. No markdown, no explanations."""
         weight=0.7,
     )
 
-    return {
+    result = {
         "templates": templates,
         "message": f"Generated {len(templates)} outreach templates",
         "best_practices": best_practices,
     }
+
+    try:
+        agent_memory = AgentMemory(user_id)
+        vector = await get_text_embedding(result["message"])
+        agent_memory.store_vector(
+            collection="memory_notes",
+            text=result["message"],
+            vector=vector,
+            metadata={
+                "agent_type": "outreach",
+                "key": params.get("role", ""),
+                "timestamp": str(datetime.now(timezone.utc)),
+            },
+        )
+    except Exception as e:
+        logger.debug("Failed to store memory vector: %s", e)
+
+    return result
 
 
 # ─── Monitoring Actions ─────────────────────────────────────
@@ -705,8 +760,6 @@ async def run_daily_scan(
         )
 
     # Store high-match alerts as notification memory entries
-    import uuid
-
     for alert in alerts[:10]:
         await memory_service.set_memory(
             user_id,
@@ -733,13 +786,31 @@ async def run_daily_scan(
         weight=0.6,
     )
 
-    return {
+    result = {
         "items": stored_items,
         "total": len(stored_items),
         "scored": scored_count,
         "alerts": alerts[:10],
         "message": f"Scan completed: {len(stored_items)} new items, {scored_count} scored, {len(alerts)} high-match alerts",
     }
+
+    try:
+        agent_memory = AgentMemory(user_id)
+        vector = await get_text_embedding(result["message"])
+        agent_memory.store_vector(
+            collection="memory_notes",
+            text=result["message"],
+            vector=vector,
+            metadata={
+                "agent_type": "scan",
+                "key": "",
+                "timestamp": str(datetime.now(timezone.utc)),
+            },
+        )
+    except Exception as e:
+        logger.debug("Failed to store memory vector: %s", e)
+
+    return result
 
 
 # ─── Career Guidance ────────────────────────────────────────
@@ -763,7 +834,6 @@ async def get_career_guidance(
 
     profile = await profile_service.get_or_create_profile(user_id)
     profile_skills = await profile_service.get_skill_names(profile.id)
-    memory_context = await memory_service.get_user_context(user_id)
 
     # Generate guidance based on query and profile
     guidance = {
@@ -794,7 +864,25 @@ async def get_career_guidance(
         relevant_context = agent_memory.get_relevant_context(query_vector, limit=3)
         guidance["memory_context"] = relevant_context
 
-    return {
+    result = {
         "guidance": guidance,
         "message": "Career guidance generated based on your profile and market conditions",
     }
+
+    try:
+        agent_memory = AgentMemory(user_id)
+        vector = await get_text_embedding(result["message"])
+        agent_memory.store_vector(
+            collection="memory_notes",
+            text=result["message"],
+            vector=vector,
+            metadata={
+                "agent_type": "guidance",
+                "key": params.get("query", ""),
+                "timestamp": str(datetime.now(timezone.utc)),
+            },
+        )
+    except Exception as e:
+        logger.debug("Failed to store memory vector: %s", e)
+
+    return result

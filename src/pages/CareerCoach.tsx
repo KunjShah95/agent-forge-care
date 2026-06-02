@@ -3,7 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Lightbulb, Target, TrendingUp, BookOpen, ArrowRight, Sparkles, MessageSquare } from "lucide-react";
+import { Loader2, Lightbulb, Target, TrendingUp, Sparkles, MessageSquare } from "lucide-react";
 import { useCareerGuidance } from "@/api/hooks";
 import { toast } from "sonner";
 

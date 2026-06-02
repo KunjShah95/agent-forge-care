@@ -29,7 +29,7 @@ function formatRelativeTime(dateStr: string) {
   return `${Math.floor(days / 30)}mo ago`;
 }
 
-function MemoryEntryRow({ entry, onEdit, onDelete }: { entry: MemoryEntry; onEdit: (entry: MemoryEntry) => void; onDelete: (id: string) => void }) {
+function MemoryEntryRow({ entry, onEdit, onDelete }: { entry: MemoryEntry; onEdit: (entry: MemoryEntry) => void; onDelete: (entry: MemoryEntry) => void }) {
   return (
     <div className="flex items-center gap-4 p-4 rounded-xl bg-muted/30 hover:bg-muted/50 transition group">
       <div className="flex-1 min-w-0">
@@ -39,7 +39,7 @@ function MemoryEntryRow({ entry, onEdit, onDelete }: { entry: MemoryEntry; onEdi
             weight: {entry.weight.toFixed(1)}
           </Badge>
         </div>
-        <p className="text-sm text-muted-foreground mt-0.5">{String(entry.value)}</p>
+        <p className="text-sm text-muted-foreground mt-0.5">{typeof entry.value === "object" ? JSON.stringify(entry.value) : String(entry.value)}</p>
       </div>
       <div className="text-xs text-muted-foreground hidden md:block">{formatRelativeTime(entry.updated_at)}</div>
       <Button
@@ -52,9 +52,9 @@ function MemoryEntryRow({ entry, onEdit, onDelete }: { entry: MemoryEntry; onEdi
       </Button>
       <Button
         variant="ghost"
-        size="sm"
+        size="icon"
         className="opacity-0 group-hover:opacity-100 transition text-destructive hover:text-destructive"
-        onClick={() => onDelete(entry.id)}
+        onClick={() => onDelete(entry)}
       >
         <Trash2 className="h-3 w-3" />
       </Button>
@@ -69,6 +69,7 @@ export default function MemoryViewer() {
   const [editingEntry, setEditingEntry] = useState<MemoryEntry | null>(null);
   const [editValue, setEditValue] = useState("");
   const [editWeight, setEditWeight] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<MemoryEntry | null>(null);
 
   const { data: memoryData, isLoading: memoryLoading } = useMemory();
   const { data: profile, isLoading: profileLoading } = useProfile();
@@ -142,8 +143,21 @@ export default function MemoryViewer() {
     );
   };
 
-  const handleDelete = (id: string) => {
-    deleteMemory.mutate(id);
+  const handleDelete = (entry: MemoryEntry) => {
+    setDeleteTarget(entry);
+  };
+
+  const confirmDelete = () => {
+    if (!deleteTarget) return;
+    deleteMemory.mutate(deleteTarget.id, {
+      onSuccess: () => {
+        toast({ title: "Memory deleted" });
+        setDeleteTarget(null);
+      },
+      onError: () => {
+        toast({ title: "Failed to delete memory", variant: "destructive" });
+      },
+    });
   };
 
   const isLoading = memoryLoading || profileLoading;
@@ -210,14 +224,14 @@ export default function MemoryViewer() {
                   <Skeleton key={i} className="h-16 w-full rounded-xl" />
                 ))}
               </div>
-            ) : profileEntries.length === 0 && otherEntries.length === 0 ? (
+            ) : profileEntries.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
                 <Database className="h-8 w-8 mx-auto mb-2 opacity-40" />
-                <p className="text-sm">No memory entries yet. Add one to get started.</p>
+                <p className="text-sm">No profile memory entries yet. Add one to get started.</p>
               </div>
             ) : (
               <div className="space-y-2">
-                {(profileEntries.length > 0 ? profileEntries : otherEntries).map((entry) => (
+                {profileEntries.map((entry) => (
                   <MemoryEntryRow key={entry.id} entry={entry} onEdit={handleEdit} onDelete={handleDelete} />
                 ))}
               </div>
@@ -442,6 +456,32 @@ export default function MemoryViewer() {
                 disabled={updateMemory.isPending}
               >
                 {updateMemory.isPending ? "Saving..." : "Save Changes"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+        <DialogContent className="max-w-sm glass">
+          <DialogHeader>
+            <DialogTitle className="font-display">Delete Memory Entry</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Are you sure you want to delete "<strong>{deleteTarget?.key}</strong>"? This action cannot be undone.
+            </p>
+            <div className="flex gap-3">
+              <Button variant="outline" className="flex-1" onClick={() => setDeleteTarget(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                className="flex-1"
+                onClick={confirmDelete}
+                disabled={deleteMemory.isPending}
+              >
+                {deleteMemory.isPending ? "Deleting..." : "Delete"}
               </Button>
             </div>
           </div>

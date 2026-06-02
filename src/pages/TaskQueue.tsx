@@ -104,6 +104,8 @@ export default function TaskQueue() {
   const runMonitor = useRunMonitor();
   const deleteTask = useDeleteTask();
   const [hideCompleted, setHideCompleted] = useState(false);
+  const [completedPage, setCompletedPage] = useState(1);
+  const COMPLETED_PER_PAGE = 20;
 
   const handleRunTask = (task: AgentTask) => {
     if (task.agent_type === "planner") {
@@ -143,7 +145,7 @@ export default function TaskQueue() {
   const activeItems = tasks.filter((q) => q.status === "queued" || q.status === "running");
   const completedItems = tasks.filter((q) => q.status === "completed");
   const failedItems = tasks.filter((q) => q.status === "failed");
-  const visibleCompleted = hideCompleted ? [] : completedItems;
+  const slicedCompleted = hideCompleted ? [] : completedItems.slice(0, completedPage * COMPLETED_PER_PAGE);
 
   return (
     <div className="space-y-6 max-w-[1400px]">
@@ -185,7 +187,7 @@ export default function TaskQueue() {
       <Tabs defaultValue="active">
         <TabsList className="glass">
           <TabsTrigger value="active">Active ({activeItems.length})</TabsTrigger>
-          <TabsTrigger value="completed">Completed ({visibleCompleted.length})</TabsTrigger>
+          <TabsTrigger value="completed">Completed ({hideCompleted ? 0 : completedItems.length})</TabsTrigger>
           <TabsTrigger value="failed">Failed ({failedItems.length})</TabsTrigger>
         </TabsList>
 
@@ -206,13 +208,22 @@ export default function TaskQueue() {
         <TabsContent value="completed" className="mt-4 space-y-2">
           {isLoading ? (
             <LoadingSkeleton />
-          ) : visibleCompleted.length === 0 ? (
+          ) : slicedCompleted.length === 0 ? (
             <div className="text-center py-16 text-muted-foreground">
               <Clock className="h-8 w-8 mx-auto mb-2 opacity-40" />
               No completed tasks yet.
             </div>
           ) : (
-            visibleCompleted.map((item) => <AgentQueueItem key={item.id} item={item} onDelete={handleDeleteTask} />)
+            <>
+              {slicedCompleted.map((item) => <AgentQueueItem key={item.id} item={item} onDelete={handleDeleteTask} />)}
+              {slicedCompleted.length < completedItems.length && (
+                <div className="text-center pt-2">
+                  <Button variant="outline" size="sm" onClick={() => setCompletedPage(p => p + 1)}>
+                    Load More ({completedItems.length - slicedCompleted.length} remaining)
+                  </Button>
+                </div>
+              )}
+            </>
           )}
         </TabsContent>
 

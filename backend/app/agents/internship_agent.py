@@ -52,7 +52,6 @@ async def discover_internships(
 
     profile = await profile_service.get_or_create_profile(user_id)
     profile_skills = await profile_service.get_skill_names(profile.id)
-    memory_context = await memory_service.get_user_context(user_id)
 
     # Merge params skills with profile skills
     all_skills = list(set(skills + profile_skills))

@@ -2,9 +2,9 @@ import { useState, useMemo } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Calendar, FileText, Trash2 } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Plus, Calendar, FileText, Trash2, Briefcase } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -131,6 +131,9 @@ function StageColumn({
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage });
   const stageApps = apps.filter((a) => a.stage === stage);
+  const [showAll, setShowAll] = useState(false);
+  const MAX_VISIBLE = 10;
+  const visibleApps = showAll ? stageApps : stageApps.slice(0, MAX_VISIBLE);
 
   return (
     <div className="flex flex-col min-h-[400px]">
@@ -140,16 +143,23 @@ function StageColumn({
           <Badge variant="secondary" className="text-[10px]">{stageApps.length}</Badge>
         </div>
       </div>
-      <SortableContext items={stageApps.map((a) => a.id)} strategy={verticalListSortingStrategy}>
+      <SortableContext items={visibleApps.map((a) => a.id)} strategy={verticalListSortingStrategy}>
         <div
           ref={setNodeRef}
           className={`flex-1 space-y-2 p-2 rounded-xl bg-muted/30 border border-dashed transition-colors ${isOver ? "bg-primary/5 border-primary/30" : "border-border/50"}`}
         >
-          {stageApps.map((a) => (
+          {visibleApps.map((a) => (
             <SortableCard key={a.id} app={a} stageColor={stageColor} onDelete={onDelete} />
           ))}
           {stageApps.length === 0 && (
             <div className="text-center text-[11px] text-muted-foreground py-8">Drop here</div>
+          )}
+          {!showAll && stageApps.length > MAX_VISIBLE && (
+            <div className="text-center pt-1">
+              <Button variant="ghost" size="sm" className="text-xs text-muted-foreground h-7" onClick={() => setShowAll(true)}>
+                Show {stageApps.length - MAX_VISIBLE} more
+              </Button>
+            </div>
           )}
         </div>
       </SortableContext>
@@ -246,6 +256,17 @@ export default function Applications() {
           {Array.from({ length: 6 }).map((_, i) => (
             <CardSkeleton key={i} />
           ))}
+        </div>
+      ) : apps.length === 0 ? (
+        <div className="py-16 text-center">
+          <div className="h-16 w-16 rounded-2xl bg-muted/50 flex items-center justify-center mx-auto mb-4">
+            <Briefcase className="h-8 w-8 text-muted-foreground" />
+          </div>
+          <h3 className="font-display font-semibold text-lg mb-1">No applications yet</h3>
+          <p className="text-sm text-muted-foreground mb-4">Save opportunities from the matches board to start tracking.</p>
+          <Button variant="outline" className="gap-2" asChild>
+            <Link to="/app/opportunities">Browse opportunities</Link>
+          </Button>
         </div>
       ) : (
         <DndContext

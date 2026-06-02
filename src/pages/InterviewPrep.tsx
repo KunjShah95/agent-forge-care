@@ -46,6 +46,9 @@ export default function InterviewPrep() {
   const createSession = useCreateInterviewSession();
   const interviewFeedback = useInterviewFeedback();
   const sessions = sessionsData?.items ?? [];
+  const [showAllSessions, setShowAllSessions] = useState(false);
+  const SESSION_PREVIEW_COUNT = 5;
+  const displaySessions = showAllSessions ? sessions : sessions.slice(0, SESSION_PREVIEW_COUNT);
 
   const handleGenerate = async () => {
     if (!company || !role) {
@@ -56,6 +59,7 @@ export default function InterviewPrep() {
       const result = await interviewPrep.mutateAsync({ company, role, type });
       setGeneratedQuestions(result.questions);
       setGeneratedTips(result.prep_tips);
+      setCategory("Generated");
       setDialogOpen(false);
       toast.success("Questions generated!");
     } catch {
@@ -96,6 +100,23 @@ export default function InterviewPrep() {
     }
   };
 
+  const statsByCategory = (() => {
+    const catMap: Record<string, { done: number; total: number; score: number }> = {
+      Behavioral: { done: 0, total: 12, score: 0 },
+      Technical: { done: 0, total: 8, score: 0 },
+      "System Design": { done: 0, total: 4, score: 0 },
+      "ML/AI": { done: 0, total: 6, score: 0 },
+    };
+    for (const s of sessions) {
+      const cat = s.type === "behavioral" ? "Behavioral" : s.type === "technical" ? "Technical" : s.type === "system_design" ? "System Design" : "ML/AI";
+      if (catMap[cat]) {
+        catMap[cat].done++;
+        catMap[cat].score = s.score || catMap[cat].score;
+      }
+    }
+    return Object.entries(catMap).map(([name, v]) => ({ name, ...v }));
+  })();
+
   const displayQuestions = generatedQuestions.length > 0
     ? { Generated: generatedQuestions.map(q => q.question) }
     : {};
@@ -113,20 +134,20 @@ export default function InterviewPrep() {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {[].map((c) => (
-          <Card key={c.name} className="glass p-5">
-            <div className="text-xs text-muted-foreground">{c.name}</div>
-            <div className="flex items-baseline gap-2 mt-1">
-              <span className="text-2xl font-display font-bold">{c.done}</span>
-              <span className="text-xs text-muted-foreground">/ {c.total}</span>
-            </div>
-            <Progress value={(c.done / c.total) * 100} className="h-1.5 mt-3" />
-            <div className="flex items-center justify-between mt-2 text-xs">
-              <span className="text-muted-foreground">Avg score</span>
-              <span className="font-display font-semibold gradient-text">{c.score}%</span>
-            </div>
-          </Card>
-        ))}
+          {statsByCategory.map((c) => (
+            <Card key={c.name} className="glass p-5">
+              <div className="text-xs text-muted-foreground">{c.name}</div>
+              <div className="flex items-baseline gap-2 mt-1">
+                <span className="text-2xl font-display font-bold">{c.done}</span>
+                <span className="text-xs text-muted-foreground">/ {c.total}</span>
+              </div>
+              <Progress value={c.total > 0 ? (c.done / c.total) * 100 : 0} className="h-1.5 mt-3" />
+              <div className="flex items-center justify-between mt-2 text-xs">
+                <span className="text-muted-foreground">Avg score</span>
+                <span className="font-display font-semibold gradient-text">{c.score}%</span>
+              </div>
+            </Card>
+          ))}
       </div>
 
       {generatedTips.length > 0 && (
@@ -145,6 +166,11 @@ export default function InterviewPrep() {
       <div className="grid lg:grid-cols-3 gap-6">
         <Card className="glass p-6 lg:col-span-2">
           <h2 className="font-display font-semibold mb-4">Question Bank</h2>
+          {Object.keys(displayQuestions).length === 0 ? (
+            <div className="py-8 text-center text-sm text-muted-foreground">
+              Generate interview questions to get started.
+            </div>
+          ) : (
           <Tabs value={category} onValueChange={setCategory}>
             <TabsList className="glass">
               {Object.keys(displayQuestions).map((c) => (
@@ -236,12 +262,15 @@ export default function InterviewPrep() {
               </TabsContent>
             ))}
           </Tabs>
+          )}
         </Card>
 
         <Card className="glass p-6">
           <h2 className="font-display font-semibold mb-4">Recent Sessions</h2>
           <div className="space-y-3">
-            {sessions.map((s) => (
+            {sessions.length === 0 ? (
+              <div className="py-8 text-center text-sm text-muted-foreground">No sessions yet. Start a mock interview to build your history.</div>
+            ) : displaySessions.map((s) => (
               <div key={s.id} className="p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition cursor-pointer">
                 <div className="flex items-center justify-between mb-1">
                   <span className="font-medium text-sm">{s.company}</span>
@@ -255,9 +284,11 @@ export default function InterviewPrep() {
               </div>
             ))}
           </div>
-          <Button variant="outline" size="sm" className="w-full mt-4 gap-2">
-            <BookOpen className="h-3 w-3" /> Review all sessions
-          </Button>
+          {!showAllSessions && sessions.length > SESSION_PREVIEW_COUNT && (
+            <Button variant="outline" size="sm" className="w-full mt-4 gap-2" onClick={() => setShowAllSessions(true)}>
+              <BookOpen className="h-3 w-3" /> View all {sessions.length} sessions
+            </Button>
+          )}
         </Card>
       </div>
 

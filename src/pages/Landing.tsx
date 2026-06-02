@@ -1,3 +1,4 @@
+import { Helmet } from "react-helmet-async";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -83,6 +84,17 @@ const comparison = [
 export default function Landing() {
   return (
     <div className="min-h-screen mesh-bg">
+      <Helmet>
+        <title>AgentForge Career OS — AI-Powered Career Platform</title>
+        <meta name="description" content="AgentForge Career OS is a multi-agent AI system that automates your entire job search and career management workflow. Discover opportunities, optimize resumes, prepare for interviews, and track your career pipeline." />
+        <meta property="og:title" content="AgentForge Career OS — AI-Powered Career Platform" />
+        <meta property="og:description" content="A multi-agent AI system that automates your entire job search and career management workflow with 8 specialized agents." />
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content="https://agentforge.ai" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="AgentForge Career OS" />
+        <meta name="twitter:description" content="AI-powered career operating system with 8 specialized agents for job search automation." />
+      </Helmet>
       <header className="sticky top-0 z-40 backdrop-blur-xl bg-background/60 border-b border-border/50">
         <div className="container flex h-16 items-center justify-between gap-3">
           <Link to="/" className="flex items-center gap-2">

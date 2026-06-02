@@ -8,6 +8,7 @@ Provides a unified interface for storing and retrieving:
 """
 
 import logging
+import uuid
 from typing import Optional, Any
 
 from app.services.rerank_service import get_reranker
@@ -73,7 +74,7 @@ class AgentMemory:
             return
         PointStruct = types[0]
 
-        from app.memory.qdrant_client import gen_point_id
+        point_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{collection}:{text[:1000]}"))
 
         payload = {
             "user_id": self.user_id,
@@ -85,7 +86,7 @@ class AgentMemory:
             collection_name=collection,
             points=[
                 PointStruct(
-                    id=gen_point_id(),
+                    id=point_id,
                     vector=vector,
                     payload=payload,
                 )

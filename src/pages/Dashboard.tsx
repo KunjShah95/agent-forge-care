@@ -20,12 +20,12 @@ export default function Dashboard() {
   const { data: auth } = useAuth();
   const { data: profile } = useProfile();
   const runPlanner = useRunPlanner();
-  const { data: matchesData, isLoading: matchesLoading } = useMatches();
-  const { data: tasksData, isLoading: tasksLoading } = useAgentTasks();
-  const { data: analytics, isLoading: analyticsLoading } = useAnalyticsSummary();
-  const { data: activityData, isLoading: activityLoading } = useAnalyticsActivity();
-  const { data: funnelData, isLoading: funnelLoading } = useAnalyticsFunnel();
-  const { data: oppsData, isLoading: oppsLoading } = useOpportunities();
+  const { data: matchesData, isLoading: matchesLoading, isError: matchesError } = useMatches();
+  const { data: tasksData, isLoading: tasksLoading, isError: tasksError } = useAgentTasks();
+  const { data: analytics, isLoading: analyticsLoading, isError: analyticsError } = useAnalyticsSummary();
+  const { data: activityData, isLoading: activityLoading, isError: activityError } = useAnalyticsActivity();
+  const { data: funnelData, isLoading: funnelLoading, isError: funnelError } = useAnalyticsFunnel();
+  const { data: oppsData, isLoading: oppsLoading, isError: oppsError } = useOpportunities();
 
   // ── Derived data ──
 
@@ -98,8 +98,16 @@ export default function Dashboard() {
     ];
   }, [analytics]);
 
+  const errors = [matchesError && "matches", tasksError && "tasks", analyticsError && "analytics", funnelError && "pipeline", activityError && "activity", oppsError && "opportunities"].filter(Boolean);
+
   return (
     <div className="space-y-6 max-w-[1400px]">
+      {errors.length > 0 && (
+        <div className="flex items-center gap-3 p-4 rounded-xl bg-destructive/10 border border-destructive/20 text-sm text-destructive">
+          <span className="h-2 w-2 rounded-full bg-destructive flex-shrink-0" />
+          <span>Some data failed to load: {errors.join(", ")}. Refresh the page or check your connection.</span>
+        </div>
+      )}
       <div className="grid xl:grid-cols-[1.2fr_0.8fr] gap-4 items-stretch">
         <Card className="glass p-6 overflow-hidden relative">
           <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-accent/10 pointer-events-none" />

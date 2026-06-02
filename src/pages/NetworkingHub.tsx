@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Mail, Plus, Search, Send, Sparkles, Trash2, Loader2 } from "lucide-react";
+import { Mail, Plus, Search, Send, Sparkles, Trash2, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -18,6 +18,9 @@ import {
 
 import { useContacts, useCreateContact, useUpdateContact, useDeleteContact, useNetworkingOutreach } from "@/api/hooks";
 import { ListSkeleton } from "@/components/ui/skeleton";
+import {
+  Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious,
+} from "@/components/ui/pagination";
 
 const templates = [
   { name: "Cold outreach — recruiter", preview: "Hi {Name}, I came across {Company}'s {Role} posting and your work on {Topic}…" },
@@ -43,11 +46,14 @@ function initials(name: string): string {
     .slice(0, 2);
 }
 
+const ITEMS_PER_PAGE = 12;
+
 export default function NetworkingHub() {
   const navigate = useNavigate();
   const { data, isLoading } = useContacts();
   const createContact = useCreateContact();
   const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
@@ -88,6 +94,17 @@ export default function NetworkingHub() {
         (c.role || "").toLowerCase().includes(q),
     );
   }, [data, searchQuery]);
+
+  const totalPages = Math.max(1, Math.ceil(contacts.length / ITEMS_PER_PAGE));
+  const paginatedContacts = contacts.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [contacts.length, totalPages]);
 
   return (
     <div className="space-y-6 max-w-[1400px]">
@@ -131,7 +148,7 @@ export default function NetworkingHub() {
               </div>
             ) : (
               <div className="divide-y divide-border/50">
-                {contacts.map((c) => (
+                {paginatedContacts.map((c) => (
                   <div
                     key={c.id}
                     className="p-4 flex items-center gap-4 hover:bg-muted/30 transition cursor-pointer"
@@ -161,7 +178,7 @@ export default function NetworkingHub() {
                     <div className="hidden md:block text-xs text-muted-foreground">{c.email}</div>
                     <Badge className={`${statusColors[c.status] || ""} text-[10px]`} variant="outline">{c.status}</Badge>
                     <div className="text-xs text-muted-foreground w-16 text-right">{c.last_contact || "—"}</div>
-                    <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); navigate("/app/agents"); }}><Mail className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); window.open(`mailto:${c.email}`, "_blank"); }}><Mail className="h-4 w-4" /></Button>
                     <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={(e) => {
                       e.stopPropagation();
                       deleteContact.mutate(c.id, {
@@ -176,6 +193,52 @@ export default function NetworkingHub() {
               </div>
             )}
           </Card>
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-4 py-3 border-t border-border/50">
+              <span className="text-xs text-muted-foreground">
+                Showing {Math.min((page - 1) * ITEMS_PER_PAGE + 1, contacts.length)}–{Math.min(page * ITEMS_PER_PAGE, contacts.length)} of {contacts.length} contacts
+              </span>
+              <Pagination className="w-auto mx-0">
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationPrevious
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      className={page <= 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                    />
+                  </PaginationItem>
+                  {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
+                    let pageNum: number;
+                    if (totalPages <= 7) {
+                      pageNum = i + 1;
+                    } else if (page <= 4) {
+                      pageNum = i + 1;
+                    } else if (page >= totalPages - 3) {
+                      pageNum = totalPages - 6 + i;
+                    } else {
+                      pageNum = page - 3 + i;
+                    }
+                    return (
+                      <PaginationItem key={pageNum}>
+                        <PaginationLink
+                          isActive={pageNum === page}
+                          onClick={() => setPage(pageNum)}
+                          className="cursor-pointer"
+                        >
+                          {pageNum}
+                        </PaginationLink>
+                      </PaginationItem>
+                    );
+                  })}
+                  <PaginationItem>
+                    <PaginationNext
+                      onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                      className={page >= totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="templates" className="mt-4">

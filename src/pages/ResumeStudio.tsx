@@ -22,8 +22,8 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Upload, Sparkles, FileText, Download, CheckCircle2, AlertCircle, Loader2, Trash2 } from "lucide-react";
-import { useResumeTailor, useCoverLetter, useResumes, useDeleteResume } from "@/api/hooks";
+import { Upload, Sparkles, FileText, CheckCircle2, AlertCircle, Loader2, Trash2 } from "lucide-react";
+import { useResumeTailor, useCoverLetter, useResumes, useDeleteResume, useResumeAnalysis } from "@/api/hooks";
 import { resume } from "@/api/client";
 import { toast } from "sonner";
 export default function ResumeStudio() {
@@ -38,6 +38,9 @@ export default function ResumeStudio() {
   const { data: resumesData } = useResumes();
   const deleteResume = useDeleteResume();
   const resumesList = resumesData?.items ?? [];
+
+  const [activeTab, setActiveTab] = useState("ats");
+  const { data: atsData } = useResumeAnalysis(activeTab === "ats" && uploadResult !== null);
 
   const [coverCompany, setCoverCompany] = useState("");
   const [coverRole, setCoverRole] = useState("");
@@ -180,7 +183,7 @@ export default function ResumeStudio() {
         ))}
       </div>
 
-      <Tabs defaultValue="ats" className="space-y-4">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className="glass">
           <TabsTrigger value="ats">ATS Analysis</TabsTrigger>
           <TabsTrigger value="gap">Keyword Gap</TabsTrigger>
@@ -189,55 +192,53 @@ export default function ResumeStudio() {
 
         <TabsContent value="ats">
           <Card className="glass p-6">
-            {!tailorResult ? (
+            {!uploadResult ? (
               <div className="text-center py-12">
                 <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                <p className="text-muted-foreground mb-4">Upload a resume and run ATS analysis</p>
-                <Button className="bg-gradient-primary shadow-glow gap-2" onClick={() => setTailorDialogOpen(true)}>
-                  <Sparkles className="h-4 w-4" /> Analyze Resume
+                <p className="text-muted-foreground mb-4">Upload a resume to see ATS analysis</p>
+                <Button variant="outline" className="gap-2" onClick={() => fileInputRef.current?.click()}>
+                  <Upload className="h-4 w-4" /> Upload Resume
                 </Button>
+              </div>
+            ) : !atsData ? (
+              <div className="text-center py-12">
+                <Loader2 className="h-8 w-8 mx-auto text-muted-foreground animate-spin mb-4" />
+                <p className="text-muted-foreground">Analyzing resume...</p>
               </div>
             ) : (
               <>
-                {(() => {
-                  const keywords = (tailorResult.ats_keywords as string[]) || [];
-                  const suggestions = (tailorResult.suggestions as string[]) || [];
-                  const actionItems = (tailorResult.action_items as string[]) || [];
-                  const kwScore = Math.min(100, 20 + keywords.length * 16);
-                  const fmtScore = uploadResult ? 85 : 70;
-                  const avScore = Math.min(100, 40 + actionItems.length * 20);
-                  return (
-                    <>
-                      <div className="grid md:grid-cols-3 gap-4 mb-6">
-                        {[
-                          { label: "Format", score: fmtScore, status: uploadResult ? `Parsed ${uploadResult.pages} pages` : "Upload a resume first" },
-                          { label: "Keywords", score: kwScore, status: `${keywords.length} keywords detected` },
-                          { label: "Action verbs", score: avScore, status: `${actionItems.length} action items identified` },
-                        ].map((s) => (
-                          <div key={s.label} className="p-4 rounded-xl bg-muted/30">
-                            <div className="text-xs text-muted-foreground">{s.label}</div>
-                            <div className="text-3xl font-display font-bold mt-1 gradient-text">{s.score}</div>
-                            <div className="text-xs text-muted-foreground mt-1">{s.status}</div>
-                          </div>
-                        ))}
-                      </div>
-                      <div className="space-y-2">
-                        {keywords.slice(0, 5).map((kw: string) => (
-                          <div key={kw} className="flex items-center gap-2 p-3 rounded-lg bg-muted/30 text-sm">
-                            <CheckCircle2 className="h-4 w-4 text-success" />
-                            Keyword match: {kw}
-                          </div>
-                        ))}
-                        {suggestions.slice(0, 6).map((s: string, i: number) => (
-                          <div key={i} className="flex items-center gap-2 p-3 rounded-lg bg-muted/30 text-sm">
-                            <AlertCircle className="h-4 w-4 text-warning" />
-                            {s}
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  );
-                })()}
+                <div className="grid md:grid-cols-3 gap-4 mb-6">
+                  {[
+                    { label: "Format", score: atsData.format_score, status: `Structure score` },
+                    { label: "Keywords", score: atsData.keyword_score, status: `${atsData.present_keywords.length} of ${atsData.present_keywords.length + atsData.missing_keywords.length} skills matched` },
+                    { label: "Action verbs", score: atsData.action_verb_score, status: `Verb usage score` },
+                  ].map((s) => (
+                    <div key={s.label} className="p-4 rounded-xl bg-muted/30">
+                      <div className="text-xs text-muted-foreground">{s.label}</div>
+                      <div className="text-3xl font-display font-bold mt-1 gradient-text">{s.score}</div>
+                      <div className="text-xs text-muted-foreground mt-1">{s.status}</div>
+                    </div>
+                  ))}
+                </div>
+                {atsData.summary && (
+                  <div className="p-4 rounded-lg bg-primary/5 border border-primary/10 mb-4">
+                    <p className="text-sm text-muted-foreground">{atsData.summary}</p>
+                  </div>
+                )}
+                <div className="space-y-2">
+                  {atsData.present_keywords.slice(0, 5).map((kw: string) => (
+                    <div key={kw} className="flex items-center gap-2 p-3 rounded-lg bg-muted/30 text-sm">
+                      <CheckCircle2 className="h-4 w-4 text-success" />
+                      {kw}
+                    </div>
+                  ))}
+                  {atsData.suggestions.map((s: string, i: number) => (
+                    <div key={i} className="flex items-center gap-2 p-3 rounded-lg bg-muted/30 text-sm">
+                      <AlertCircle className="h-4 w-4 text-warning" />
+                      {s}
+                    </div>
+                  ))}
+                </div>
               </>
             )}
           </Card>
@@ -245,22 +246,35 @@ export default function ResumeStudio() {
 
         <TabsContent value="gap">
           <Card className="glass p-6">
-            <div className="text-sm text-muted-foreground mb-4">
-              {tailorResult
-                ? `Keyword gap analysis from AI tailoring`
-                : `Upload a resume and run AI tailoring to see keyword gaps`}
-            </div>
-            <div className="space-y-2">
-              {(tailorResult?.ats_keywords || []).map((kw, i) => (
-                <div key={typeof kw === "string" ? kw : i} className="flex items-center gap-3 p-3 rounded-lg bg-muted/30">
-                  <span className="flex-1 font-medium text-sm">{typeof kw === "string" ? kw : kw.keyword}</span>
-                  <Badge variant="outline" className="text-[10px]">
-                    {typeof kw === "string" ? "High" : kw.weight}
-                  </Badge>
-                  <Badge className="bg-success/10 text-success border-success/20">In resume</Badge>
+            {!atsData ? (
+              <div className="text-center py-12">
+                <p className="text-muted-foreground">Upload a resume and view ATS analysis to see keyword gaps</p>
+              </div>
+            ) : (
+              <>
+                <div className="text-sm text-muted-foreground mb-4">
+                  {atsData.missing_keywords.length > 0
+                    ? `${atsData.missing_keywords.length} skills missing from your resume`
+                    : `All profile skills found in resume`}
                 </div>
-              ))}
-            </div>
+                <div className="space-y-2">
+                  {atsData.present_keywords.map((kw) => (
+                    <div key={kw} className="flex items-center gap-3 p-3 rounded-lg bg-muted/30">
+                      <CheckCircle2 className="h-4 w-4 text-success" />
+                      <span className="flex-1 font-medium text-sm">{kw}</span>
+                      <Badge className="bg-success/10 text-success border-success/20">Present</Badge>
+                    </div>
+                  ))}
+                  {atsData.missing_keywords.map((kw) => (
+                    <div key={kw} className="flex items-center gap-3 p-3 rounded-lg bg-muted/30">
+                      <AlertCircle className="h-4 w-4 text-destructive" />
+                      <span className="flex-1 font-medium text-sm">{kw}</span>
+                      <Badge variant="destructive">Missing</Badge>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </Card>
         </TabsContent>
 
