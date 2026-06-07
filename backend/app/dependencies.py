@@ -13,7 +13,7 @@ from app.config import settings
 from app.database import get_db
 from app.models.user import User, Profile
 
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 
 # ─── Firebase Token Verification ────────────────────────────
 
@@ -134,10 +134,16 @@ async def rate_limiter() -> RedisRateLimiter:
 
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
     db: AsyncSession = Depends(get_db),
 ) -> User:
     """Validate Firebase token and return the current user with auto-provisioning."""
+    if credentials is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing authorization token",
+        )
+
     token = credentials.credentials
     try:
         payload = verify_firebase_token(token)
