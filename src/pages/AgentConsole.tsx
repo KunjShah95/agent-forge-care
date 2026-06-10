@@ -47,7 +47,7 @@ export default function AgentConsole() {
         <h2 className="font-display text-lg font-semibold mb-3">Agent Performance</h2>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {agentMetrics.map((m) => (
-            <Card key={m.agent} className="glass p-4 hover:shadow-glow transition">
+            <Card key={m.agent} className="bento-card p-4 hover:shadow-glow transition">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
                   {(() => {
@@ -73,7 +73,7 @@ export default function AgentConsole() {
       {/* Live Activity Feed + Task Queue */}
       <div className="grid lg:grid-cols-[1.2fr_0.8fr] gap-6">
         {/* Activity Feed */}
-        <Card className="glass p-6">
+        <Card className="bento-card p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-display font-semibold">Live Agent Activity</h2>
             <Badge className="bg-primary/10 text-primary border-primary/20 gap-1.5">
@@ -96,7 +96,7 @@ export default function AgentConsole() {
                 const StatusIcon = status.icon;
                 return (
                   <div key={t.id} className="flex items-start gap-3 p-3 rounded-lg hover:bg-muted/30 transition group">
-                    <div className="h-8 w-8 rounded-lg bg-gradient-primary/10 border border-primary/20 flex items-center justify-center group-hover:scale-110 transition shrink-0">
+                    <div className="h-8 w-8 rounded-lg bg-gradient-1/10 border border-primary/20 flex items-center justify-center group-hover:scale-110 transition shrink-0">
                       <Icon className="h-4 w-4 text-primary" />
                     </div>
                     <div className="flex-1 min-w-0">
@@ -125,7 +125,7 @@ export default function AgentConsole() {
         </Card>
 
         {/* Task Queue Summary */}
-        <Card className="glass p-6">
+        <Card className="bento-card p-6">
           <h2 className="font-display font-semibold mb-4">Task Queue</h2>
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">

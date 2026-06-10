@@ -115,18 +115,18 @@ export default function NetworkingHub() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" className="gap-2" onClick={() => { resetForm(); setDialogOpen(true); }}><Plus className="h-4 w-4" /> Add contact</Button>
-          <Button className="bg-gradient-primary shadow-glow gap-2" onClick={() => { setOutreachDialogOpen(true); setOutreachResult(null); }}><Sparkles className="h-4 w-4" /> Draft outreach</Button>
+          <Button className="bg-gradient-1 shadow-glow gap-2" onClick={() => { setOutreachDialogOpen(true); setOutreachResult(null); }}><Sparkles className="h-4 w-4" /> Draft outreach</Button>
         </div>
       </div>
 
       <Tabs defaultValue="contacts">
-        <TabsList className="glass">
+        <TabsList className="glass-strong">
           <TabsTrigger value="contacts">Contacts ({!isLoading ? contacts.length : "…"})</TabsTrigger>
           <TabsTrigger value="templates">Templates</TabsTrigger>
         </TabsList>
 
         <TabsContent value="contacts" className="mt-4">
-          <Card className="glass overflow-hidden">
+          <Card className="glass-strong overflow-hidden">
             <div className="p-4 border-b border-border/50 flex gap-3">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -165,7 +165,7 @@ export default function NetworkingHub() {
                     }}
                   >
                     <Avatar className="h-10 w-10">
-                      <AvatarFallback className="bg-gradient-primary text-primary-foreground text-xs">
+                      <AvatarFallback className="bg-gradient-1 text-primary-foreground text-xs">
                         {initials(c.name)}
                       </AvatarFallback>
                     </Avatar>
@@ -244,12 +244,12 @@ export default function NetworkingHub() {
         <TabsContent value="templates" className="mt-4">
           <div className="grid md:grid-cols-2 gap-4">
             {templates.map((t) => (
-              <Card key={t.name} className="glass p-5 hover:shadow-glow transition">
+              <Card key={t.name} className="glass-strong p-5 hover:shadow-glow transition">
                 <div className="font-display font-semibold mb-2">{t.name}</div>
                 <p className="text-xs text-muted-foreground font-mono mb-4 line-clamp-3">{t.preview}</p>
                 <div className="flex gap-2">
                   <Button variant="outline" size="sm" className="flex-1">Edit</Button>
-                  <Button size="sm" className="bg-gradient-primary gap-1"><Send className="h-3 w-3" /> Use</Button>
+                  <Button size="sm" className="bg-gradient-1 gap-1"><Send className="h-3 w-3" /> Use</Button>
                 </div>
               </Card>
             ))}
@@ -258,7 +258,7 @@ export default function NetworkingHub() {
       </Tabs>
 
       <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) { setDialogOpen(false); resetForm(); } }}>
-        <DialogContent className="glass">
+        <DialogContent className="glass-strong">
           <DialogHeader>
             <DialogTitle className="font-display">{editingId ? "Edit Contact" : "Add Contact"}</DialogTitle>
           </DialogHeader>
@@ -316,7 +316,7 @@ export default function NetworkingHub() {
             )}
             <Button variant="outline" onClick={() => { setDialogOpen(false); resetForm(); }}>Cancel</Button>
             <Button
-              className="bg-gradient-primary"
+              className="bg-gradient-1"
               disabled={!newName.trim() || createContact.isPending || updateContact.isPending}
               onClick={() => {
                 const data = {
@@ -356,7 +356,7 @@ export default function NetworkingHub() {
       </Dialog>
 
       <Dialog open={outreachDialogOpen} onOpenChange={(open) => { if (!open) { setOutreachDialogOpen(false); setOutreachResult(null); } }}>
-        <DialogContent className="glass max-w-2xl">
+        <DialogContent className="glass-strong max-w-2xl">
           <DialogHeader>
             <DialogTitle className="font-display">Draft AI Outreach</DialogTitle>
           </DialogHeader>
@@ -383,7 +383,7 @@ export default function NetworkingHub() {
               <DialogFooter>
                 <Button variant="outline" onClick={() => setOutreachDialogOpen(false)}>Cancel</Button>
                 <Button
-                  className="bg-gradient-primary shadow-glow gap-2"
+                  className="bg-gradient-1 shadow-glow gap-2"
                   disabled={!outreachTargets.trim() || outreach.isPending}
                   onClick={async () => {
                     try {

@@ -33,7 +33,7 @@ export default function AppLayout() {
       <div className="min-h-screen flex w-full mesh-bg">
         <AppSidebar />
         <div className="flex-1 flex flex-col min-w-0">
-          <header className="h-14 flex items-center gap-3 border-b border-border/50 px-4 backdrop-blur-xl bg-background/60 sticky top-0 z-30">
+          <header className="h-14 flex items-center gap-3 border-b border-border/40 px-4 backdrop-blur-xl bg-background/70 sticky top-0 z-30">
             <SidebarTrigger />
             <Button
               variant="outline"
@@ -51,7 +51,7 @@ export default function AppLayout() {
               <NotificationCenter />
               <ThemeToggle />
               <Avatar className="h-8 w-8 ml-2 border-2 border-primary/30">
-                <AvatarFallback className="bg-gradient-primary text-primary-foreground text-xs font-semibold">{initials}</AvatarFallback>
+                <AvatarFallback className="bg-gradient-1 text-primary-foreground text-xs font-semibold">{initials}</AvatarFallback>
               </Avatar>
             </div>
           </header>

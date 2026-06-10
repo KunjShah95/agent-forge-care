@@ -6,6 +6,8 @@ import {
   signInWithPopup,
   GoogleAuthProvider,
   signOut,
+  sendPasswordResetEmail,
+  sendEmailVerification,
 } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { firebaseConfigError, isFirebaseConfigured } from "@/lib/firebase";
@@ -27,6 +29,8 @@ type AuthContextValue = {
   register: (email: string, password: string, full_name: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   logout: () => void;
+  sendPasswordReset: (email: string) => Promise<void>;
+  sendVerification: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -157,6 +161,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(true);
     try {
       const cred = await createUserWithEmailAndPassword(auth, email, password);
+      try {
+        await sendEmailVerification(cred.user);
+      } catch (e) {
+        console.error("Error sending verification email:", e);
+      }
       const idToken = await cred.user.getIdToken();
       localStorage.setItem("auth_token", idToken);
       setAuthToken(idToken);
@@ -176,6 +185,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false);
       isHandlingAuth.current = false;
+    }
+  };
+
+  const sendPasswordReset = async (email: string) => {
+    assertFirebaseConfigured();
+    await sendPasswordResetEmail(auth, email);
+  };
+
+  const sendVerification = async () => {
+    assertFirebaseConfigured();
+    if (auth.currentUser) {
+      await sendEmailVerification(auth.currentUser);
     }
   };
 
@@ -223,6 +244,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         register,
         signInWithGoogle,
         logout,
+        sendPasswordReset,
+        sendVerification,
       }}
     >
       {children}

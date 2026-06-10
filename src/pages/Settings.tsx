@@ -17,6 +17,7 @@ import { profile as profileApi } from "@/api/client";
 import { AGENT_LABELS } from "@/lib/agent-types";
 
 type ProfileFormValues = {
+  full_name: string;
   school: string;
   graduation_date: string;
   portfolio_url: string;
@@ -47,6 +48,7 @@ export default function Settings() {
 
   const { register, handleSubmit, reset, formState: { isDirty } } = useForm<ProfileFormValues>({
     defaultValues: {
+      full_name: "",
       school: "",
       graduation_date: "",
       portfolio_url: "",
@@ -65,6 +67,7 @@ export default function Settings() {
   useEffect(() => {
     if (profile) {
       reset({
+        full_name: profile.full_name || "",
         school: profile.school || "",
         graduation_date: profile.graduation_date || "",
         portfolio_url: profile.portfolio_url || "",
@@ -112,6 +115,7 @@ export default function Settings() {
   const onSubmit = (data: ProfileFormValues) => {
     updateProfile.mutate(
       {
+        full_name: data.full_name || undefined,
         school: data.school || undefined,
         graduation_date: data.graduation_date || undefined,
         portfolio_url: data.portfolio_url || undefined,
@@ -147,14 +151,14 @@ export default function Settings() {
         </TabsList>
 
         <TabsContent value="profile" className="mt-4 space-y-4">
-          <Card className="glass p-6 space-y-4">
+          <Card className="bento-card p-6 space-y-4">
             <div className="flex items-center gap-4">
               <Avatar className="h-16 w-16 border-2 border-primary/30">
                 {profile?.avatar_url ? (
                   <AvatarImage src={`${apiBase}${profile.avatar_url}`} alt="Avatar" />
                 ) : null}
-                <AvatarFallback className="bg-gradient-primary text-primary-foreground text-lg font-display">
-                  {isLoading ? "..." : "U"}
+                <AvatarFallback className="bg-gradient-1 text-primary-foreground text-lg font-display">
+                  {isLoading ? "..." : profile?.full_name ? profile.full_name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase() : "U"}
                 </AvatarFallback>
               </Avatar>
               <div>
@@ -191,6 +195,7 @@ export default function Settings() {
             ) : (
               <form onSubmit={handleSubmit(onSubmit)}>
                 <div className="grid grid-cols-2 gap-4">
+                  <div className="col-span-2"><Label>Full Name</Label><Input {...register("full_name")} className="mt-1.5" /></div>
                   <div><Label>School</Label><Input {...register("school")} className="mt-1.5" /></div>
                   <div><Label>Graduation Date</Label><Input {...register("graduation_date")} className="mt-1.5" placeholder="e.g., June 2026" /></div>
                   <div><Label>Portfolio URL</Label><Input {...register("portfolio_url")} className="mt-1.5" /></div>
@@ -206,7 +211,7 @@ export default function Settings() {
                 </div>
                 <Button
                   type="submit"
-                  className="bg-gradient-primary shadow-glow mt-4"
+                  className="bg-gradient-1 shadow-glow mt-4"
                   disabled={updateProfile.isPending || !isDirty}
                 >
                   {updateProfile.isPending ? "Saving..." : "Save changes"}
@@ -218,8 +223,8 @@ export default function Settings() {
 
         <TabsContent value="agents" className="mt-4 space-y-3">
           {agentNames.map((a) => (
-            <Card key={a} className="glass p-4 flex items-center gap-4">
-              <div className="h-8 w-8 rounded-lg bg-gradient-primary/10 border border-primary/20 flex items-center justify-center text-xs font-bold text-primary">
+            <Card key={a} className="glass-strong p-4 flex items-center gap-4">
+              <div className="h-8 w-8 rounded-lg bg-gradient-1/10 border border-primary/20 flex items-center justify-center text-xs font-bold text-primary">
                 {a[0]}
               </div>
               <div className="flex-1">
@@ -240,7 +245,7 @@ export default function Settings() {
         </TabsContent>
 
         <TabsContent value="billing" className="mt-4">
-          <Card className="glass p-6 text-center py-12">
+          <Card className="bento-card p-6 text-center py-12">
             <CreditCard className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
             <div className="font-display font-semibold text-lg mb-1">Billing coming soon</div>
             <p className="text-sm text-muted-foreground max-w-md mx-auto">

@@ -47,7 +47,7 @@ export function AppSidebar() {
     <Sidebar collapsible="icon">
       <SidebarHeader className="border-b border-sidebar-border">
         <NavLink to="/app" className="flex items-center gap-2 px-2 py-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-primary shadow-glow">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-1 shadow-glow">
             <Sparkles className="h-4 w-4 text-primary-foreground" />
           </div>
           <div className="flex flex-col">

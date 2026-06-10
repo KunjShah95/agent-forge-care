@@ -26,8 +26,14 @@ export default function Analytics() {
   }, [summary, funnel]);
 
   return (
-    <div className="space-y-6 max-w-[1400px]">
-      <div>
+    <div className="space-y-6 max-w-[1400px] relative">
+      {/* Animated grid background */}
+      <div className="fixed inset-0 animated-grid opacity-40 pointer-events-none" />
+      <div className="fixed inset-0 bg-beams opacity-20 pointer-events-none" />
+      <div className="fixed top-1/4 right-1/4 w-72 h-72 rounded-full bg-gradient-1 opacity-[0.03] blur-3xl animate-float-slow pointer-events-none" />
+      <div className="fixed bottom-1/3 left-1/4 w-56 h-56 rounded-full bg-gradient-3 opacity-[0.03] blur-3xl animate-float pointer-events-none" />
+
+      <div className="relative">
         <h1 className="font-display text-3xl font-bold">Analytics</h1>
         <p className="text-muted-foreground mt-1">Your search, quantified.</p>
       </div>
@@ -38,7 +44,7 @@ export default function Analytics() {
           Array.from({ length: 4 }).map((_, i) => <StatSkeleton key={i} />)
         ) : (
           metrics.map((m) => (
-            <Card key={m.label} className="glass p-5">
+            <Card key={m.label} className="bento-card p-5">
               <div className="text-xs text-muted-foreground">{m.label}</div>
               <div className="text-3xl font-display font-bold mt-1">{m.value}</div>
               <div className="text-xs text-success mt-1">{m.change}</div>
@@ -49,7 +55,7 @@ export default function Analytics() {
 
       <div className="grid lg:grid-cols-2 gap-6">
         {/* Funnel */}
-        <Card className="glass p-6">
+        <Card className="bento-card p-6">
           <h2 className="font-display font-semibold mb-4">Conversion Funnel</h2>
           {funnelLoading ? (
             <div className="space-y-4 py-6">
@@ -67,7 +73,7 @@ export default function Analytics() {
                   </div>
                   <div className="h-8 rounded-lg bg-muted/30 overflow-hidden relative">
                     <div
-                      className="h-full bg-gradient-primary opacity-90 transition"
+                      className="h-full bg-gradient-1 opacity-90 transition"
                       style={{ width: `${(f.value / funnel[0].value) * 100}%` }}
                     />
                   </div>
@@ -80,7 +86,7 @@ export default function Analytics() {
         </Card>
 
         {/* Skill Demand */}
-        <Card className="glass p-6">
+        <Card className="bento-card p-6">
           <h2 className="font-display font-semibold mb-4">Skill Demand Index</h2>
           {skillsLoading ? (
             <div className="h-[260px] flex items-center justify-center text-sm text-muted-foreground">Loading…</div>
@@ -100,7 +106,7 @@ export default function Analytics() {
         </Card>
 
         {/* Weekly Activity */}
-        <Card className="glass p-6 lg:col-span-2">
+        <Card className="bento-card p-6 lg:col-span-2">
           <h2 className="font-display font-semibold mb-4">Weekly Output</h2>
           {activityLoading ? (
             <div className="h-[280px] flex items-center justify-center text-sm text-muted-foreground">Loading…</div>

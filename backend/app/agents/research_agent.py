@@ -20,7 +20,36 @@ from app.services.memory_service import MemoryService
 from app.memory.memory_layer import AgentMemory
 from app.utils.embedding import get_text_embedding, compute_similarity
 
+import json
+from app.config import settings
+
 logger = logging.getLogger("agentforge.agents.research")
+
+
+def _get_llm(temperature: float = 0.7):
+    if not settings.openai_api_key:
+        return None
+    try:
+        from langchain_openai import ChatOpenAI
+
+        return ChatOpenAI(
+            model="gpt-4o-mini",
+            temperature=temperature,
+            api_key=settings.openai_api_key,
+        )
+    except ImportError:
+        logger.warning("langchain_openai not available")
+        return None
+
+
+def _strip_json_fences(content) -> str:
+    content = str(content).strip()
+    if content.startswith("```"):
+        content = content.split("\n", 1)[-1]
+        content = content.rsplit("```", 1)[0]
+    if content.startswith("json"):
+        content = content[4:].strip()
+    return content
 
 
 async def conduct_research(
@@ -131,6 +160,79 @@ async def conduct_research(
     }
 
 
+async def _fetch_github_org_data(company_name: str) -> dict | None:
+    """Fetch live GitHub organization details and repo language stats."""
+    if not company_name:
+        return None
+    org_name = re.sub(r'[^a-zA-Z0-9-]', '', company_name.lower().replace(" ", ""))
+    
+    headers = {
+        "User-Agent": "AgentForge-CareerOS"
+    }
+    import os
+    token = os.environ.get("GITHUB_TOKEN")
+    if token:
+        headers["Authorization"] = f"token {token}"
+        
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            org_res = await client.get(f"https://api.github.com/orgs/{org_name}", headers=headers)
+            if org_res.status_code != 200:
+                search_res = await client.get(
+                    "https://api.github.com/search/users",
+                    params={"q": f"{company_name} type:org"},
+                    headers=headers
+                )
+                if search_res.status_code == 200:
+                    items = search_res.json().get("items", [])
+                    if items:
+                        org_name = items[0]["login"]
+                        org_res = await client.get(f"https://api.github.com/orgs/{org_name}", headers=headers)
+            
+            if org_res.status_code == 200:
+                org_data = org_res.json()
+                
+                repos_res = await client.get(
+                    f"https://api.github.com/orgs/{org_name}/repos",
+                    params={"sort": "updated", "per_page": "10"},
+                    headers=headers
+                )
+                
+                repos = []
+                languages = {}
+                stars = 0
+                if repos_res.status_code == 200:
+                    for repo in repos_res.json():
+                        stars += repo.get("stargazers_count", 0)
+                        lang = repo.get("language")
+                        if lang:
+                            languages[lang] = languages.get(lang, 0) + 1
+                        repos.append({
+                            "name": repo.get("name"),
+                            "stars": repo.get("stargazers_count"),
+                            "language": lang,
+                            "updated_at": repo.get("updated_at")
+                        })
+                
+                sorted_languages = [l for l, _ in sorted(languages.items(), key=lambda x: x[1], reverse=True)]
+                
+                return {
+                    "login": org_data.get("login"),
+                    "name": org_data.get("name"),
+                    "description": org_data.get("description"),
+                    "public_repos": org_data.get("public_repos", 0),
+                    "followers": org_data.get("followers", 0),
+                    "blog": org_data.get("blog"),
+                    "languages": sorted_languages[:5],
+                    "total_stars": stars,
+                    "top_repos": [r["name"] for r in sorted(repos, key=lambda x: x["stars"], reverse=True)[:3]]
+                }
+    except Exception as e:
+        logger.warning("Failed to fetch GitHub org data for %s: %s", company_name, e)
+    return None
+
+
 async def _search_company(company: str, search_adapter: SearchAdapter) -> dict:
     """Search the web for company information, fall back to static data."""
     if not company:
@@ -143,8 +245,57 @@ async def _search_company(company: str, search_adapter: SearchAdapter) -> dict:
 
         snippets = " ".join(r.get("snippet", "") for r in results if r.get("snippet"))
         titles = " ".join(r.get("title", "") for r in results if r.get("title"))
-        combined = f"{snippets} {titles}".lower()
+        combined = f"{snippets} {titles}"
 
+        # Fetch live GitHub organization metadata
+        github_data = await _fetch_github_org_data(company)
+
+        llm = _get_llm(temperature=0.5)
+        if llm:
+            try:
+                from langchain_core.messages import HumanMessage
+                
+                github_str = ""
+                if github_data:
+                    github_str = f"""
+                    LIVE GITHUB DATA:
+                    - Organization: {github_data.get('login')} ({github_data.get('name')})
+                    - Description: {github_data.get('description')}
+                    - Public Repos: {github_data.get('public_repos')}
+                    - Primary Languages: {', '.join(github_data.get('languages', []))}
+                    - Top Repositories: {', '.join(github_data.get('top_repos', []))}
+                    - Community Stars on recent repos: {github_data.get('total_stars')}
+                    """
+
+                prompt = f"""You are an expert company research analyst. Based on these web search snippets and optional live GitHub data about '{company}', construct a structured JSON report.
+                
+                SEARCH SNIPPETS:
+                {combined}
+                {github_str}
+                
+                Return ONLY a valid JSON object with the following keys:
+                - "name": company name (string)
+                - "industry": primary industry / sector (string)
+                - "stage": stage of the company (e.g. Growth-stage startup, Public, seed, etc.) (string)
+                - "funding": estimate of funding raised or public market valuation (string)
+                - "culture": primary company culture traits (string)
+                - "tech_stack": list of 5-8 primary technologies used (list of strings)
+                - "hiring_trend": summary of hiring trends (string)
+                - "interview_process": list of 3-4 typical interview stages (list of strings)
+                - "summary": 2-3 sentence summary of the company overview and culture (string)
+                
+                Do not include markdown code blocks, do not explain the output."""
+                
+                response = await llm.ainvoke([HumanMessage(content=prompt)])
+                data = json.loads(_strip_json_fences(response.content))
+                required = ["name", "industry", "stage", "funding", "culture", "tech_stack", "hiring_trend", "interview_process", "summary"]
+                if all(k in data for k in required):
+                    return data
+            except Exception as e:
+                logger.warning("LLM _search_company failed, falling back to regex: %s", e)
+
+        # Regex/heuristic fallback
+        combined_lower = combined.lower()
         industry = "Technology / AI"
         for kw in [
             "ai",
@@ -155,7 +306,7 @@ async def _search_company(company: str, search_adapter: SearchAdapter) -> dict:
             "e-commerce",
             "cloud",
         ]:
-            if kw in combined:
+            if kw in combined_lower:
                 industry = kw.title()
                 break
 
@@ -178,11 +329,17 @@ async def _search_company(company: str, search_adapter: SearchAdapter) -> dict:
             "flat hierarchy",
             "innovation-driven",
         ]:
-            if c in combined:
+            if c in combined_lower:
                 culture = c
                 break
 
         tech_stack = ["Python", "TypeScript", "React", "AWS", "PostgreSQL"]
+        if github_data and github_data.get("languages"):
+            tech_stack = [t.title() if t.lower() != "node.js" else "Node.js" for t in github_data["languages"]]
+            if "React" not in tech_stack:
+                tech_stack.append("React")
+            if "AWS" not in tech_stack:
+                tech_stack.append("AWS")
         known_techs = [
             "python",
             "typescript",
@@ -199,12 +356,12 @@ async def _search_company(company: str, search_adapter: SearchAdapter) -> dict:
             "graphql",
             "kafka",
         ]
-        found = [t for t in known_techs if t in combined]
+        found = [t for t in known_techs if t in combined_lower]
         if found:
             tech_stack = [t.title() if t != "node.js" else "Node.js" for t in found[:6]]
 
         hiring = "Information not available"
-        if re.search(r"(hiring|jobs|careers|positions? open)", combined, re.IGNORECASE):
+        if re.search(r"(hiring|jobs|careers|positions? open)", combined_lower, re.IGNORECASE):
             hiring = "Actively hiring across multiple roles"
 
         summary = snippets[:500] if snippets else _research_company(company)["summary"]
@@ -244,6 +401,32 @@ async def _search_interview_insights(
 
         snippets = " ".join(r.get("snippet", "") for r in results if r.get("snippet"))
 
+        llm = _get_llm(temperature=0.5)
+        if llm:
+            try:
+                from langchain_core.messages import HumanMessage
+                prompt = f"""You are an expert interview coach. Based on these search snippets about '{role}' interview preparation, construct a structured JSON report.
+                
+                SEARCH SNIPPETS:
+                {snippets}
+                
+                Return ONLY a valid JSON object with the following keys:
+                - "focus_areas": list of 3-4 primary technical or behavioral focus areas (list of strings)
+                - "common_questions": list of 5 typical behavioral or technical questions (list of strings)
+                - "tips": summary of tips/strategies for this specific role's interview (string)
+                - "recommended_prep": list of 3 actionable preparation steps (list of strings)
+                
+                Do not include markdown code blocks, do not explain the output."""
+                
+                response = await llm.ainvoke([HumanMessage(content=prompt)])
+                data = json.loads(_strip_json_fences(response.content))
+                required = ["focus_areas", "common_questions", "tips", "recommended_prep"]
+                if all(k in data for k in required):
+                    return data
+            except Exception as e:
+                logger.warning("LLM _search_interview_insights failed, falling back to regex: %s", e)
+
+        # Fallback
         tips = "Focus on fundamentals and problem-solving."
         if snippets:
             tips = snippets[:200]
@@ -301,6 +484,33 @@ async def _search_market_intelligence(
         snippets = " ".join(r.get("snippet", "") for r in results if r.get("snippet"))
         combined = snippets.lower()
 
+        llm = _get_llm(temperature=0.5)
+        if llm:
+            try:
+                from langchain_core.messages import HumanMessage
+                prompt = f"""You are a market research analyst. Based on these search snippets about current tech market trends (focusing on {', '.join(skills) if skills else 'general tech'}), construct a structured JSON report.
+                
+                SEARCH SNIPPETS:
+                {snippets}
+                
+                Return ONLY a valid JSON object with the following keys:
+                - "outlook": 2-3 sentence overview of the hiring outlook (string)
+                - "trending_roles": list of 3 trending job titles in this area (list of strings)
+                - "salary_range": estimated salary range for these roles (string)
+                - "growth_areas": list of 3-4 growing industries/domains (list of strings)
+                - "suggestions": list of 3 career development recommendations (list of strings)
+                
+                Do not include markdown code blocks, do not explain the output."""
+                
+                response = await llm.ainvoke([HumanMessage(content=prompt)])
+                data = json.loads(_strip_json_fences(response.content))
+                required = ["outlook", "trending_roles", "salary_range", "growth_areas", "suggestions"]
+                if all(k in data for k in required):
+                    return data
+            except Exception as e:
+                logger.warning("LLM _search_market_intelligence failed, falling back to regex: %s", e)
+
+        # Fallback
         outlook = (
             f"Strong demand for {' and '.join(skills[:2])} skills"
             if skills
@@ -359,6 +569,32 @@ async def _search_skill_insights(
         snippets = " ".join(r.get("snippet", "") for r in results if r.get("snippet"))
         combined = snippets.lower()
 
+        llm = _get_llm(temperature=0.5)
+        if llm:
+            try:
+                from langchain_core.messages import HumanMessage
+                prompt = f"""You are a technical skills analyst. Based on these search snippets about technical skill demand (focusing on {', '.join(skills) if skills else 'general tech'}), construct a structured JSON report.
+                
+                SEARCH SNIPPETS:
+                {snippets}
+                
+                Return ONLY a valid JSON object with the following keys:
+                - "insight": 2-3 sentence overview of the demand for these skills (string)
+                - "skill_demand_map": dictionary mapping each skill to a demand level (e.g. 'high', 'very high', 'stable') (dict with string keys/values)
+                - "recommended_skills": list of 3 supplementary skills to learn (list of strings)
+                - "learning_resources": list of 3 recommended books, courses, or resources (list of strings)
+                
+                Do not include markdown code blocks, do not explain the output."""
+                
+                response = await llm.ainvoke([HumanMessage(content=prompt)])
+                data = json.loads(_strip_json_fences(response.content))
+                required = ["insight", "skill_demand_map", "recommended_skills", "learning_resources"]
+                if all(k in data for k in required):
+                    return data
+            except Exception as e:
+                logger.warning("LLM _search_skill_insights failed, falling back to regex: %s", e)
+
+        # Fallback
         insight = (
             snippets[:200]
             if snippets

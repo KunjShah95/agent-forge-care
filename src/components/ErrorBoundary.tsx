@@ -33,7 +33,7 @@ export default class ErrorBoundary extends Component<Props, State> {
     if (this.state.hasError) {
       return (
         <div className="flex items-center justify-center min-h-[400px] p-8">
-          <div className="glass rounded-2xl p-8 max-w-md w-full text-center space-y-4">
+          <div className="bento-card p-8 max-w-md w-full text-center space-y-4">
             <div className="mx-auto h-12 w-12 rounded-full bg-destructive/10 flex items-center justify-center">
               <AlertTriangle className="h-6 w-6 text-destructive" />
             </div>

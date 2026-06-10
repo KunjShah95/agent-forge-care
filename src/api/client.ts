@@ -202,6 +202,15 @@ export const agents = {
 
   jobDiscover: (data: { query?: string; location?: string; skills?: string[] }) =>
     request<Record<string, unknown>>("/agents/job-discover", { method: "POST", body: data }),
+
+  retryTask: (id: string) =>
+    request<{ status: string; message: string }>(`/agents/tasks/${id}/retry`, { method: "POST" }),
+
+  cancelTask: (id: string) =>
+    request<{ status: string; message: string }>(`/agents/tasks/${id}/cancel`, { method: "POST" }),
+
+  clearTasks: () =>
+    request<void>("/agents/tasks/clear", { method: "DELETE" }),
 };
 
 // Memory

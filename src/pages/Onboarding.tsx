@@ -106,13 +106,13 @@ export default function Onboarding() {
     <div className="min-h-screen mesh-bg flex items-center justify-center p-4">
       <div className="w-full max-w-2xl">
         <div className="flex items-center gap-2 mb-8 justify-center">
-          <div className="h-9 w-9 rounded-xl bg-gradient-primary flex items-center justify-center shadow-glow">
+          <div className="h-9 w-9 rounded-xl bg-gradient-1 flex items-center justify-center shadow-glow">
             <Sparkles className="h-5 w-5 text-primary-foreground" />
           </div>
           <span className="font-display font-bold text-lg">AgentForge Career OS</span>
         </div>
 
-        <div className="glass rounded-2xl p-8 shadow-elegant">
+        <div className="bento-card p-8">
           <div className="flex items-center justify-between mb-2 text-xs text-muted-foreground">
             <span>Step {step + 1} of {steps.length}</span>
             <span>{steps[step]}</span>
@@ -200,7 +200,7 @@ export default function Onboarding() {
 
           {step === 5 && (
             <div className="text-center py-8 animate-fade-in">
-              <div className="h-16 w-16 rounded-2xl bg-gradient-primary mx-auto flex items-center justify-center shadow-glow animate-pulse-glow">
+              <div className="h-16 w-16 rounded-2xl bg-gradient-1 mx-auto flex items-center justify-center shadow-glow animate-pulse-glow">
                 <Sparkles className="h-8 w-8 text-primary-foreground" />
               </div>
               <h2 className="font-display text-3xl font-bold mt-6">You're ready{fullName ? `, ${fullName}` : ""}.</h2>
@@ -219,7 +219,7 @@ export default function Onboarding() {
             <Button variant="ghost" onClick={prev} disabled={step === 0} className="gap-2">
               <ArrowLeft className="h-4 w-4" /> Back
             </Button>
-            <Button onClick={next} className="bg-gradient-primary shadow-glow gap-2" disabled={step === steps.length - 1 && updateProfile.isPending}>
+            <Button onClick={next} className="bg-gradient-1 shadow-glow gap-2" disabled={step === steps.length - 1 && updateProfile.isPending}>
               {step === steps.length - 1 ? (updateProfile.isPending ? "Saving…" : "Enter dashboard") : "Continue"}
               <ArrowRight className="h-4 w-4" />
             </Button>

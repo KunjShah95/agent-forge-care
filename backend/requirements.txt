@@ -23,3 +23,6 @@ langchain-core
 email-validator
 pypdf>=5.0.0
 rq>=1.9.0
+reportlab>=4.2.0
+sendgrid>=6.11.0
+

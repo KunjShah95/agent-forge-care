@@ -134,13 +134,13 @@ export default function OpportunityMonitor() {
           {runMonitor.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
           {runMonitor.isPending ? "Scanning…" : "Run Scan"}
         </Button>
-        <Button className="bg-gradient-primary shadow-glow gap-2" onClick={openNew}>
+        <Button className="bg-gradient-1 shadow-glow gap-2" onClick={openNew}>
           <Bell className="h-4 w-4" /> New alert
         </Button>
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">
-        <Card className="glass p-6 lg:col-span-2 space-y-3">
+        <Card className="bento-card p-6 lg:col-span-2 space-y-3">
           <h2 className="font-display font-semibold mb-2">Active Alerts</h2>
           {isLoading && (
             <div className="flex items-center justify-center py-8">
@@ -177,7 +177,7 @@ export default function OpportunityMonitor() {
           ))}
         </Card>
 
-        <Card className="glass p-6 space-y-5">
+        <Card className="bento-card p-6 space-y-5">
           <h2 className="font-display font-semibold">Digest Settings</h2>
           <div className="space-y-4">
             <div className="flex items-center justify-between">
@@ -271,7 +271,7 @@ export default function OpportunityMonitor() {
           <DialogFooter>
             <Button variant="outline" onClick={() => { setDialogOpen(false); resetForm(); }}>Cancel</Button>
             <Button
-              className="bg-gradient-primary shadow-glow gap-2"
+              className="bg-gradient-1 shadow-glow gap-2"
               onClick={handleSubmit}
               disabled={createAlert.isPending || updateAlert.isPending}
             >

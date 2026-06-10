@@ -3,70 +3,36 @@ import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Sparkles, Loader2, User, Mail, Lock, Eye, EyeOff, CheckCircle2 } from "lucide-react";
+import { Sparkles, Loader2, User, Mail, Lock, Eye, EyeOff, CheckCircle2, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import { useAuthContext, getFirebaseErrorMessage } from "@/lib/auth-context";
 import { firebaseConfigError, isFirebaseConfigured } from "@/lib/firebase";
 import { apiConfigError } from "@/api/client";
 
 const GoogleIcon = () => (
-  <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
-    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
-    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
-    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+  <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
+    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="currentColor" />
+    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="currentColor" />
+    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="currentColor" />
+    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="currentColor" />
   </svg>
 );
 
-function getPasswordStrength(pw: string): { score: number; label: string; color: string } {
-  if (pw.length === 0) return { score: 0, label: "", color: "" };
+function getPasswordStrength(pw: string): { score: number; label: string; color: string; textColor: string } {
+  if (pw.length === 0) return { score: 0, label: "", color: "", textColor: "" };
   let score = 0;
   if (pw.length >= 8) score++;
   if (/[A-Z]/.test(pw)) score++;
   if (/[0-9]/.test(pw)) score++;
   if (/[^A-Za-z0-9]/.test(pw)) score++;
   const map = [
-    { label: "Too short", color: "bg-destructive" },
-    { label: "Weak", color: "bg-orange-500" },
-    { label: "Fair", color: "bg-yellow-500" },
-    { label: "Good", color: "bg-blue-500" },
-    { label: "Strong", color: "bg-green-500" },
+    { label: "Too short", color: "bg-destructive", textColor: "text-destructive" },
+    { label: "Weak", color: "bg-orange-500", textColor: "text-orange-400" },
+    { label: "Fair", color: "bg-yellow-500", textColor: "text-yellow-400" },
+    { label: "Good", color: "bg-blue-500", textColor: "text-blue-400" },
+    { label: "Strong", color: "bg-emerald-500", textColor: "text-emerald-400" },
   ];
   return { score, ...map[score] };
-}
-
-function OrDivider() {
-  return (
-    <div className="flex items-center gap-3 my-5">
-      <div className="flex-1 h-px bg-white/10" />
-      <span className="text-xs text-muted-foreground uppercase tracking-widest">or</span>
-      <div className="flex-1 h-px bg-white/10" />
-    </div>
-  );
-}
-
-function SocialButton({
-  icon,
-  label,
-  onClick,
-  disabled,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  onClick: () => void;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className="flex items-center justify-center gap-2.5 w-full rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 active:scale-[0.98] transition-all duration-150 py-2.5 px-4 text-sm font-medium text-foreground disabled:opacity-60 disabled:cursor-not-allowed"
-    >
-      {icon}
-      {label}
-    </button>
-  );
 }
 
 export default function Register() {
@@ -115,80 +81,65 @@ export default function Register() {
   };
 
   return (
-    <div className="min-h-screen mesh-bg flex items-center justify-center p-4">
-      <div className="w-full max-w-sm">
-        <div className="flex items-center gap-2 mb-8 justify-center">
-          <div className="h-9 w-9 rounded-xl bg-gradient-primary flex items-center justify-center shadow-glow">
+    <div className="relative min-h-screen flex items-center justify-center p-4 overflow-hidden">
+      <div className="absolute inset-0 animated-grid" />
+      <div className="absolute inset-0 bg-beams opacity-30" />
+      <div className="absolute inset-0 bg-gradient-to-b from-primary/[0.03] via-transparent to-accent/[0.02]" />
+      <div className="absolute top-1/3 right-1/4 w-80 h-80 rounded-full bg-gradient-1 opacity-[0.04] blur-3xl animate-float-slow" />
+      <div className="absolute bottom-1/4 left-1/3 w-60 h-60 rounded-full bg-gradient-3 opacity-[0.04] blur-3xl animate-float" />
+
+      <div className="relative w-full max-w-sm">
+        <Link to="/" className="flex items-center gap-2.5 mb-8 justify-center group">
+          <div className="h-9 w-9 rounded-xl bg-gradient-1 flex items-center justify-center shadow-glow transition-transform duration-300 group-hover:scale-110">
             <Sparkles className="h-5 w-5 text-primary-foreground" />
           </div>
-          <span className="font-display font-bold text-lg">AgentForge Career OS</span>
-        </div>
+          <span className="font-display font-bold text-lg tracking-tight">AgentForge Career OS</span>
+        </Link>
 
-        <div className="glass rounded-2xl p-8 shadow-elegant">
-          <h1 className="font-display text-2xl font-bold text-center mb-1">Create your account</h1>
-          <p className="text-sm text-muted-foreground text-center mb-6">
-            Your AI career team starts here
-          </p>
+        <div className="bento-card rounded-2xl p-8 shadow-elevated">
+          <h1 className="font-display text-2xl font-bold text-center mb-1 tracking-tight">Create your account</h1>
+          <p className="text-sm text-muted-foreground text-center mb-6">Your AI career team starts here</p>
 
           {!isFirebaseConfigured && firebaseConfigError && (
-            <p className="text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2 mb-4">
-              {firebaseConfigError}
-            </p>
+            <p className="text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2 mb-4 border border-destructive/20">{firebaseConfigError}</p>
           )}
-
           {apiConfigError && (
-            <p className="text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2 mb-4">
-              {apiConfigError}
-            </p>
+            <p className="text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2 mb-4 border border-destructive/20">{apiConfigError}</p>
           )}
 
-          <div className="space-y-2.5">
-            <SocialButton
-              icon={<GoogleIcon />}
-              label="Sign up with Google"
-              onClick={handleSocialSignup}
-              disabled={isSubmitting || isLoading || !isFirebaseConfigured}
-            />
-          </div>
+          <button
+            type="button"
+            onClick={handleSocialSignup}
+            disabled={isSubmitting || isLoading || !isFirebaseConfigured}
+            className="flex items-center justify-center gap-3 w-full rounded-xl border border-border/60 bg-background/40 hover:bg-muted/50 active:scale-[0.98] transition-all duration-200 py-2.5 px-4 text-sm font-medium text-foreground"
+          >
+            <GoogleIcon />
+            Sign up with Google
+          </button>
 
-          <OrDivider />
+          <div className="flex items-center gap-3 my-6">
+            <div className="flex-1 h-px bg-border/60" />
+            <span className="text-xs text-muted-foreground uppercase tracking-widest font-medium">or</span>
+            <div className="flex-1 h-px bg-border/60" />
+          </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <Label htmlFor="fullName">Full name</Label>
+              <Label htmlFor="fullName" className="text-sm font-medium">Full name</Label>
               <div className="relative mt-1.5">
                 <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                <Input
-                  id="fullName"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  placeholder="Jane Doe"
-                  required
-                  autoComplete="name"
-                  className="pl-9"
-                />
+                <Input id="fullName" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Jane Doe" required autoComplete="name" className="pl-9" />
               </div>
             </div>
-
             <div>
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email" className="text-sm font-medium">Email</Label>
               <div className="relative mt-1.5">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                <Input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                  required
-                  autoComplete="email"
-                  className="pl-9"
-                />
+                <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" required autoComplete="email" className="pl-9" />
               </div>
             </div>
-
             <div>
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password" className="text-sm font-medium">Password</Label>
               <div className="relative mt-1.5">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                 <Input
@@ -206,68 +157,54 @@ export default function Register() {
                   type="button"
                   onClick={() => setShowPassword((v) => !v)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                  aria-label={showPassword ? "Hide password" : "Show password"}
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
-
               {password.length > 0 && (
-                <div className="mt-2 space-y-1">
+                <div className="mt-2.5 space-y-1.5">
                   <div className="flex gap-1">
                     {[1, 2, 3, 4].map((i) => (
-                      <div
-                        key={i}
-                        className={`h-1 flex-1 rounded-full transition-all duration-300 ${
-                          i <= strength.score ? strength.color : "bg-white/10"
-                        }`}
-                      />
+                      <div key={i} className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${
+                        i <= strength.score ? strength.color : "bg-border/40"
+                      }`} />
                     ))}
                   </div>
-                  <p className="text-xs text-muted-foreground">{strength.label}</p>
+                  <p className={`text-xs ${strength.textColor || "text-muted-foreground"}`}>{strength.label}</p>
                 </div>
               )}
             </div>
-
-            {error && (
-              <p className="text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2">
-                {error}
-              </p>
-            )}
-
-            <Button type="submit" className="w-full bg-gradient-primary shadow-glow" disabled={isSubmitting || isLoading || !isFirebaseConfigured}>
+            {error && <p className="text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2 border border-destructive/20">{error}</p>}
+            <Button type="submit" className="w-full bg-gradient-1 shadow-glow hover:shadow-glow-lg transition-all duration-300 gap-2" disabled={isSubmitting || isLoading || !isFirebaseConfigured}>
               {isSubmitting ? (
-                <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Creating account…</>
+                <><Loader2 className="h-4 w-4 animate-spin" />Creating account...</>
               ) : (
-                "Create account"
+                <>Create account<ArrowRight className="h-4 w-4" /></>
               )}
             </Button>
           </form>
 
-          <div className="mt-5 rounded-xl bg-white/5 border border-white/8 p-3 space-y-1.5">
+          <div className="mt-5 rounded-xl bg-primary/[0.03] border border-primary/10 p-4 space-y-2.5">
             {[
-              "7 AI agents working 24/7 for you",
+              "8 AI agents working 24/7 for you",
               "Personalised job & internship matches",
               "AI cover letters, resume tailoring & more",
             ].map((perk) => (
-              <div key={perk} className="flex items-center gap-2 text-xs text-muted-foreground">
-                <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />
+              <div key={perk} className="flex items-center gap-2.5 text-xs text-muted-foreground">
+                <div className="h-5 w-5 rounded-full bg-gradient-1/20 flex items-center justify-center shrink-0">
+                  <CheckCircle2 className="h-3 w-3 text-primary" />
+                </div>
                 {perk}
               </div>
             ))}
           </div>
 
           <p className="text-sm text-muted-foreground text-center mt-5">
-            Already have an account?{" "}
-            <Link to="/login" className="text-primary hover:underline font-medium">
-              Sign in
-            </Link>
+            Already have an account? <Link to="/login" className="text-primary hover:underline font-medium">Sign in</Link>
           </p>
-
           <p className="text-xs text-muted-foreground/60 text-center mt-3 leading-relaxed">
             By creating an account you agree to our{" "}
-            <span className="underline underline-offset-2 cursor-pointer hover:text-muted-foreground">Terms of Service</span>
-            {" "}and{" "}
+            <span className="underline underline-offset-2 cursor-pointer hover:text-muted-foreground">Terms of Service</span> and{" "}
             <span className="underline underline-offset-2 cursor-pointer hover:text-muted-foreground">Privacy Policy</span>.
           </p>
         </div>

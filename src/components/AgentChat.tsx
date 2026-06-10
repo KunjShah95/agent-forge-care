@@ -63,11 +63,11 @@ export default function AgentChat() {
   const liveStatus = data?.slice(-1)?.[0] ?? null;
 
   return (
-    <Card className="glass overflow-hidden flex flex-col h-[600px]">
+    <Card className="bento-card overflow-hidden flex flex-col h-[600px]">
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-4 border-b border-border/50">
         <div className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-xl bg-gradient-primary flex items-center justify-center shadow-glow">
+          <div className="h-9 w-9 rounded-xl bg-gradient-1 flex items-center justify-center shadow-glow">
             <Brain className="h-5 w-5 text-primary-foreground" />
           </div>
           <div>
@@ -91,7 +91,7 @@ export default function AgentChat() {
       <ScrollArea className="flex-1 p-5" ref={scrollRef}>
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center gap-4 py-12">
-            <div className="h-16 w-16 rounded-2xl bg-gradient-primary/10 border border-primary/20 flex items-center justify-center">
+            <div className="h-16 w-16 rounded-2xl bg-gradient-1/10 border border-primary/20 flex items-center justify-center">
               <Brain className="h-8 w-8 text-primary" />
             </div>
             <div className="max-w-md">
@@ -112,7 +112,7 @@ export default function AgentChat() {
                   key={suggestion}
                   variant="outline"
                   size="sm"
-                  className="glass text-[11px] h-auto py-2 leading-tight"
+                  className="glass-strong text-[11px] h-auto py-2 leading-tight"
                   onClick={() => {
                     const nativeInput = inputRef.current;
                     if (nativeInput) {
@@ -138,14 +138,14 @@ export default function AgentChat() {
                 className={`flex gap-3 ${m.role === "user" ? "justify-end" : "justify-start"}`}
               >
                 {m.role === "assistant" && (
-                  <div className="h-8 w-8 rounded-xl bg-gradient-primary/10 border border-primary/20 flex items-center justify-center shrink-0 mt-1">
+                  <div className="h-8 w-8 rounded-xl bg-gradient-1/10 border border-primary/20 flex items-center justify-center shrink-0 mt-1">
                     <Brain className="h-4 w-4 text-primary" />
                   </div>
                 )}
                 <div
                   className={`max-w-[85%] rounded-2xl px-5 py-3 text-sm leading-relaxed ${
                     m.role === "user"
-                      ? "bg-gradient-primary text-primary-foreground"
+                      ? "bg-gradient-1 text-primary-foreground"
                       : "bg-muted/40 border border-border/40"
                   }`}
                 >
@@ -224,7 +224,7 @@ export default function AgentChat() {
                   const Icon = agentIcons[agentName] || Brain;
                   return (
                     <>
-                      <div className="h-8 w-8 rounded-lg bg-gradient-primary/10 border border-primary/20 flex items-center justify-center">
+                      <div className="h-8 w-8 rounded-lg bg-gradient-1/10 border border-primary/20 flex items-center justify-center">
                         <Icon className="h-4 w-4 text-primary animate-pulse" />
                       </div>
                       <div>
@@ -280,7 +280,7 @@ export default function AgentChat() {
             ) : (
               <Button
                 type="submit"
-                className="h-11 w-11 bg-gradient-primary shadow-glow"
+                className="h-11 w-11 bg-gradient-1 shadow-glow"
                 disabled={!input.trim()}
               >
                 <Send className="h-4 w-4" />

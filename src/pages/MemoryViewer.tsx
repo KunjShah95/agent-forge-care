@@ -171,7 +171,7 @@ export default function MemoryViewer() {
             The system's long-term memory. This data personalizes agent behavior, match scoring, and recommendations.
           </p>
         </div>
-        <Button className="bg-gradient-primary shadow-glow gap-2" onClick={() => setAddOpen(true)}>
+        <Button className="bg-gradient-1 shadow-glow gap-2" onClick={() => setAddOpen(true)}>
           <Plus className="h-4 w-4" /> Add Memory
         </Button>
       </div>
@@ -189,7 +189,7 @@ export default function MemoryViewer() {
             icon: Brain,
           },
         ].map((s) => (
-          <Card key={s.label} className="glass p-5">
+          <Card key={s.label} className="bento-card p-5">
             <div className="flex items-center justify-between">
               <span className="text-xs text-muted-foreground">{s.label}</span>
               <s.icon className="h-4 w-4 text-primary" />
@@ -202,7 +202,7 @@ export default function MemoryViewer() {
       </div>
 
       <Tabs defaultValue="profile">
-        <TabsList className="glass">
+        <TabsList className="bento-card">
           <TabsTrigger value="profile">Profile Memory</TabsTrigger>
           <TabsTrigger value="skills">Skills</TabsTrigger>
           <TabsTrigger value="learnings">Learnings</TabsTrigger>
@@ -210,7 +210,7 @@ export default function MemoryViewer() {
         </TabsList>
 
         <TabsContent value="profile" className="mt-4">
-          <Card className="glass p-6">
+          <Card className="bento-card p-6">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="font-display font-semibold">Stored Preferences</h2>
@@ -240,7 +240,7 @@ export default function MemoryViewer() {
         </TabsContent>
 
         <TabsContent value="skills" className="mt-4 space-y-4">
-          <Card className="glass p-6">
+          <Card className="bento-card p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-display font-semibold">Skills</h2>
               <Badge variant="outline" className="gap-1">
@@ -284,7 +284,7 @@ export default function MemoryViewer() {
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         <div className="h-1.5 flex-1 rounded-full bg-muted overflow-hidden">
                           <div
-                            className="h-full rounded-full bg-gradient-primary"
+                            className="h-full rounded-full bg-gradient-1"
                             style={{ width: `${weight * 100}%` }}
                           />
                         </div>
@@ -312,9 +312,9 @@ export default function MemoryViewer() {
             </div>
           ) : (
             learningEntries.map((entry) => (
-              <Card key={entry.id} className="glass p-5 hover:shadow-glow transition">
+              <Card key={entry.id} className="bento-card p-5 hover:shadow-glow transition">
                 <div className="flex items-start gap-3">
-                  <div className="h-8 w-8 rounded-lg bg-gradient-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
+                  <div className="h-8 w-8 rounded-lg bg-gradient-1/10 border border-primary/20 flex items-center justify-center shrink-0">
                     <Brain className="h-4 w-4 text-primary" />
                   </div>
                   <div className="flex-1">
@@ -333,7 +333,7 @@ export default function MemoryViewer() {
         </TabsContent>
 
         <TabsContent value="raw" className="mt-4">
-          <Card className="glass p-6">
+          <Card className="bento-card p-6">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="font-display font-semibold">Raw Agent Context</h2>
@@ -399,7 +399,7 @@ export default function MemoryViewer() {
               />
             </div>
             <Button
-              className="w-full bg-gradient-primary shadow-glow"
+              className="w-full bg-gradient-1 shadow-glow"
               onClick={handleAdd}
               disabled={createMemory.isPending}
             >
@@ -451,7 +451,7 @@ export default function MemoryViewer() {
                 Cancel
               </Button>
               <Button
-                className="flex-1 bg-gradient-primary shadow-glow"
+                className="flex-1 bg-gradient-1 shadow-glow"
                 onClick={handleSaveEdit}
                 disabled={updateMemory.isPending}
               >

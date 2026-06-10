@@ -122,14 +122,20 @@ export default function ResearchCenter() {
   const r = researchResult as Record<string, unknown> | null;
 
   return (
-    <div className="space-y-6 max-w-[1400px]">
-      <div>
+    <div className="space-y-6 max-w-[1400px] relative">
+      {/* Animated grid background */}
+      <div className="fixed inset-0 animated-grid opacity-40 pointer-events-none" />
+      <div className="fixed inset-0 bg-beams opacity-20 pointer-events-none" />
+      <div className="fixed top-1/4 right-1/4 w-72 h-72 rounded-full bg-gradient-1 opacity-[0.03] blur-3xl animate-float-slow pointer-events-none" />
+      <div className="fixed bottom-1/3 left-1/4 w-56 h-56 rounded-full bg-gradient-3 opacity-[0.03] blur-3xl animate-float pointer-events-none" />
+
+      <div className="relative">
         <h1 className="font-display text-3xl font-bold">Research Center</h1>
         <p className="text-muted-foreground mt-1">Company profiles, interview insights, and industry trends compiled by your Research Agent.</p>
       </div>
 
       <Tabs defaultValue="companies">
-        <TabsList className="glass">
+        <TabsList className="bento-card">
           <TabsTrigger value="companies"><Building2 className="h-3 w-3 mr-1" /> Companies</TabsTrigger>
           <TabsTrigger value="insights"><BookOpen className="h-3 w-3 mr-1" /> Interview Insights</TabsTrigger>
           <TabsTrigger value="trends"><TrendingUp className="h-3 w-3 mr-1" /> Industry Trends</TabsTrigger>
@@ -137,7 +143,7 @@ export default function ResearchCenter() {
         </TabsList>
 
         <TabsContent value="companies" className="mt-4 space-y-4">
-          <Card className="glass p-4">
+          <Card className="bento-card p-4">
             <div className="flex gap-2">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -150,7 +156,7 @@ export default function ResearchCenter() {
                 />
               </div>
               <Button
-                className="bg-gradient-primary shadow-glow gap-2"
+                className="bg-gradient-1 shadow-glow gap-2"
                 onClick={() => handleResearch()}
                 disabled={research.isPending}
               >
@@ -161,7 +167,7 @@ export default function ResearchCenter() {
           </Card>
 
           {researchResult && (
-            <Card className="glass p-5 border-primary/30">
+            <Card className="bento-card p-5 border-primary/30">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <h3 className="font-display font-semibold">Research: {researchedCompany}</h3>
@@ -293,11 +299,11 @@ export default function ResearchCenter() {
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
             </div>
           ) : insights.length === 0 ? (
-            <Card className="glass p-5 text-center text-sm text-muted-foreground">
+            <Card className="bento-card p-5 text-center text-sm text-muted-foreground">
               Research a company to get interview insights.
             </Card>
           ) : insights.map((i, idx) => (
-            <Card key={idx} className="glass p-5">
+            <Card key={idx} className="bento-card p-5">
               <div className="flex items-start justify-between mb-2">
                 <Badge variant="secondary">{i.company}</Badge>
                 <span className="text-xs text-muted-foreground">{i.date}</span>
@@ -313,11 +319,11 @@ export default function ResearchCenter() {
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
             </div>
           ) : trends.length === 0 ? (
-            <Card className="glass p-5 text-center text-sm text-muted-foreground">
+            <Card className="bento-card p-5 text-center text-sm text-muted-foreground">
               No industry trend data available yet.
             </Card>
           ) : trends.map((t, idx) => (
-            <Card key={idx} className="glass p-5 flex items-center gap-4">
+            <Card key={idx} className="bento-card p-5 flex items-center gap-4">
               <TrendingUp className="h-5 w-5 text-success flex-shrink-0" />
               <div className="flex-1">
                 <div className="font-medium text-sm">{t.topic}</div>
@@ -328,12 +334,12 @@ export default function ResearchCenter() {
         </TabsContent>
 
         <TabsContent value="notes" className="mt-4">
-          <Card className="glass p-6 space-y-3">
+          <Card className="bento-card p-6 space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="font-display font-semibold">Personal research notes</h3>
               <Button
                 size="sm"
-                className="gap-2 bg-gradient-primary shadow-glow"
+                className="gap-2 bg-gradient-1 shadow-glow"
                 onClick={handleSaveNotes}
                 disabled={createMemory.isPending}
               >

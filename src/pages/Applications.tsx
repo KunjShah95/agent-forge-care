@@ -53,9 +53,9 @@ function SortableCard({
 
   return (
     <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
-      <Card className="glass p-3 cursor-grab active:cursor-grabbing hover:shadow-glow transition group">
+      <div className="bento-card p-3 cursor-grab active:cursor-grabbing hover:shadow-glow transition group">
         <div className="flex items-start gap-2 mb-2">
-          <div className="h-8 w-8 rounded-lg bg-gradient-primary/10 border border-primary/20 flex items-center justify-center font-bold text-primary text-sm shrink-0">
+          <div className="h-8 w-8 rounded-lg bg-gradient-1/10 border border-primary/20 flex items-center justify-center font-bold text-primary text-sm shrink-0">
             {app.logo}
           </div>
           <div className="min-w-0 flex-1">
@@ -85,7 +85,7 @@ function SortableCard({
             <FileText className="h-3 w-3 mt-0.5 flex-shrink-0" /> {app.notes}
           </div>
         )}
-      </Card>
+      </div>
     </div>
   );
 }
@@ -98,9 +98,9 @@ function CardContent({
   stageColor: Record<Stage, string>;
 }) {
   return (
-    <Card className="glass p-3 shadow-lg ring-2 ring-primary/20">
+    <div className="glow-card p-3 !shadow-deep ring-2 ring-primary/20">
       <div className="flex items-start gap-2 mb-2">
-        <div className="h-8 w-8 rounded-lg bg-gradient-primary/10 border border-primary/20 flex items-center justify-center font-bold text-primary text-sm shrink-0">
+        <div className="h-8 w-8 rounded-lg bg-gradient-1/10 border border-primary/20 flex items-center justify-center font-bold text-primary text-sm shrink-0">
           {app.logo}
         </div>
         <div className="min-w-0 flex-1">
@@ -114,7 +114,7 @@ function CardContent({
           <Calendar className="h-3 w-3" /> {app.nextStep} · {app.nextDate}
         </div>
       )}
-    </Card>
+    </div>
   );
 }
 
@@ -145,8 +145,7 @@ function StageColumn({
       </div>
       <SortableContext items={visibleApps.map((a) => a.id)} strategy={verticalListSortingStrategy}>
         <div
-          ref={setNodeRef}
-          className={`flex-1 space-y-2 p-2 rounded-xl bg-muted/30 border border-dashed transition-colors ${isOver ? "bg-primary/5 border-primary/30" : "border-border/50"}`}
+          ref={setNodeRef}            className={`flex-1 space-y-2 p-2 rounded-xl bg-muted/20 border border-dashed transition-colors ${isOver ? "bg-primary/10 border-primary/30 shadow-glow" : "border-border/40"}`}
         >
           {visibleApps.map((a) => (
             <SortableCard key={a.id} app={a} stageColor={stageColor} onDelete={onDelete} />
@@ -246,7 +245,7 @@ export default function Applications() {
             {isLoading ? "Loading…" : `Drag cards between stages. ${apps.length} total applications.`}
           </p>
         </div>
-        <Button className="bg-gradient-primary shadow-glow gap-2" onClick={() => setDialogOpen(true)}>
+        <Button className="bg-gradient-1 shadow-glow gap-2" onClick={() => setDialogOpen(true)}>
           <Plus className="h-4 w-4" /> New application
         </Button>
       </div>
@@ -315,7 +314,7 @@ export default function Applications() {
       )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="glass">
+        <DialogContent className="glass-strong">
           <DialogHeader>
             <DialogTitle className="font-display">New Application</DialogTitle>
           </DialogHeader>
@@ -348,7 +347,7 @@ export default function Applications() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
             <Button
-              className="bg-gradient-primary"
+              className="bg-gradient-1"
               disabled={!newOppId || createApp.isPending}
               onClick={() => {
                 createApp.mutate(

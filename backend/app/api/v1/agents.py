@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, func
 
@@ -131,6 +131,23 @@ async def list_tasks(
     return TaskList(items=[TaskOut.model_validate(t) for t in tasks])
 
 
+@router.delete("/tasks/clear", status_code=204)
+async def clear_tasks(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Clear all completed or failed agent tasks for the user."""
+    from sqlalchemy import delete
+    
+    await db.execute(
+        delete(AgentTask).where(
+            AgentTask.user_id == user.id,
+            AgentTask.status.in_([TaskStatus.completed, TaskStatus.failed])
+        )
+    )
+    await db.commit()
+
+
 @router.delete("/tasks/{id}", status_code=204)
 async def delete_task(
     id: str,
@@ -159,10 +176,91 @@ async def get_task(
     )
     task = result.scalar_one_or_none()
     if not task:
-        from fastapi import HTTPException
-
         raise HTTPException(status_code=404, detail="Task not found")
     return task
+
+
+@router.post("/tasks/{id}/retry")
+async def retry_task(
+    id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Retry a failed or completed agent task."""
+    result = await db.execute(
+        select(AgentTask).where(AgentTask.id == id, AgentTask.user_id == user.id)
+    )
+    task = result.scalar_one_or_none()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    task.status = TaskStatus.running
+    task.error = None
+    task.started_at = datetime.now(timezone.utc)
+    task.completed_at = None
+    await db.commit()
+
+    try:
+        if task.agent_type == AgentType.planner:
+            from app.agents.graph import run_planner_agent
+            goal = task.input.get("goal") or task.input.get("goal_text") or ""
+            await run_planner_agent(str(user.id), goal)
+        elif task.agent_type == AgentType.monitor:
+            from app.agents.graph import run_opportunity_scan
+            await run_opportunity_scan(str(user.id))
+        elif task.agent_type == AgentType.resume:
+            from app.agents.graph import run_resume_tailoring
+            app_id = task.input.get("application_id")
+            if app_id:
+                await run_resume_tailoring(str(user.id), app_id)
+            else:
+                from app.agents.assistant_agent import tailor_resume
+                res = await tailor_resume(str(user.id), task.input, db)
+                task.output = res
+                task.status = TaskStatus.completed
+                task.completed_at = datetime.now(timezone.utc)
+                await db.commit()
+        else:
+            from app.agents.graph import dispatch_agent
+            res = await dispatch_agent(task.agent_type, str(user.id), task.input, db)
+            task.output = res
+            task.status = TaskStatus.completed
+            task.completed_at = datetime.now(timezone.utc)
+            await db.commit()
+            
+        return {"status": "success", "message": f"Task {id} retried successfully"}
+    except Exception as e:
+        task.status = TaskStatus.failed
+        task.error = str(e)
+        task.completed_at = datetime.now(timezone.utc)
+        await db.commit()
+        raise HTTPException(status_code=500, detail=f"Retry failed: {str(e)}")
+
+
+@router.post("/tasks/{id}/cancel")
+async def cancel_task(
+    id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Cancel a running or queued agent task."""
+    result = await db.execute(
+        select(AgentTask).where(AgentTask.id == id, AgentTask.user_id == user.id)
+    )
+    task = result.scalar_one_or_none()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    if task.status in (TaskStatus.queued, TaskStatus.running):
+        task.status = TaskStatus.failed
+        task.error = "Cancelled by user"
+        task.completed_at = datetime.now(timezone.utc)
+        await db.commit()
+        return {"status": "success", "message": f"Task {id} cancelled"}
+    else:
+        return {"status": "ignored", "message": f"Task {id} is not running"}
+
+
 
 
 @router.post("/monitor/run", response_model=PlannerRunResponse, status_code=202)

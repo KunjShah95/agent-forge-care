@@ -26,7 +26,10 @@ export function useUpdateProfile() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: api.profile.update,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["profile"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["profile"] });
+      qc.invalidateQueries({ queryKey: ["auth", "me"] });
+    },
   });
 }
 
@@ -174,6 +177,31 @@ export function useDeleteTask() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["agent-tasks"] }),
   });
 }
+
+export function useRetryTask() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.agents.retryTask,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["agent-tasks"] }),
+  });
+}
+
+export function useCancelTask() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.agents.cancelTask,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["agent-tasks"] }),
+  });
+}
+
+export function useClearTasks() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.agents.clearTasks,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["agent-tasks"] }),
+  });
+}
+
 
 // ─── Memory ─────────────────────────────────────────────
 

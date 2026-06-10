@@ -14,7 +14,7 @@ function Skeleton({
 
 export function StatSkeleton() {
   return (
-    <div className="glass p-5 space-y-3">
+    <div className="bento-card p-5 space-y-3">
       <Skeleton className="h-3 w-20" />
       <Skeleton className="h-8 w-16" />
       <Skeleton className="h-3 w-24" />
@@ -24,7 +24,7 @@ export function StatSkeleton() {
 
 export function CardSkeleton() {
   return (
-    <div className="glass p-5 space-y-3">
+    <div className="bento-card p-5 space-y-3">
       <div className="flex items-start gap-3">
         <Skeleton className="h-10 w-10 rounded-lg" />
         <div className="flex-1 space-y-2">

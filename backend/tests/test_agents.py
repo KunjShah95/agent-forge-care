@@ -241,3 +241,44 @@ async def test_resume_tailor_success(mock_resume, auth_client, mock_db):
     )
     assert response.status_code == 200
     assert "resume" in response.json()
+
+
+@pytest.mark.asyncio
+@patch("app.agents.graph.run_planner_agent", new_callable=AsyncMock)
+async def test_retry_task_planner_success(mock_run, auth_client, mock_db):
+    task = make_agent_task(agent_type=AgentType.planner, status=TaskStatus.failed, input={"goal": "Find ML internships"})
+    setup_mock_execute(mock_db, [MockResult(scalar_value=task)])
+    
+    response = await auth_client.post(f"/api/v1/agents/tasks/{task.id}/retry")
+    assert response.status_code == 200
+    assert response.json()["status"] == "success"
+    mock_run.assert_called_once_with(str(TEST_USER_ID), "Find ML internships")
+
+
+@pytest.mark.asyncio
+async def test_cancel_task_success(auth_client, mock_db):
+    task = make_agent_task(agent_type=AgentType.planner, status=TaskStatus.running)
+    setup_mock_execute(mock_db, [MockResult(scalar_value=task)])
+    
+    response = await auth_client.post(f"/api/v1/agents/tasks/{task.id}/cancel")
+    assert response.status_code == 200
+    assert response.json()["status"] == "success"
+    assert task.status == TaskStatus.failed
+    assert task.error == "Cancelled by user"
+
+
+@pytest.mark.asyncio
+async def test_cancel_task_not_running(auth_client, mock_db):
+    task = make_agent_task(agent_type=AgentType.planner, status=TaskStatus.completed)
+    setup_mock_execute(mock_db, [MockResult(scalar_value=task)])
+    
+    response = await auth_client.post(f"/api/v1/agents/tasks/{task.id}/cancel")
+    assert response.status_code == 200
+    assert response.json()["status"] == "ignored"
+
+
+@pytest.mark.asyncio
+async def test_clear_tasks_success(auth_client, mock_db):
+    response = await auth_client.delete("/api/v1/agents/tasks/clear")
+    assert response.status_code == 204
+

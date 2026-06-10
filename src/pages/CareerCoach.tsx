@@ -38,7 +38,7 @@ export default function CareerCoach() {
         <p className="text-muted-foreground mt-1">Personalized career guidance powered by AI.</p>
       </div>
 
-      <Card className="glass p-6">
+      <Card className="bento-card p-6">
         <div className="flex gap-3">
           <Textarea
             placeholder="Ask for career advice... e.g., 'What skills should I focus on for AI internships?' or 'How can I improve my application strategy?'"
@@ -48,7 +48,7 @@ export default function CareerCoach() {
             onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), handleGetGuidance())}
           />
           <Button
-            className="bg-gradient-primary shadow-glow gap-2 self-end"
+            className="bg-gradient-1 shadow-glow gap-2 self-end"
             onClick={handleGetGuidance}
             disabled={careerGuidance.isPending}
           >
@@ -59,7 +59,7 @@ export default function CareerCoach() {
       </Card>
 
       {careerGuidance.isPending && (
-        <Card className="glass p-8 text-center">
+        <Card className="bento-card p-8 text-center">
           <Loader2 className="h-8 w-8 animate-spin mx-auto mb-3 text-primary" />
           <p className="text-muted-foreground">Analyzing your profile and generating guidance...</p>
         </Card>
@@ -68,7 +68,7 @@ export default function CareerCoach() {
       {result && !careerGuidance.isPending && (
         <div className="space-y-4">
           {profileSummary && (
-            <Card className="glass p-5 border-primary/20">
+            <Card className="bento-card p-5 border-primary/20">
               <div className="flex items-center gap-2 mb-3">
                 <Lightbulb className="h-5 w-5 text-primary" />
                 <h3 className="font-display font-semibold">Profile Summary</h3>
@@ -87,7 +87,7 @@ export default function CareerCoach() {
           )}
 
           {nextSteps && nextSteps.length > 0 && (
-            <Card className="glass p-5 border-success/20">
+            <Card className="bento-card p-5 border-success/20">
               <div className="flex items-center gap-2 mb-3">
                 <Target className="h-5 w-5 text-success" />
                 <h3 className="font-display font-semibold">Next Steps</h3>
@@ -106,7 +106,7 @@ export default function CareerCoach() {
           )}
 
           {tips && tips.length > 0 && (
-            <Card className="glass p-5 border-warning/20">
+            <Card className="bento-card p-5 border-warning/20">
               <div className="flex items-center gap-2 mb-3">
                 <TrendingUp className="h-5 w-5 text-warning" />
                 <h3 className="font-display font-semibold">Tips & Recommendations</h3>

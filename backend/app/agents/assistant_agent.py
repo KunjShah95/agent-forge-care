@@ -760,17 +760,23 @@ async def run_daily_scan(
         )
 
     # Store high-match alerts as notification memory entries
+    from app.services.notification_service import create_notification
+    from app.models.user import User
+
+    user_result = await db.execute(select(User).where(User.id == user_id))
+    user = user_result.scalar_one_or_none()
+    email_enabled = any(ac.email_notify for ac in alert_configs) if alert_configs else False
+
     for alert in alerts[:10]:
-        await memory_service.set_memory(
+        title = f"High match: {alert['title']} @ {alert['company']}"
+        body = alert["message"]
+        await create_notification(
+            db,
             user_id,
-            f"notification:{uuid.uuid4()}",
-            {
-                "title": f"High match: {alert['title']} @ {alert['company']}",
-                "body": alert["message"],
-                "type": "success",
-                "read": False,
-            },
-            weight=1.0,
+            title=title,
+            body=body,
+            type="success",
+            to_email=user.email if (email_enabled and user and user.email) else None,
         )
 
     # Update memory with scan timestamp

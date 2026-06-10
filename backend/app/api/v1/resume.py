@@ -326,3 +326,258 @@ async def upload_resume(
         "characters": chars,
         "text": text[:5000],
     }
+
+
+from pydantic import BaseModel
+from datetime import datetime
+from fastapi.responses import StreamingResponse
+
+class ResumeSection(BaseModel):
+    title: str
+    content: list[str]
+
+class ResumeData(BaseModel):
+    name: str
+    email: str
+    phone: str | None = None
+    linkedin: str | None = None
+    github: str | None = None
+    summary: str | None = None
+    sections: list[ResumeSection]
+
+class CoverLetterData(BaseModel):
+    name: str
+    email: str
+    phone: str | None = None
+    company: str
+    date: str | None = None
+    body: str
+
+@router.post("/generate-pdf")
+async def generate_resume_pdf(
+    data: ResumeData,
+    user: User = Depends(get_current_user),
+):
+    try:
+        from reportlab.lib.pagesizes import letter
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.enums import TA_CENTER, TA_LEFT
+        from reportlab.lib import colors
+        
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(
+            buffer,
+            pagesize=letter,
+            rightMargin=54,
+            leftMargin=54,
+            topMargin=54,
+            bottomMargin=54
+        )
+        
+        styles = getSampleStyleSheet()
+        
+        name_style = ParagraphStyle(
+            'ResumeName',
+            parent=styles['Normal'],
+            fontName='Helvetica-Bold',
+            fontSize=22,
+            leading=26,
+            textColor=colors.HexColor('#0F172A'),
+            alignment=TA_CENTER
+        )
+        
+        contact_style = ParagraphStyle(
+            'ResumeContact',
+            parent=styles['Normal'],
+            fontName='Helvetica',
+            fontSize=9,
+            leading=13,
+            textColor=colors.HexColor('#475569'),
+            alignment=TA_CENTER
+        )
+        
+        section_title_style = ParagraphStyle(
+            'ResumeSectionTitle',
+            parent=styles['Normal'],
+            fontName='Helvetica-Bold',
+            fontSize=12,
+            leading=16,
+            textColor=colors.HexColor('#1E3A8A'),
+            alignment=TA_LEFT,
+            spaceAfter=4
+        )
+        
+        body_style = ParagraphStyle(
+            'ResumeBody',
+            parent=styles['Normal'],
+            fontName='Helvetica',
+            fontSize=10,
+            leading=14,
+            textColor=colors.HexColor('#334155'),
+            alignment=TA_LEFT
+        )
+        
+        bullet_style = ParagraphStyle(
+            'ResumeBullet',
+            parent=styles['Normal'],
+            fontName='Helvetica',
+            fontSize=9.5,
+            leading=13.5,
+            textColor=colors.HexColor('#334155'),
+            alignment=TA_LEFT,
+            leftIndent=15,
+            firstLineIndent=-10
+        )
+        
+        story = []
+        
+        # Header block
+        story.append(Paragraph(data.name, name_style))
+        story.append(Spacer(1, 4))
+        
+        contact_parts = []
+        if data.email:
+            contact_parts.append(data.email)
+        if data.phone:
+            contact_parts.append(data.phone)
+        if data.linkedin:
+            contact_parts.append(data.linkedin)
+        if data.github:
+            contact_parts.append(data.github)
+            
+        contact_str = "  |  ".join(contact_parts)
+        story.append(Paragraph(contact_str, contact_style))
+        story.append(Spacer(1, 15))
+        
+        # Summary Section
+        if data.summary:
+            story.append(Paragraph("PROFESSIONAL SUMMARY", section_title_style))
+            story.append(Paragraph(data.summary, body_style))
+            story.append(Spacer(1, 10))
+            
+        # Sections
+        for sec in data.sections:
+            sec_title = sec.title.upper()
+            content_items = sec.content
+            if not content_items:
+                continue
+                
+            story.append(Paragraph(sec_title, section_title_style))
+            
+            if "SKILL" in sec_title:
+                skills_str = ", ".join(content_items)
+                story.append(Paragraph(skills_str, body_style))
+            else:
+                for item in content_items:
+                    if item.startswith("-") or item.startswith("•"):
+                        clean_item = item.lstrip("-•").strip()
+                        story.append(Paragraph(f"&bull; {clean_item}", bullet_style))
+                    else:
+                        story.append(Paragraph(item, body_style))
+            story.append(Spacer(1, 10))
+            
+        doc.build(story)
+        buffer.seek(0)
+        
+        return StreamingResponse(
+            buffer,
+            media_type="application/pdf",
+            headers={"Content-Disposition": "attachment; filename=resume_tailored.pdf"}
+        )
+    except Exception as e:
+        logger.exception("Failed to generate resume PDF")
+        raise HTTPException(status_code=500, detail=f"PDF generation failed: {str(e)}")
+
+@router.post("/generate-cover-letter-pdf")
+async def generate_cover_letter_pdf(
+    data: CoverLetterData,
+    user: User = Depends(get_current_user),
+):
+    try:
+        from reportlab.lib.pagesizes import letter
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.enums import TA_LEFT, TA_JUSTIFY
+        from reportlab.lib import colors
+        
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(
+            buffer,
+            pagesize=letter,
+            rightMargin=54,
+            leftMargin=54,
+            topMargin=54,
+            bottomMargin=54
+        )
+        
+        styles = getSampleStyleSheet()
+        
+        name_style = ParagraphStyle(
+            'CoverName',
+            parent=styles['Normal'],
+            fontName='Helvetica-Bold',
+            fontSize=20,
+            leading=24,
+            textColor=colors.HexColor('#111827'),
+            alignment=TA_LEFT
+        )
+        
+        contact_style = ParagraphStyle(
+            'CoverContact',
+            parent=styles['Normal'],
+            fontName='Helvetica',
+            fontSize=9,
+            leading=13,
+            textColor=colors.HexColor('#4B5563'),
+            alignment=TA_LEFT
+        )
+        
+        body_style = ParagraphStyle(
+            'CoverBody',
+            parent=styles['Normal'],
+            fontName='Helvetica',
+            fontSize=10,
+            leading=15,
+            textColor=colors.HexColor('#1F2937'),
+            alignment=TA_JUSTIFY
+        )
+        
+        story = []
+        
+        story.append(Paragraph(data.name, name_style))
+        story.append(Spacer(1, 4))
+        
+        contact_parts = []
+        if data.email:
+            contact_parts.append(data.email)
+        if data.phone:
+            contact_parts.append(data.phone)
+            
+        contact_str = "  |  ".join(contact_parts)
+        story.append(Paragraph(contact_str, contact_style))
+        story.append(Spacer(1, 15))
+        
+        date_str = data.date or datetime.now().strftime("%B %d, %Y")
+        story.append(Paragraph(date_str, body_style))
+        story.append(Spacer(1, 12))
+        
+        story.append(Paragraph(f"To the hiring team at {data.company},", body_style))
+        story.append(Spacer(1, 12))
+        
+        paragraphs = [p.strip() for p in data.body.split("\n\n") if p.strip()]
+        for p in paragraphs:
+            story.append(Paragraph(p.replace("\n", "<br/>"), body_style))
+            story.append(Spacer(1, 12))
+            
+        doc.build(story)
+        buffer.seek(0)
+        
+        return StreamingResponse(
+            buffer,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename=cover_letter_{data.company.replace(' ', '_')}.pdf"}
+        )
+    except Exception as e:
+        logger.exception("Failed to generate cover letter PDF")
+        raise HTTPException(status_code=500, detail=f"PDF generation failed: {str(e)}")
