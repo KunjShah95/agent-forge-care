@@ -90,7 +90,6 @@ class RerankService:
             doc_strings.append(" | ".join(p.strip() for p in parts if p.strip()))
 
         try:
-            import cohere
             response = self.client.rerank(
                 query=query,
                 documents=doc_strings,

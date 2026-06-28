@@ -27,6 +27,9 @@ from app.services.match_service import MatchService
 from app.search.adapters import SearchAdapter
 from app.memory.memory_layer import AgentMemory
 from app.utils.embedding import get_text_embedding
+from app.utils.location import parse_location
+from app.utils.industry import detect_industry
+from app.utils.work_mode import infer_work_type
 
 logger = logging.getLogger("agentforge.agents.internship")
 
@@ -66,21 +69,65 @@ async def discover_internships(
             limit=limit,
             source_filter="internship",
         )
+        if not raw_results:
+            logger.warning("External internship search returned 0 results, using demo data")
+            raw_results = _demo_internships(query, location)
     except Exception as e:
         logger.warning("External search failed, using demo data: %s", e)
         raw_results = _demo_internships(query, location)
 
+    # Skip internships the user already has (cross-run dedup so repeat searches
+    # return unique openings instead of re-inserting the same ones).
+    existing_result = await db.execute(
+        select(Opportunity.title, Opportunity.company).where(
+            Opportunity.user_id == user_id
+        )
+    )
+    existing_keys = {
+        (t.lower().strip(), (c or "").lower().strip())
+        for t, c in existing_result.all()
+        if t
+    }
+
     # Store results and score
     items = []
+    seen_keys = set()
     opp_map: dict[str, Opportunity] = {}
     for r in raw_results[:limit]:
+        title = r.get("title", "Untitled Internship")
+        company = r.get("company", "Unknown")
+        key = (title.lower().strip(), (company or "").lower().strip())
+        if key in seen_keys or key in existing_keys:
+            continue
+        seen_keys.add(key)
+
+        # Parse location into city/state/country
+        loc_raw = r.get("location")
+        parsed = parse_location(loc_raw)
+
+        industry = detect_industry(
+            title=title,
+            company=company,
+            description=r.get("description", ""),
+        )
+
+        remote = r.get("remote", False)
+        work_type = r.get("work_type") or infer_work_type(
+            remote, title, r.get("description"), loc_raw
+        )
+
         opp = Opportunity(
             user_id=user_id,
-            title=r.get("title", "Untitled Internship"),
-            company=r.get("company", "Unknown"),
+            title=title,
+            company=company,
             company_logo=r.get("logo"),
-            location=r.get("location"),
-            remote=r.get("remote", False),
+            location=loc_raw,
+            city=parsed["city"],
+            state=parsed["state"],
+            country=parsed["country"],
+            industry=industry,
+            remote=remote,
+            work_type=work_type,
             type="Internship",
             description=r.get("description"),
             apply_url=r.get("apply_url"),
@@ -162,7 +209,7 @@ async def get_internship_recommendations(
     limit: int = 10,
 ) -> list[dict]:
     """Get top-scored internship recommendations from stored opportunities."""
-    from sqlalchemy import select, desc
+    from sqlalchemy import desc
 
     result = await db.execute(
         select(Opportunity, MatchScore)
@@ -170,7 +217,7 @@ async def get_internship_recommendations(
         .where(
             Opportunity.user_id == user_id,
             Opportunity.type == "Internship",
-            Opportunity.is_active == True,
+            Opportunity.is_active.is_(True),
         )
         .order_by(desc(MatchScore.overall_score))
         .limit(limit)

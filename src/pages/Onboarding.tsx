@@ -132,7 +132,7 @@ export default function Onboarding() {
               <div className="grid grid-cols-2 gap-4">
                 <div><Label>Full name</Label><Input value={fullName} onChange={(e) => setFullName(e.target.value)} className="mt-1.5" /></div>
                 <div><Label>School</Label><Input value={school} onChange={(e) => setSchool(e.target.value)} className="mt-1.5" /></div>
-                <div><Label>Graduation</Label><Input value={graduation} onChange={(e) => setGraduation(e.target.value)} className="mt-1.5" /></div>
+                <div><Label>Graduation</Label><Input value={graduation} onChange={(e) => setGraduation(e.target.value)} className="mt-1.5" placeholder="e.g., 2026-06-15" /></div>
               </div>
               <div><Label>Bio / pitch</Label><Textarea className="mt-1.5" value={bio} onChange={(e) => setBio(e.target.value)} /></div>
             </div>

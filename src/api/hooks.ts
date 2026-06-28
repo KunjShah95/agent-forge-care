@@ -19,6 +19,7 @@ export function useProfile() {
   return useQuery({
     queryKey: ["profile"],
     queryFn: api.profile.get,
+    enabled: !!api.getAuthToken(),
   });
 }
 
@@ -35,10 +36,11 @@ export function useUpdateProfile() {
 
 // ─── Opportunities ──────────────────────────────────────
 
-export function useOpportunities(params?: { type?: string; search?: string; remote?: boolean }) {
+export function useOpportunities(params?: { type?: string; search?: string; remote?: boolean; work_type?: string }) {
   return useQuery({
     queryKey: ["opportunities", params],
     queryFn: () => api.opportunities.list(params),
+    enabled: !!api.getAuthToken(),
   });
 }
 
@@ -54,13 +56,14 @@ export function useMatches() {
   return useQuery({
     queryKey: ["opportunities", "matches"],
     queryFn: api.opportunities.matches,
+    enabled: !!api.getAuthToken(),
   });
 }
 
 export function useRefreshOpportunities() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: api.opportunities.refresh,
+    mutationFn: (query?: string) => api.opportunities.refresh(query),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["opportunities"] });
     },
@@ -73,6 +76,7 @@ export function useApplications() {
   return useQuery({
     queryKey: ["applications"],
     queryFn: api.applications.list,
+    enabled: !!api.getAuthToken(),
   });
 }
 
@@ -107,6 +111,7 @@ export function useContacts() {
   return useQuery({
     queryKey: ["contacts"],
     queryFn: api.contacts.list,
+    enabled: !!api.getAuthToken(),
   });
 }
 
@@ -141,6 +146,7 @@ export function useAgentTasks(params?: { status?: string }) {
   return useQuery({
     queryKey: ["agent-tasks", params],
     queryFn: () => api.agents.getTasks(params),
+    enabled: !!api.getAuthToken(),
     refetchInterval: 10_000, // Poll every 10s
   });
 }
@@ -149,7 +155,7 @@ export function useAgentTask(id: string) {
   return useQuery({
     queryKey: ["agent-tasks", id],
     queryFn: () => api.agents.getTask(id),
-    enabled: !!id,
+    enabled: !!api.getAuthToken() && !!id,
     refetchInterval: 5_000,
   });
 }
@@ -209,6 +215,7 @@ export function useMemory() {
   return useQuery({
     queryKey: ["memory"],
     queryFn: api.memory.list,
+    enabled: !!api.getAuthToken(),
   });
 }
 
@@ -243,6 +250,7 @@ export function useAnalyticsSummary() {
   return useQuery({
     queryKey: ["analytics", "summary"],
     queryFn: api.analytics.summary,
+    enabled: !!api.getAuthToken(),
   });
 }
 
@@ -250,6 +258,7 @@ export function useAnalyticsActivity() {
   return useQuery({
     queryKey: ["analytics", "activity"],
     queryFn: api.analytics.activity,
+    enabled: !!api.getAuthToken(),
   });
 }
 
@@ -257,6 +266,7 @@ export function useAnalyticsFunnel() {
   return useQuery({
     queryKey: ["analytics", "funnel"],
     queryFn: api.analytics.funnel,
+    enabled: !!api.getAuthToken(),
   });
 }
 
@@ -264,6 +274,7 @@ export function useAnalyticsSkillsDemand() {
   return useQuery({
     queryKey: ["analytics", "skills-demand"],
     queryFn: api.analytics.skillsDemand,
+    enabled: !!api.getAuthToken(),
   });
 }
 
@@ -331,12 +342,54 @@ export function useResumeTailor() {
   });
 }
 
+// ─── Hackathons ────────────────────────────────────────
+
+export function useHackathons() {
+  return useQuery({
+    queryKey: ["opportunities", "hackathons"],
+    queryFn: api.opportunities.hackathons,
+    enabled: !!api.getAuthToken(),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useScanHackathons() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (opts?: { skills?: string[]; alert_enabled?: boolean; email_enabled?: boolean }) =>
+      api.opportunities.scanHackathons(opts),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["opportunities", "hackathons"] });
+      qc.invalidateQueries({ queryKey: ["opportunities", "matches"] });
+    },
+  });
+}
+
+export function useLocations() {
+  return useQuery({
+    queryKey: ["opportunities", "locations"],
+    queryFn: api.opportunities.locations,
+    enabled: !!api.getAuthToken(),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useFilterOptions() {
+  return useQuery({
+    queryKey: ["opportunities", "filters"],
+    queryFn: api.opportunities.filters,
+    enabled: !!api.getAuthToken(),
+    staleTime: 10 * 60 * 1000,
+  });
+}
+
 // ─── Monitor Alerts ─────────────────────────────────────
 
 export function useAlertConfigs() {
   return useQuery({
     queryKey: ["monitor", "alerts"],
     queryFn: api.monitor.listAlerts,
+    enabled: !!api.getAuthToken(),
   });
 }
 
@@ -369,6 +422,7 @@ export function useMonitorSettings() {
   return useQuery({
     queryKey: ["monitor", "settings"],
     queryFn: api.monitor.getSettings,
+    enabled: !!api.getAuthToken(),
   });
 }
 
@@ -387,6 +441,7 @@ export function useNotifications() {
   return useQuery({
     queryKey: ["notifications"],
     queryFn: api.notifications.list,
+    enabled: !!api.getAuthToken(),
     refetchInterval: 15_000,
   });
 }
@@ -422,6 +477,7 @@ export function useResumes() {
   return useQuery({
     queryKey: ["resumes"],
     queryFn: api.resume.list,
+    enabled: !!api.getAuthToken(),
   });
 }
 
@@ -455,6 +511,7 @@ export function useInterviewSessions() {
   return useQuery({
     queryKey: ["interview-sessions"],
     queryFn: api.interview.sessions.list,
+    enabled: !!api.getAuthToken(),
   });
 }
 
@@ -469,5 +526,86 @@ export function useCreateInterviewSession() {
 export function useInterviewFeedback() {
   return useMutation({
     mutationFn: api.interview.feedback,
+  });
+}
+
+// ─── Hiring Agent ─────────────────────────────────────────
+
+export function useHiringPipeline() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.hiringAgent.pipeline,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["hiring-agent"] }),
+  });
+}
+
+export function useHiringExtract(enabled: boolean) {
+  return useQuery({
+    queryKey: ["hiring-agent", "extract"],
+    queryFn: api.hiringAgent.extract,
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
+export function useHiringEvaluate() {
+  return useMutation({
+    mutationFn: api.hiringAgent.evaluateText,
+  });
+}
+
+export function useHiringAts(enabled: boolean) {
+  return useQuery({
+    queryKey: ["hiring-agent", "ats"],
+    queryFn: api.hiringAgent.ats,
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
+export function useHiringMatchJd() {
+  return useMutation({
+    mutationFn: api.hiringAgent.matchJd,
+  });
+}
+
+export function useHiringCoverLetter() {
+  return useMutation({
+    mutationFn: api.hiringAgent.coverLetter,
+  });
+}
+
+export function useHiringGithubEnrich() {
+  return useMutation({
+    mutationFn: api.hiringAgent.githubEnrich,
+  });
+}
+
+export function useHiringPortfolioEnrich() {
+  return useMutation({
+    mutationFn: api.hiringAgent.portfolioEnrich,
+  });
+}
+
+export function useHiringLiveDemos() {
+  return useMutation({
+    mutationFn: api.hiringAgent.liveDemos,
+  });
+}
+
+export function useHiringReport() {
+  return useQuery({
+    queryKey: ["hiring-agent", "report"],
+    queryFn: api.hiringAgent.report,
+    enabled: false,
+  });
+}
+
+export function useHiringHistory() {
+  return useQuery({
+    queryKey: ["hiring-agent", "history"],
+    queryFn: api.hiringAgent.history,
+    enabled: !!api.getAuthToken(),
+    staleTime: 120_000,
   });
 }

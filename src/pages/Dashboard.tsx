@@ -115,7 +115,7 @@ export default function Dashboard() {
               Career OS active
             </Badge>
             <h1 className="font-display text-3xl md:text-4xl font-bold tracking-tight">
-              {greeting}, {auth?.full_name || "there"} <span className="inline-block animate-float" style={{ animationDuration: "2s" }}>👋</span>
+              {greeting}, {profile?.full_name || auth?.full_name || "there"} <span className="inline-block animate-float" style={{ animationDuration: "2s" }}>👋</span>
             </h1>
             <p className="text-muted-foreground mt-2 max-w-2xl">
               The planner has already scanned the market, scored fresh matches, and queued actions for today. Your career OS is working while you focus on what matters.

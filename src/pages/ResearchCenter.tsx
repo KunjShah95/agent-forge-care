@@ -120,6 +120,7 @@ export default function ResearchCenter() {
   };
 
   const r = researchResult as Record<string, unknown> | null;
+  const researchResults = r?.results as Record<string, unknown> | undefined;
 
   return (
     <div className="space-y-6 max-w-[1400px] relative">
@@ -195,96 +196,109 @@ export default function ResearchCenter() {
                     </div>
                   )}
 
-                  {r?.focus && (
+                  {r?.topics && Array.isArray(r.topics) && r.topics.length > 0 && (
                     <div className="flex items-start gap-3 p-4 rounded-lg bg-muted/30">
                       <Target className="h-5 w-5 text-warning mt-0.5 flex-shrink-0" />
                       <div>
-                        <div className="text-xs font-semibold text-warning mb-1">Focus Areas</div>
-                        <p className="text-sm text-muted-foreground">{r.focus as string}</p>
+                        <div className="text-xs font-semibold text-warning mb-1">Research Topics</div>
+                        <p className="text-sm text-muted-foreground">{(r.topics as string[]).join(', ')}</p>
                       </div>
                     </div>
                   )}
 
-                  {r?.company_info && (
-                    <div>
-                      <div className="flex items-center gap-2 mb-3">
-                        <Building2 className="h-4 w-4 text-primary" />
-                        <h4 className="font-display font-semibold text-sm">Company Info</h4>
-                      </div>
-                      <div className="grid sm:grid-cols-2 gap-3">
-                        {(r.company_info as Record<string, string>)?.description && (
-                          <div className="p-3 rounded-lg bg-muted/30 col-span-full">
-                            <div className="text-xs text-muted-foreground mb-1">Description</div>
-                            <p className="text-sm">{(r.company_info as Record<string, string>).description}</p>
-                          </div>
-                        )}
-                        {(r.company_info as Record<string, string>)?.culture && (
-                          <div className="p-3 rounded-lg bg-muted/30">
-                            <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
-                              <Users className="h-3 w-3" /> Culture
+                  {researchResults ? (
+                    (() => {
+                      const companyInfo = researchResults.company_info as Record<string, string> | undefined;
+                      const marketIntel = researchResults.market_intelligence as Record<string, unknown> | undefined;
+                      const interviewData = researchResults.interview_insights as Record<string, unknown> | undefined;
+                      
+                      return (
+                        <>
+                          {companyInfo && (
+                            <div>
+                              <div className="flex items-center gap-2 mb-3">
+                                <Building2 className="h-4 w-4 text-primary" />
+                                <h4 className="font-display font-semibold text-sm">Company Info</h4>
+                              </div>
+                              <div className="grid sm:grid-cols-2 gap-3">
+                                {companyInfo?.summary && (
+                                  <div className="p-3 rounded-lg bg-muted/30 col-span-full">
+                                    <div className="text-xs text-muted-foreground mb-1">Summary</div>
+                                    <p className="text-sm">{companyInfo.summary}</p>
+                                  </div>
+                                )}
+                                {companyInfo?.culture && (
+                                  <div className="p-3 rounded-lg bg-muted/30">
+                                    <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+                                      <Users className="h-3 w-3" /> Culture
+                                    </div>
+                                    <p className="text-sm">{companyInfo.culture}</p>
+                                  </div>
+                                )}
+                                {companyInfo?.funding && (
+                                  <div className="p-3 rounded-lg bg-muted/30">
+                                    <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+                                      <DollarSign className="h-3 w-3" /> Funding
+                                    </div>
+                                    <p className="text-sm">{companyInfo.funding}</p>
+                                  </div>
+                                )}
+                                {companyInfo?.industry && (
+                                  <div className="p-3 rounded-lg bg-muted/30">
+                                    <div className="text-xs text-muted-foreground mb-1">Industry</div>
+                                    <p className="text-sm">{companyInfo.industry}</p>
+                                  </div>
+                                )}
+                                {companyInfo?.tech_stack && (
+                                  <div className="p-3 rounded-lg bg-muted/30 col-span-full">
+                                    <div className="text-xs text-muted-foreground mb-1">Tech Stack</div>
+                                    <p className="text-sm">{(Array.isArray(companyInfo.tech_stack) ? companyInfo.tech_stack : []).join(', ')}</p>
+                                  </div>
+                                )}
+                              </div>
                             </div>
-                            <p className="text-sm">{(r.company_info as Record<string, string>).culture}</p>
-                          </div>
-                        )}
-                        {(r.company_info as Record<string, string>)?.funding && (
-                          <div className="p-3 rounded-lg bg-muted/30">
-                            <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
-                              <DollarSign className="h-3 w-3" /> Funding
+                          )}
+
+                          {marketIntel && (
+                            <div>
+                              <div className="flex items-center gap-2 mb-3">
+                                <TrendingUp className="h-4 w-4 text-success" />
+                                <h4 className="font-display font-semibold text-sm">Market Intelligence</h4>
+                              </div>
+                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                {Object.entries(marketIntel).map(([key, val]) => (
+                                  <div key={key} className="p-3 rounded-lg bg-muted/30">
+                                    <div className="text-xs text-muted-foreground mb-1 capitalize">{key.replace(/_/g, ' ')}</div>
+                                    <div className="font-display font-semibold text-sm">{String(val)}</div>
+                                  </div>
+                                ))}
+                              </div>
                             </div>
-                            <p className="text-sm">{(r.company_info as Record<string, string>).funding}</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
+                          )}
 
-                  {r?.market_intelligence && (
-                    <div>
-                      <div className="flex items-center gap-2 mb-3">
-                        <TrendingUp className="h-4 w-4 text-success" />
-                        <h4 className="font-display font-semibold text-sm">Market Intelligence</h4>
-                      </div>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                        {Object.entries(r.market_intelligence as Record<string, unknown>).map(([key, val]) => (
-                          <div key={key} className="p-3 rounded-lg bg-muted/30">
-                            <div className="text-xs text-muted-foreground mb-1 capitalize">{key.replace(/_/g, " ")}</div>
-                            <div className="font-display font-semibold text-sm">{String(val)}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {r?.skill_insights && Array.isArray(r.skill_insights) && (
-                    <div>
-                      <div className="flex items-center gap-2 mb-3">
-                        <BookOpen className="h-4 w-4 text-info" />
-                        <h4 className="font-display font-semibold text-sm">Skill Insights</h4>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {(r.skill_insights as string[]).map((skill, i) => (
-                          <Badge key={i} variant="secondary" className="text-xs">{skill}</Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {r?.interview_insights && Array.isArray(r.interview_insights) && (
-                    <div>
-                      <div className="flex items-center gap-2 mb-3">
-                        <FileText className="h-4 w-4 text-warning" />
-                        <h4 className="font-display font-semibold text-sm">Interview Insights</h4>
-                      </div>
-                      <ul className="space-y-2">
-                        {(r.interview_insights as string[]).map((insight, i) => (
-                          <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
-                            <span className="text-warning mt-1.5 h-1.5 w-1.5 rounded-full bg-warning flex-shrink-0" />
-                            {insight}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
+                          {interviewData && (
+                            <div>
+                              <div className="flex items-center gap-2 mb-3">
+                                <FileText className="h-4 w-4 text-warning" />
+                                <h4 className="font-display font-semibold text-sm">Interview Insights</h4>
+                              </div>
+                              <div className="space-y-2">
+                                {interviewData.tips && (
+                                  <p className="text-sm text-muted-foreground">{interviewData.tips as string}</p>
+                                )}
+                                {(interviewData.common_questions as string[] | undefined)?.slice(0, 5).map((q, i) => (
+                                  <div key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                                    <span className="h-1.5 w-1.5 rounded-full bg-warning flex-shrink-0 mt-1.5" />
+                                    {q}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()
+                  ) : null}
                 </div>
               )}
             </Card>

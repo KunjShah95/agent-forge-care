@@ -10,24 +10,23 @@ Stores embeddings for:
 
 import logging
 import uuid
-from typing import Optional
 
 from qdrant_client import QdrantClient as QdrantRawClient
 from qdrant_client.models import (
     VectorParams,
     Distance,
-    PointStruct,
-    Filter,
-    FieldCondition,
-    MatchValue,
 )
 
 from app.config import settings
 
 logger = logging.getLogger("agentforge.qdrant")
 
-# Embedding dimension (using text-embedding-3-small: 1536, or all-MiniLM-L6-v2: 384)
-DEFAULT_EMBEDDING_SIZE = 384  # Local model dimension; update to 1536 for OpenAI
+# Embedding dimension (multi-provider support).
+# Used by: HuggingFace (768), Ollama nomic-embed-text (768), Gemini (768),
+# OpenAI text-embedding-3-small (1536), OpenAI text-embedding-3-large (3072).
+# Default: 768 (works with HuggingFace, Ollama, Gemini — most common)
+# When OpenAI is the active provider, pass 1536 explicitly.
+DEFAULT_EMBEDDING_SIZE = 768
 
 COLLECTIONS = {
     "resume_embeddings": VectorParams(

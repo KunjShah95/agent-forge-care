@@ -1,12 +1,11 @@
 import uuid
-from datetime import datetime, date, timezone
+from datetime import datetime, timezone
 from sqlalchemy import (
     Column,
     String,
     Text,
     Boolean,
     Integer,
-    Float,
     Date,
     DateTime,
     ForeignKey,
@@ -83,7 +82,7 @@ class User(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=gen_uuid)
     email = Column(String(255), unique=True, nullable=False, index=True)
     password_hash = Column(String(255), nullable=True)
-    firebase_uid = Column(String(255), unique=True, nullable=True, index=True)
+    firebase_uid = Column(String(255), unique=True, nullable=True)
     full_name = Column(String(255), nullable=False)
     avatar_url = Column(Text, nullable=True)
     created_at = Column(
@@ -138,7 +137,7 @@ class Profile(Base):
         nullable=False,
     )
     school = Column(String(255), nullable=True)
-    graduation_date = Column(Date, nullable=True)
+    graduation_date = Column(String(50), nullable=True)
     bio = Column(Text, nullable=True)
     portfolio_url = Column(Text, nullable=True)
     linkedin_url = Column(Text, nullable=True)
@@ -169,7 +168,7 @@ class Skill(Base):
     __tablename__ = "skills"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=gen_uuid)
-    name = Column(String(100), unique=True, nullable=False, index=True)
+    name = Column(String(100), unique=True, nullable=False)
 
 
 class ProfileSkill(Base):
@@ -208,7 +207,12 @@ class Opportunity(Base):
     company = Column(String(255), nullable=False)
     company_logo = Column(Text, nullable=True)
     location = Column(String(255), nullable=True)
+    city = Column(String(150), nullable=True, index=True)
+    state = Column(String(100), nullable=True, index=True)
+    country = Column(String(100), nullable=True, index=True)
+    industry = Column(String(150), nullable=True, index=True)
     remote = Column(Boolean, default=False)
+    work_type = Column(String(20), nullable=True)
     type = Column(String(50), nullable=False, index=True)
     salary_min = Column(Integer, nullable=True)
     salary_max = Column(Integer, nullable=True)
@@ -375,11 +379,11 @@ class PlannerGoal(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=gen_uuid)
     user_id = Column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     goal_text = Column(Text, nullable=False)
     plan = Column(JSON, default=list)
-    status = Column(String(20), default="active")
+    status = Column(String(20), default="active", index=True)
     created_at = Column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -437,7 +441,7 @@ class AlertConfig(Base):
     min_match_score = Column(Integer, default=80)
     frequency = Column(String(20), default="daily")
     is_active = Column(Boolean, default=True)
-    email_notify = Column(Boolean, default=False, nullable=False)
+    email_notify = Column(Boolean, default=False, server_default="false", nullable=False)
     created_at = Column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

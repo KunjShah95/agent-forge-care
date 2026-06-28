@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? "http://localhost:8000/api/v1" : "");
+const API_BASE = import.meta.env.VITE_API_URL || "/api/v1";
 
 export const apiConfigError = import.meta.env.DEV || import.meta.env.VITE_API_URL
   ? null
@@ -82,14 +82,6 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
 
 // Auth
 export const auth = {
-  // Deprecated: sign-in now handled via Firebase SDK in auth-context.tsx
-  register: (data: { email: string; password: string; full_name: string }) =>
-    request<{ access_token: string; refresh_token: string }>("/auth/register", { method: "POST", body: data }),
-
-  // Deprecated: sign-in now handled via Firebase SDK in auth-context.tsx
-  login: (data: { email: string; password: string }) =>
-    request<{ access_token: string; refresh_token: string }>("/auth/login", { method: "POST", body: data }),
-
   me: () => request<{ id: string; email: string; full_name: string }>("/auth/me"),
 };
 
@@ -123,7 +115,7 @@ export const profile = {
 
 // Opportunities
 export const opportunities = {
-  list: (params?: { type?: string; search?: string; remote?: boolean; page?: number; limit?: number }) =>
+  list: (params?: { type?: string; search?: string; remote?: boolean; work_type?: string; page?: number; limit?: number }) =>
     request<{ items: Opportunity[]; total: number; page: number }>("/opportunities", { params }),
 
   get: (id: string) => request<Opportunity>(`/opportunities/${id}`),
@@ -131,8 +123,47 @@ export const opportunities = {
   matches: () =>
     request<{ items: ScoredOpportunity[] }>("/opportunities/matches"),
 
-  refresh: () =>
-    request<{ task_id: string }>("/opportunities/refresh", { method: "POST" }),
+  refresh: (query?: string) =>
+    request<{ task_id: string }>("/opportunities/refresh", {
+      method: "POST",
+      body: query ? { query } : undefined,
+    }),
+
+  hackathons: () =>
+    request<{ from_search: HackathonResult[]; saved: HackathonResult[] }>(
+      "/opportunities/hackathons"
+    ),
+
+  filters: () =>
+    request<{
+      cities: string[];
+      states: string[];
+      countries: string[];
+      industries: string[];
+    }>("/opportunities/filters"),
+
+  scanHackathons: (opts?: { skills?: string[]; alert_enabled?: boolean; email_enabled?: boolean }) =>
+    request<{
+      new_matches: HackathonMatch[];
+      total_found: number;
+      message: string;
+    }>("/opportunities/hackathons/scan", {
+      method: "POST",
+      body: opts && Object.keys(opts).length > 0 ? opts : undefined,
+    }),
+
+  locations: () =>
+    request<{
+      locations: {
+        city?: string;
+        state?: string;
+        country?: string;
+        lat: number;
+        lng: number;
+        count: number;
+        avg_score?: number | null;
+      }[];
+    }>("/opportunities/locations"),
 };
 
 // Applications
@@ -266,7 +297,8 @@ export type Profile = {
   role_types: string[];
   company_sizes: string[];
   career_goal?: string;
-  skills: { id?: string; name: string; proficiency: string }[];
+  is_onboarded: boolean;
+  skills: { skill: { id: string; name: string }; proficiency: string }[];
 };
 
 export type Opportunity = {
@@ -275,7 +307,12 @@ export type Opportunity = {
   company: string;
   logo?: string;
   location?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  industry?: string;
   remote: boolean;
+  work_type?: string;
   type: string;
   salary_min?: number;
   salary_max?: number;
@@ -353,7 +390,7 @@ export type MonitorSettings = {
 };
 
 export const monitor = {
-  listAlerts: () => request<AlertConfig[]>("/monitor/alerts"),
+  listAlerts: () => request<{ items: AlertConfig[]; total: number; page: number }>("/monitor/alerts"),
   createAlert: (data: { name: string; keywords?: string[]; locations?: string[]; opportunity_types?: string[]; min_match_score?: number; frequency?: string }) =>
     request<AlertConfig>("/monitor/alerts", { method: "POST", body: data }),
   updateAlert: (id: string, data: Partial<AlertConfig>) =>
@@ -361,6 +398,7 @@ export const monitor = {
   deleteAlert: (id: string) => request<void>(`/monitor/alerts/${id}`, { method: "DELETE" }),
 
   getSettings: () => request<MonitorSettings>("/monitor/settings"),
+  // updateSettings returns the full merged settings object on success
   updateSettings: (data: Partial<MonitorSettings>) =>
     request<MonitorSettings>("/monitor/settings", { method: "PATCH", body: data }),
 };
@@ -373,6 +411,14 @@ export type AtsAnalysis = {
   present_keywords: string[];
   suggestions: string[];
   summary: string;
+  // GitHub-verified skills (from profile_scraper)
+  github_inferred_skills?: string[];
+  github_demonstrated_skills?: string[];
+  project_evidence?: string[];
+  // Portfolio-scraped data (from profile_scraper)
+  portfolio_skills?: string[];
+  portfolio_projects?: string[];
+  portfolio_role?: string | null;
 };
 
 export const resume = {
@@ -451,6 +497,35 @@ export type InterviewSession = {
   duration?: string;
 };
 
+export type HackathonMatch = {
+  id: string;
+  title: string;
+  company: string;
+  location?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  description?: string;
+  apply_url?: string;
+  matched_skills: string[];
+  skill_score: number;
+};
+
+export type HackathonResult = {
+  id?: string;
+  title: string;
+  company: string;
+  location?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  description?: string;
+  apply_url?: string;
+  deadline?: string;
+  source?: string;
+  skills_required?: string[];
+};
+
 export type MemoryEntry = {
   id: string;
   key: string;
@@ -458,4 +533,107 @@ export type MemoryEntry = {
   weight: number;
   created_at: string;
   updated_at: string;
+};
+
+// ─── Hiring Agent ────────────────────────────────────────
+
+export type ExtractedResume = {
+  basics?: { name?: string; email?: string; phone?: string; url?: string; summary?: string; location?: string; profiles?: Record<string, unknown>[] };
+  work?: { name?: string; position?: string; startDate?: string; endDate?: string; summary?: string; highlights?: string[] }[];
+  education?: { institution?: string; area?: string; studyType?: string; startDate?: string; endDate?: string }[];
+  skills?: { name?: string; level?: string; keywords?: string[] }[];
+  projects?: { name?: string; description?: string; url?: string; technologies?: string[]; highlights?: string[] }[];
+  awards?: { title?: string; date?: string; awarder?: string; summary?: string }[];
+  raw_text?: string;
+};
+
+export type HiringAgentEval = {
+  scores: { open_source: { score: number; max: number; evidence: string }; self_projects: { score: number; max: number; evidence: string }; production: { score: number; max: number; evidence: string }; technical_skills: { score: number; max: number; evidence: string } };
+  bonus_points: { total: number; breakdown: string };
+  deductions: { total: number; reasons: string };
+  key_strengths: string[];
+  areas_for_improvement: string[];
+};
+
+export type HiringAgentATS = {
+  keyword_coverage_pct: number;
+  matched_keywords: string[];
+  missing_keywords: string[];
+  matched_count: number;
+  missing_count: number;
+  suggestions: string[];
+  experience_years?: number;
+  resume_experience_years?: number;
+};
+
+export type JDMatchResult = {
+  skill_match: Record<string, unknown>;
+  experience_match: Record<string, unknown>;
+  education_match: Record<string, unknown>;
+  project_relevance: Record<string, unknown>;
+  overall_score: number;
+  overall_assessment: string;
+  gap_analysis: { area: string; severity: string }[];
+};
+
+export type ImprovementItem = {
+  category: string;
+  suggestion: string;
+  impact: string;
+  effort: string;
+  priority_score: number;
+};
+
+export type PipelineResult = {
+  name: string;
+  resume: ExtractedResume;
+  overall_score: number;
+  max_score: number;
+  evaluation: HiringAgentEval;
+  improvements: ImprovementItem[];
+  live_demo_status: { url: string; status: string }[];
+  github_summary?: Record<string, unknown>;
+  portfolio_summary?: Record<string, unknown>;
+  report_html?: string;
+};
+
+export type PortfolioEnrichResult = {
+  url: string;
+  role?: string;
+  summary?: string;
+  projects?: { name: string; description?: string; technologies?: string[] }[];
+  technologies_detected?: string[];
+  experience?: string[];
+};
+
+export const hiringAgent = {
+  pipeline: (data?: { github_url?: string; portfolio_url?: string; jd_text?: string; position_type?: string }) =>
+    request<PipelineResult>("/hiring-agent/pipeline", { method: "POST", body: data }),
+
+  extract: () => request<ExtractedResume>("/hiring-agent/extract"),
+
+  evaluateText: () => request<HiringAgentEval>("/hiring-agent/evaluate-text"),
+
+  ats: () => request<HiringAgentATS>("/hiring-agent/ats"),
+
+  matchJd: (data: { job_description: string }) =>
+    request<JDMatchResult>("/hiring-agent/match-jd", { method: "POST", body: data }),
+
+  coverLetter: (data: { job_title: string; company_name: string; job_description: string }) =>
+    request<string>("/hiring-agent/cover-letter", { method: "POST", body: data }),
+
+  githubEnrich: (data: { github_url: string }) =>
+    request<Record<string, unknown>>("/hiring-agent/github-enrich", { method: "POST", body: data }),
+
+  portfolioEnrich: (data: { portfolio_url: string }) =>
+    request<PortfolioEnrichResult>("/hiring-agent/portfolio-enrich", { method: "POST", body: data }),
+
+  liveDemos: (data: { urls: string[] }) =>
+    request<{ url: string; status: string }[]>("/hiring-agent/live-demos", { method: "POST", body: data }),
+
+  report: () =>
+    request<string>("/hiring-agent/report"),
+
+  history: () =>
+    request<{ items: { name: string; overall_score: number; max_score: number; timestamp: string }[] }>("/hiring-agent/history"),
 };

@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, func
@@ -6,6 +7,8 @@ from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User, MemoryEntry
 from app.schemas.user import MemoryCreate, MemoryUpdate, MemoryOut, MemoryList
+
+logger = logging.getLogger("agentforge.memory")
 
 router = APIRouter()
 
@@ -18,27 +21,31 @@ async def list_memory(
     db: AsyncSession = Depends(get_db),
 ):
     """List all memory entries for the current user."""
-    count_result = await db.execute(
-        select(func.count())
-        .select_from(MemoryEntry)
-        .where(MemoryEntry.user_id == user.id)
-    )
-    total = count_result.scalar()
+    try:
+        count_result = await db.execute(
+            select(func.count())
+            .select_from(MemoryEntry)
+            .where(MemoryEntry.user_id == user.id)
+        )
+        total = count_result.scalar()
 
-    offset = (page - 1) * limit
-    result = await db.execute(
-        select(MemoryEntry)
-        .where(MemoryEntry.user_id == user.id)
-        .order_by(desc(MemoryEntry.updated_at))
-        .offset(offset)
-        .limit(limit)
-    )
-    entries = result.scalars().all()
-    return MemoryList(
-        items=[MemoryOut.model_validate(e) for e in entries],
-        total=total,
-        page=page,
-    )
+        offset = (page - 1) * limit
+        result = await db.execute(
+            select(MemoryEntry)
+            .where(MemoryEntry.user_id == user.id)
+            .order_by(desc(MemoryEntry.updated_at))
+            .offset(offset)
+            .limit(limit)
+        )
+        entries = result.scalars().all()
+        return MemoryList(
+            items=[MemoryOut.model_validate(e) for e in entries],
+            total=total,
+            page=page,
+        )
+    except Exception as e:
+        logger.error("Failed to list memory for user %s: %s", user.id, str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to list memory: {str(e)}")
 
 
 @router.post("", response_model=MemoryOut, status_code=201)
@@ -48,15 +55,19 @@ async def create_memory(
     db: AsyncSession = Depends(get_db),
 ):
     """Create a new memory entry."""
-    entry = MemoryEntry(
-        user_id=user.id,
-        key=data.key,
-        value=data.value,
-        weight=data.weight,
-    )
-    db.add(entry)
-    await db.flush()
-    return entry
+    try:
+        entry = MemoryEntry(
+            user_id=user.id,
+            key=data.key,
+            value=data.value,
+            weight=data.weight,
+        )
+        db.add(entry)
+        await db.flush()
+        return entry
+    except Exception as e:
+        logger.error("Failed to create memory for user %s: %s", user.id, str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to create memory: {str(e)}")
 
 
 @router.patch("/{id}", response_model=MemoryOut)
@@ -67,17 +78,23 @@ async def update_memory(
     db: AsyncSession = Depends(get_db),
 ):
     """Update a memory entry."""
-    result = await db.execute(
-        select(MemoryEntry).where(MemoryEntry.id == id, MemoryEntry.user_id == user.id)
-    )
-    entry = result.scalar_one_or_none()
-    if not entry:
-        raise HTTPException(status_code=404, detail="Memory entry not found")
+    try:
+        result = await db.execute(
+            select(MemoryEntry).where(MemoryEntry.id == id, MemoryEntry.user_id == user.id)
+        )
+        entry = result.scalar_one_or_none()
+        if not entry:
+            raise HTTPException(status_code=404, detail="Memory entry not found")
 
-    for key, value in data.model_dump(exclude_unset=True).items():
-        setattr(entry, key, value)
-    await db.flush()
-    return entry
+        for key, value in data.model_dump(exclude_unset=True).items():
+            setattr(entry, key, value)
+        await db.flush()
+        return entry
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to update memory for user %s: %s", user.id, str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to update memory: {str(e)}")
 
 
 @router.delete("/{id}", status_code=204)
@@ -87,13 +104,19 @@ async def delete_memory(
     db: AsyncSession = Depends(get_db),
 ):
     """Delete a memory entry."""
-    result = await db.execute(
-        select(MemoryEntry).where(MemoryEntry.id == id, MemoryEntry.user_id == user.id)
-    )
-    entry = result.scalar_one_or_none()
-    if not entry:
-        raise HTTPException(status_code=404, detail="Memory entry not found")
-    await db.delete(entry)
+    try:
+        result = await db.execute(
+            select(MemoryEntry).where(MemoryEntry.id == id, MemoryEntry.user_id == user.id)
+        )
+        entry = result.scalar_one_or_none()
+        if not entry:
+            raise HTTPException(status_code=404, detail="Memory entry not found")
+        await db.delete(entry)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to delete memory for user %s: %s", user.id, str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to delete memory: {str(e)}")
 
 
 @router.get("/context")
@@ -102,10 +125,14 @@ async def get_memory_context(
     db: AsyncSession = Depends(get_db),
 ):
     """Get condensed memory context for agent system use."""
-    result = await db.execute(select(MemoryEntry).where(MemoryEntry.user_id == user.id))
-    entries = result.scalars().all()
+    try:
+        result = await db.execute(select(MemoryEntry).where(MemoryEntry.user_id == user.id))
+        entries = result.scalars().all()
 
-    context = {}
-    for entry in entries:
-        context[entry.key] = entry.value
-    return context
+        context = {}
+        for entry in entries:
+            context[entry.key] = entry.value
+        return context
+    except Exception as e:
+        logger.error("Failed to get memory context for user %s: %s", user.id, str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to get memory context: {str(e)}")

@@ -18,6 +18,8 @@ def register_routes():
         chat,
         resume,
         notifications,
+        status,
+        hiring_agent,
     )
 
     router.include_router(auth.router, prefix="/auth", tags=["Auth"])
@@ -37,6 +39,10 @@ def register_routes():
     router.include_router(resume.router, prefix="/resume", tags=["Resume"])
     router.include_router(
         notifications.router, prefix="/notifications", tags=["Notifications"]
+    )
+    router.include_router(status.router, tags=["Status"])
+    router.include_router(
+        hiring_agent.router, prefix="/hiring-agent", tags=["Hiring Agent"]
     )
 
 

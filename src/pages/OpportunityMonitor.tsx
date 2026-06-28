@@ -147,12 +147,12 @@ export default function OpportunityMonitor() {
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
           )}
-          {!isLoading && alerts && alerts.length === 0 && (
+          {!isLoading && alerts?.items?.length === 0 && (
             <div className="text-center py-8 text-muted-foreground text-sm">
               No alerts configured. Click "New alert" to get started.
             </div>
           )}
-          {alerts?.map((a) => (
+          {alerts?.items?.map((a) => (
             <div key={a.id} className="flex items-center gap-4 p-4 rounded-xl bg-muted/30 hover:bg-muted/50 transition">
               <Switch checked={a.is_active} onCheckedChange={() => handleToggle(a)} />
               <div className="flex-1 min-w-0">

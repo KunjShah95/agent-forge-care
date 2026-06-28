@@ -1,17 +1,15 @@
 from decimal import Decimal
-from datetime import date, timezone
-from datetime import datetime
 import logging
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select
 from app.models.user import (
-    Profile,
     Opportunity,
     MatchScore,
     MemoryEntry,
 )
 from app.services.profile_service import ProfileService
 from app.services.rerank_service import get_reranker
+from app.config import settings
 
 logger = logging.getLogger("agentforge.match")
 
@@ -34,26 +32,77 @@ class MatchService:
         profile = await profile_service.get_or_create_profile(user_id)
         skills = await profile_service.get_skill_names(profile.id)
 
-        # Get memory preferences
-        mem_result = await self.db.execute(
-            select(MemoryEntry).where(
-                MemoryEntry.user_id == user_id,
-                MemoryEntry.key == "preferences",
+        # ── Fetch GitHub + portfolio skills from memory ──
+        github_skills: set[str] = set()
+        github_projects: list[str] = []
+        portfolio_skills: set[str] = set()
+        portfolio_projects: list[str] = []
+        try:
+            gh_result = await self.db.execute(
+                select(MemoryEntry).where(
+                    MemoryEntry.user_id == user_id,
+                    MemoryEntry.key == "github_skills_analysis",
+                )
             )
-        )
-        preferences = mem_result.scalar_one_or_none()
+            gh_entry = gh_result.scalar_one_or_none()
+            if gh_entry and gh_entry.value and isinstance(gh_entry.value, dict) and "error" not in gh_entry.value:
+                gh_skills_raw = gh_entry.value.get("skills", [])
+                github_skills = set(s.lower() for s in gh_skills_raw if isinstance(s, str) and s)
+                github_projects = gh_entry.value.get("project_highlights", [])
 
-        # Skills match
+            pf_result = await self.db.execute(
+                select(MemoryEntry).where(
+                    MemoryEntry.user_id == user_id,
+                    MemoryEntry.key == "portfolio_scrape",
+                )
+            )
+            pf_entry = pf_result.scalar_one_or_none()
+            if pf_entry and pf_entry.value and isinstance(pf_entry.value, dict) and "error" not in pf_entry.value:
+                pf_skills_raw = pf_entry.value.get("skills", [])
+                pf_techs_raw = pf_entry.value.get("technologies_detected", [])
+                portfolio_skills = set(
+                    s.lower() for s in (pf_skills_raw or []) + (pf_techs_raw or [])
+                    if isinstance(s, str) and s
+                )
+                pf_projects_raw = pf_entry.value.get("projects", [])
+                portfolio_projects = [str(p) for p in (pf_projects_raw or []) if p]
+        except Exception as e:
+            logger.debug("Failed to fetch GitHub/portfolio memory for match calculation: %s", e)
+
+        # Skills match — merge profile skills with GitHub + portfolio skills
         profile_skills = set(s.lower() for s in skills)
+        combined_skills = profile_skills | github_skills | portfolio_skills
         required_skills = set(s.lower() for s in (opportunity.skills_required or []))
+
+        # Base skill match uses profile skills only (official/declared)
         skill_match = (
             len(profile_skills & required_skills) / max(len(required_skills), 1) * 100
         )
 
+        # GitHub boost: count additional matches from GitHub-inferred skills
+        gh_only_matches = (github_skills - profile_skills) & required_skills
+        has_github_boost = len(gh_only_matches) > 0
+
+        # Portfolio boost: count additional matches from portfolio-detected skills
+        pf_only_matches = (portfolio_skills - profile_skills - github_skills) & required_skills
+        has_portfolio_boost = len(pf_only_matches) > 0
+
+        if has_github_boost or has_portfolio_boost:
+            # Compute what the match would be with all combined skills
+            boosted_match = (
+                len(combined_skills & required_skills) / max(len(required_skills), 1) * 100
+            )
+            # Blend: configurable weights with runtime normalization (always sums to 1.0)
+            pw = settings.match_profile_weight
+            ew = settings.match_external_weight
+            total = pw + ew
+            if total > 0:
+                skill_match = skill_match * (pw / total) + boosted_match * (ew / total)
+
         # Location match
         location_match = 100.0
         if opportunity.location:
-            preferred = [l.lower() for l in (profile.target_locations or [])]
+            preferred = [loc.lower() for loc in (profile.target_locations or [])]
             opp_loc = opportunity.location.lower()
             if (
                 "remote" not in opp_loc
@@ -95,6 +144,27 @@ class MatchService:
         if skill_match >= 70:
             matched = profile_skills & required_skills
             reasons.append(f"Skills match: {', '.join(matched)[:60]}")
+            if has_github_boost:
+                reasons.append(
+                    f"+ GitHub-proven: {', '.join(sorted(gh_only_matches))[:50]}"
+                )
+            if has_portfolio_boost:
+                reasons.append(
+                    f"+ Portfolio-detected: {', '.join(sorted(pf_only_matches))[:50]}"
+                )
+        else:
+            if has_github_boost:
+                reasons.append(
+                    f"GitHub shows {', '.join(sorted(gh_only_matches))[:50]} — add to profile for full credit"
+                )
+            if has_portfolio_boost:
+                reasons.append(
+                    f"Portfolio shows {', '.join(sorted(pf_only_matches))[:50]} — add to profile for full credit"
+                )
+        if github_projects:
+            reasons.append("GitHub project activity detected")
+        if portfolio_projects:
+            reasons.append("Portfolio projects detected")
         if location_match >= 80:
             reasons.append("Location preference aligned")
         if opportunity.remote:
@@ -116,7 +186,7 @@ class MatchService:
         result = await self.db.execute(
             select(Opportunity).where(
                 Opportunity.user_id == user_id,
-                Opportunity.is_active == True,
+                Opportunity.is_active.is_(True),
             )
         )
         opportunities = result.scalars().all()

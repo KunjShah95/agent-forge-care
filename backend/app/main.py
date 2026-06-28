@@ -7,9 +7,12 @@ from datetime import datetime, timezone
 
 from pathlib import Path
 from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from starlette.middleware.httpsredirect import HTTPSRedirectMiddleware
 from sqlalchemy import text
 
 from app.config import settings
@@ -19,6 +22,7 @@ from app.middleware.auth import RequestLogMiddleware
 from app.memory.qdrant_client import init_collections, get_qdrant_client
 from app.dependencies import rate_limiter, _get_rate_limit_key
 from app.tasks.memory_cleanup import cleanup_expired_memory
+from app.tasks.hackathon_scanner import run_scheduled_hackathon_scan
 
 class JSONFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
@@ -68,9 +72,13 @@ async def lifespan(app: FastAPI):
         logger.warning("Qdrant init skipped: %s", e)
     _cleanup_task = asyncio.create_task(_run_memory_cleanup_loop())
     logger.info("Memory cleanup background task started")
+    _hackathon_scanner_task = asyncio.create_task(run_scheduled_hackathon_scan())
+    logger.info("Hackathon scanner background task started")
     yield
     if _cleanup_task:
         _cleanup_task.cancel()
+    if _hackathon_scanner_task:
+        _hackathon_scanner_task.cancel()
     await close_db()
     logger.info("Shutdown complete")
 
@@ -85,15 +93,53 @@ app = FastAPI(
 )
 
 
-# Middleware
+# Security middleware
+if not settings.debug:
+    app.add_middleware(
+        TrustedHostMiddleware, allowed_hosts=["agentforge.ai", "www.agentforge.ai"]
+    )
+    app.add_middleware(HTTPSRedirectMiddleware)
+
+# CORS middleware with stricter settings
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=[
+        "Authorization",
+        "Content-Type",
+        "X-Requested-With",
+        "Accept",
+        "Origin",
+        "User-Agent",
+        "X-CSRF-Token",
+    ],
+    expose_headers=["X-Total-Count", "X-Page-Count"],
+    max_age=3600,
 )
+
+# GZip compression
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+# Request logging middleware
 app.add_middleware(RequestLogMiddleware)
+
+
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Content-Security-Policy"] = "default-src 'self';"
+    
+    response.headers["X-RateLimit-Limit"] = str(settings.rate_limit_per_minute)
+    response.headers["X-RateLimit-Remaining"] = "100"
+    response.headers["X-RateLimit-Reset"] = str(int(time.time()) + 60)
+    
+    return response
 
 
 @app.middleware("http")
@@ -103,10 +149,15 @@ async def rate_limit_middleware(request: Request, call_next):
     try:
         limiter = await rate_limiter()
         key = _get_rate_limit_key(request)
-        if await limiter.is_rate_limited(key, max_requests=100, window_seconds=60):
+        if await limiter.is_rate_limited(key, max_requests=settings.rate_limit_per_minute, window_seconds=60):
             return JSONResponse(
                 status_code=429,
-                content={"detail": "Too many requests. Please slow down."},
+                content={
+                    "error": "Too many requests",
+                    "message": "Please slow down and try again later.",
+                    "retry_after": 60,
+                    "limit": settings.rate_limit_per_minute,
+                },
             )
     except Exception:
         logger.warning("Rate limiter unavailable (Redis down?) — allowing request")

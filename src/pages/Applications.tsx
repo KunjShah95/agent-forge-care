@@ -26,6 +26,17 @@ import { CardSkeleton } from "@/components/ui/skeleton";
 type Stage = "Saved" | "Applied" | "OA" | "Interview" | "Offer" | "Rejected";
 
 const stages: Stage[] = ["Saved", "Applied", "OA", "Interview", "Offer", "Rejected"];
+
+// Backend stores stages as lowercase enum values ("applied", "oa", …); the UI
+// uses capitalized labels. Convert at the API boundary so cards land in the
+// right column and PATCH sends a value the enum accepts.
+const API_TO_UI_STAGE: Record<string, Stage> = {
+  saved: "Saved", applied: "Applied", oa: "OA",
+  interview: "Interview", offer: "Offer", rejected: "Rejected", withdrawn: "Rejected",
+};
+const toUiStage = (s: string | null | undefined): Stage =>
+  API_TO_UI_STAGE[(s || "saved").toLowerCase()] || "Saved";
+const toApiStage = (s: Stage): string => s.toLowerCase();
 const stageColor: Record<Stage, string> = {
   Saved: "bg-muted-foreground/10 text-muted-foreground",
   Applied: "bg-blue-500/10 text-blue-500",
@@ -182,7 +193,7 @@ export default function Applications() {
     () =>
       (data?.items || []).map((a) => ({
         id: a.id,
-        stage: (a.stage || "Saved") as Stage,
+        stage: toUiStage(a.stage),
         title: a.opportunity?.title || "Untitled",
         company: a.opportunity?.company || "Unknown",
         logo: a.opportunity?.company?.charAt(0) || "?",
@@ -195,7 +206,7 @@ export default function Applications() {
   );
 
   const move = (id: string, stage: Stage) => {
-    updateApp.mutate({ id, data: { stage } });
+    updateApp.mutate({ id, data: { stage: toApiStage(stage) } });
   };
 
   const sensors = useSensors(

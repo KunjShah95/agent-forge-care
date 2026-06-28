@@ -42,13 +42,14 @@ from app.agents.job_agent import discover_jobs
 from app.agents.research_agent import conduct_research
 from app.agents.assistant_agent import (
     tailor_resume,
-    generate_cover_letter,
     prepare_interview,
     generate_outreach,
     run_daily_scan,
     get_career_guidance,
 )
 from app.utils.demo_data import generate_demo_opportunities
+from app.utils.location import parse_location
+from app.utils.industry import detect_industry
 from app.services.profile_service import ProfileService
 from app.services.memory_service import MemoryService
 from app.services.notification_service import create_notification
@@ -187,7 +188,7 @@ async def _execute_with_retry(
     """
     Execute a single agent with exponential backoff retry.
 
-    Retry schedule: attempt 0 (immediate), attempt 1 (2s wait), attempt 2 (4s wait).
+    Retry schedule: attempt 0 fails -> 1s wait -> attempt 1 fails -> 2s wait -> attempt 2.
     Each attempt is individually timed out via asyncio.wait_for.
     """
     last_error: Exception | None = None
@@ -276,6 +277,7 @@ async def _execute_single_agent_inner(
                 type="success",
             )
 
+            await db.commit()
             return {agent_str: agent_result}
 
         except Exception as e:
@@ -313,7 +315,6 @@ def _filter_tasks_by_context(tasks: list[dict], profile: dict) -> list[dict]:
     filtered: list[dict] = []
     for task in tasks:
         agent = task.get("agent", "")
-        action = task.get("action", "")
 
         # Skip internship if role types exclude internship
         if agent == "internship" and role_types:
@@ -441,14 +442,34 @@ async def _fallback_search(
     except Exception:
         raw_results = generate_demo_opportunities(agent_type, query, location)
 
+    from app.utils.work_mode import infer_work_type
+
     items = []
     for r in raw_results[:10]:
+        loc_raw = r.get("location")
+        parsed = parse_location(loc_raw)
+        industry = detect_industry(
+            title=r.get("title", ""),
+            company=r.get("company", ""),
+            description=r.get("description", ""),
+        )
+
+        remote = r.get("remote", False)
+        work_type = r.get("work_type") or infer_work_type(
+            remote, r.get("title"), r.get("description"), loc_raw
+        )
+
         opp = Opportunity(
             user_id=user_id,
             title=r.get("title", "Untitled"),
             company=r.get("company", "Unknown"),
-            location=r.get("location"),
-            remote=r.get("remote", False),
+            location=loc_raw,
+            city=parsed["city"],
+            state=parsed["state"],
+            country=parsed["country"],
+            industry=industry,
+            remote=remote,
+            work_type=work_type,
             type=r.get("type", agent_type.value.capitalize()),
             description=r.get("description"),
             apply_url=r.get("apply_url"),
@@ -708,11 +729,11 @@ async def generate_final_response_node(state: PlannerGraphState) -> dict:
                     db,
                     user_id,
                     title="Goal completed",
-                    body=f"Your goal has been processed.",
+                    body="Your goal has been processed.",
                     type="success",
                 )
 
-        await db.flush()
+        await db.commit()
 
     return {
         "final_response": final_response,
@@ -831,16 +852,19 @@ async def run_planner_agent(user_id: str, goal: str) -> str:
 # ─── Direct API Entry Points ────────────────────────────────
 
 
-async def run_opportunity_scan(user_id: str) -> str:
+async def run_opportunity_scan(user_id: str, query: Optional[str] = None) -> str:
     """Run the opportunity monitor to scan for new openings."""
     task_id = gen_id()
+    params = {"action": "scan"}
+    if query:
+        params["search_query"] = query
 
     async with async_session_factory() as db:
         task = AgentTask(
             id=task_id,
             user_id=user_id,
             agent_type=AgentType.monitor,
-            input={"action": "scan"},
+            input=params,
             status=TaskStatus.running,
             started_at=datetime.now(timezone.utc),
         )
@@ -848,7 +872,7 @@ async def run_opportunity_scan(user_id: str) -> str:
         await db.flush()
 
         try:
-            result = await run_daily_scan(user_id, {"action": "scan"}, db)
+            result = await run_daily_scan(user_id, params, db)
 
             task.status = TaskStatus.completed
             task.output = result
@@ -876,7 +900,10 @@ async def run_opportunity_scan(user_id: str) -> str:
                 body=str(e)[:200],
                 type="error",
             )
+            await db.rollback()
+            return task_id
 
+        await db.commit()
     return task_id
 
 
@@ -924,6 +951,6 @@ async def run_resume_tailoring(user_id: str, application_id: str) -> str:
         task.status = TaskStatus.completed
         task.completed_at = datetime.now(timezone.utc)
         db.add(task)
-        await db.flush()
+        await db.commit()
 
     return task_id

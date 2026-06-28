@@ -10,7 +10,7 @@ from typing import TypedDict
 import json
 import logging
 
-from app.config import settings
+from app.services.model_manager import get_completion_llm
 
 logger = logging.getLogger("agentforge.planner")
 
@@ -94,22 +94,16 @@ Example:
 
 async def llm_decompose_goal(goal: str, profile: dict, memory_context: dict) -> list[Task] | None:
     """
-    Decompose a goal using LangChain's ChatOpenAI.
+    Decompose a goal using the best available LLM (multi-provider fallback chain).
     Returns None if LLM is unavailable or fails (caller falls back to keyword method).
     """
-    if not settings.openai_api_key:
-        logger.debug("LLM decomposition skipped: no OpenAI API key configured")
+    llm = get_completion_llm(temperature=0.3, preferred_provider="openai")
+    if not llm:
+        logger.debug("LLM decomposition skipped: no LLM provider available")
         return None
 
     try:
-        from langchain_openai import ChatOpenAI
         from langchain_core.messages import HumanMessage
-
-        llm = ChatOpenAI(
-            model="gpt-4o-mini",
-            temperature=0.3,
-            api_key=settings.openai_api_key,
-        )
 
         prompt = _build_decomposition_prompt(goal, profile, memory_context)
         response = await llm.ainvoke([HumanMessage(content=prompt)])
@@ -274,10 +268,25 @@ async def decompose_goal_with_llm(goal: str, profile: dict, memory_context: dict
     Async entry point: tries LLM decomposition first, falls back to keyword method.
     This is the preferred entry point for the graph nodes and API endpoints.
     """
-    llm_tasks = await llm_decompose_goal(goal, profile, memory_context)
-    if llm_tasks is not None:
-        return llm_tasks
-    return _keyword_decompose(goal, profile, memory_context)
+    # Input validation with graceful fallback
+    if not goal or not isinstance(goal, str) or len(goal.strip()) < 3:
+        logger.warning("Empty or invalid goal received: %r — returning empty task list", goal)
+        return []
+    
+    if not isinstance(profile, dict):
+        profile = {}
+    
+    if not isinstance(memory_context, dict):
+        memory_context = {}
+
+    try:
+        llm_tasks = await llm_decompose_goal(goal, profile, memory_context)
+        if llm_tasks is not None:
+            return llm_tasks
+        return _keyword_decompose(goal, profile, memory_context)
+    except Exception as e:
+        logger.error("Goal decomposition failed for goal '%s': %s", goal, str(e))
+        raise
 
 
 # ─── Response Formatting ────────────────────────────────────

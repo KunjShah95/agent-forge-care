@@ -9,7 +9,6 @@ Provides a unified interface for storing and retrieving:
 
 import logging
 import uuid
-from typing import Optional, Any
 
 from app.services.rerank_service import get_reranker
 

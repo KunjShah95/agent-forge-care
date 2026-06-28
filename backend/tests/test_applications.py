@@ -131,7 +131,8 @@ async def test_create_application_invalid_id_format(auth_client, mock_db):
         "/api/v1/applications",
         json={"opportunity_id": "not-a-uuid"},
     )
-    assert response.status_code == 404
+    # Schema validates UUID format at the Pydantic level, returning 422
+    assert response.status_code == 422
 
 
 @pytest.mark.asyncio

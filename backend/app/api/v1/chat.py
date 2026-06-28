@@ -12,16 +12,13 @@ tasks to specialist agents, and streams everything back in real-time.
 
 import json
 import logging
-import asyncio
-import uuid
-from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db, async_session_factory
-from app.dependencies import get_current_user, get_optional_user
+from app.dependencies import get_optional_user
 from app.models.user import User, AgentType
 from app.agents.planner import decompose_goal_with_llm, format_planner_response
 from app.agents.graph import dispatch_agent
@@ -112,7 +109,7 @@ async def chat_stream(
                 }
 
             # ── Step 1: Decompose goal ──
-            yield _sse_text(f"## 🔍 Analyzing your goal\n\n")
+            yield _sse_text("## 🔍 Analyzing your goal\n\n")
             yield _sse_text(f"**Goal:** {goal}\n\n")
             yield _sse_data({"type": "phase", "phase": "planning", "message": "Decomposing goal into tasks..."})
 
@@ -135,7 +132,7 @@ async def chat_stream(
                 yield _sse_text(f"{i}. **{t['agent'].title()} Agent** → {t['action']}\n")
 
             # ── Step 2: Dispatch tasks sequentially ──
-            yield _sse_text(f"\n---\n\n")
+            yield _sse_text("\n---\n\n")
             results = {}
 
             for t in subtasks:
@@ -170,7 +167,7 @@ async def chat_stream(
                                 yield _sse_text(f"  *...and {len(items) - 5} more*\n")
 
                         if result.get("suggestions"):
-                            yield _sse_text(f"\n**Suggestions:**\n\n")
+                            yield _sse_text("\n**Suggestions:**\n\n")
                             for s in result["suggestions"][:4]:
                                 yield _sse_text(f"- {s}\n")
 
@@ -209,11 +206,11 @@ async def chat_stream(
                     results[t["agent"]] = {"error": str(e)}
 
             # ── Step 3: Final summary ──
-            yield _sse_text(f"\n---\n\n")
+            yield _sse_text("\n---\n\n")
             summary = format_planner_response(goal, results)
             for line in summary.split("\n"):
                 yield _sse_text(line + "\n")
-            yield _sse_text(f"\n\n**All tasks complete!** 🎉\n")
+            yield _sse_text("\n\n**All tasks complete!** 🎉\n")
 
             yield _sse_data({
                 "type": "plan_complete",

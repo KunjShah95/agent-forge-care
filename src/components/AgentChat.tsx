@@ -281,7 +281,7 @@ export default function AgentChat() {
               <Button
                 type="submit"
                 className="h-11 w-11 bg-gradient-1 shadow-glow"
-                disabled={!input.trim()}
+                disabled={!input || !input.trim()}
               >
                 <Send className="h-4 w-4" />
               </Button>

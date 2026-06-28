@@ -12,7 +12,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useMemory, useCreateMemory, useUpdateMemory, useDeleteMemory, useProfile } from "@/api/hooks";
-import { toast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import type { MemoryEntry } from "@/api/client";
 
 function formatRelativeTime(dateStr: string) {
@@ -121,23 +121,23 @@ export default function MemoryViewer() {
     try {
       parsedValue = JSON.parse(editValue);
     } catch {
-      toast({ title: "Invalid JSON", description: "Value must be valid JSON", variant: "destructive" });
+      toast.error("Invalid JSON", { description: "Value must be valid JSON" });
       return;
     }
     const weight = parseFloat(editWeight);
     if (isNaN(weight)) {
-      toast({ title: "Invalid weight", description: "Weight must be a number", variant: "destructive" });
+      toast.error("Invalid weight", { description: "Weight must be a number" });
       return;
     }
     updateMemory.mutate(
       { id: editingEntry.id, data: { value: parsedValue, weight } },
       {
         onSuccess: () => {
-          toast({ title: "Memory updated" });
+          toast.success("Memory updated");
           setEditingEntry(null);
         },
         onError: () => {
-          toast({ title: "Failed to update memory", variant: "destructive" });
+          toast.error("Failed to update memory");
         },
       }
     );
@@ -151,11 +151,11 @@ export default function MemoryViewer() {
     if (!deleteTarget) return;
     deleteMemory.mutate(deleteTarget.id, {
       onSuccess: () => {
-        toast({ title: "Memory deleted" });
+        toast.success("Memory deleted");
         setDeleteTarget(null);
       },
       onError: () => {
-        toast({ title: "Failed to delete memory", variant: "destructive" });
+        toast.error("Failed to delete memory");
       },
     });
   };
@@ -265,9 +265,9 @@ export default function MemoryViewer() {
                   const level = skill.proficiency || "intermediate";
                   const weight = level === "expert" ? 1.0 : level === "advanced" ? 0.85 : level === "intermediate" ? 0.65 : 0.3;
                   return (
-                    <div key={skill.id} className="p-3 rounded-xl bg-muted/30">
+                    <div key={skill.skill.id} className="p-3 rounded-xl bg-muted/30">
                       <div className="flex items-center justify-between mb-1">
-                        <span className="font-medium text-sm">{skill.name}</span>
+                        <span className="font-medium text-sm">{skill.skill.name}</span>
                         <Badge
                           variant="outline"
                           className={`text-[10px] ${
@@ -350,7 +350,7 @@ export default function MemoryViewer() {
                 JSON.stringify(
                   {
                     memory: entries.map((e) => ({ key: e.key, value: e.value, weight: e.weight })),
-                    skills: skills.map((s) => ({ name: s.name, proficiency: s.proficiency })),
+                    skills: skills.map((s) => ({ name: s.skill.name, proficiency: s.proficiency })),
                   },
                   null,
                   2

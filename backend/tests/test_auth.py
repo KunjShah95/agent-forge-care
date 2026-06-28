@@ -9,43 +9,6 @@ from tests.conftest import (
     TEST_FIREBASE_UID,
 )
 
-# ─── Deprecated Endpoints ────────────────────────────────────
-
-
-@pytest.mark.asyncio
-async def test_register_deprecated(async_client, mock_db):
-    response = await async_client.post(
-        "/api/v1/auth/register",
-        json={
-            "email": "new@example.com",
-            "password": "password123",
-            "full_name": "New User",
-        },
-    )
-    assert response.status_code == 400
-    assert "Firebase" in response.json()["detail"]
-
-
-@pytest.mark.asyncio
-async def test_login_deprecated(async_client, mock_db):
-    response = await async_client.post(
-        "/api/v1/auth/login",
-        json={"email": TEST_USER_EMAIL, "password": "password123"},
-    )
-    assert response.status_code == 400
-    assert "Firebase" in response.json()["detail"]
-
-
-@pytest.mark.asyncio
-async def test_refresh_deprecated(async_client, mock_db):
-    response = await async_client.post(
-        "/api/v1/auth/refresh",
-        json={"token": "some.token.here"},
-    )
-    assert response.status_code == 400
-    assert "Firebase" in response.json()["detail"]
-
-
 # ─── GET /me ─────────────────────────────────────────────────
 
 

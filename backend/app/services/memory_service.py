@@ -1,7 +1,10 @@
+import logging
 from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.models.user import MemoryEntry
+
+logger = logging.getLogger("agentforge.services.memory")
 
 
 class MemoryService:
@@ -10,48 +13,63 @@ class MemoryService:
 
     async def get_user_context(self, user_id: str) -> dict:
         """Get all memory entries for a user as a plain dict."""
-        result = await self.db.execute(
-            select(MemoryEntry).where(MemoryEntry.user_id == user_id)
-        )
-        entries = result.scalars().all()
-        context = {}
-        for entry in entries:
-            context[entry.key] = {
-                "value": entry.value,
-                "weight": float(entry.weight),
-            }
-        return context
+        try:
+            result = await self.db.execute(
+                select(MemoryEntry).where(MemoryEntry.user_id == user_id)
+            )
+            entries = result.scalars().all()
+            context = {}
+            for entry in entries:
+                context[entry.key] = {
+                    "value": entry.value,
+                    "weight": float(entry.weight),
+                }
+            return context
+        except Exception as e:
+            logger.error("Failed to get memory context for user %s: %s", user_id, str(e))
+            raise
 
     async def set_memory(self, user_id: str, key: str, value: Any, weight: float = 1.0):
         """Set or update a memory entry."""
-        result = await self.db.execute(
-            select(MemoryEntry).where(
-                MemoryEntry.user_id == user_id,
-                MemoryEntry.key == key,
+        try:
+            if not key or not isinstance(key, str) or len(key.strip()) < 1:
+                raise ValueError("Memory key must be a non-empty string")
+
+            result = await self.db.execute(
+                select(MemoryEntry).where(
+                    MemoryEntry.user_id == user_id,
+                    MemoryEntry.key == key,
+                )
             )
-        )
-        entry = result.scalar_one_or_none()
-        if entry:
-            entry.value = value
-            entry.weight = weight
-        else:
-            entry = MemoryEntry(
-                user_id=user_id,
-                key=key,
-                value=value,
-                weight=weight,
-            )
-            self.db.add(entry)
-        await self.db.flush()
-        return entry
+            entry = result.scalar_one_or_none()
+            if entry:
+                entry.value = value
+                entry.weight = weight
+            else:
+                entry = MemoryEntry(
+                    user_id=user_id,
+                    key=key,
+                    value=value,
+                    weight=weight,
+                )
+                self.db.add(entry)
+            await self.db.flush()
+            return entry
+        except Exception as e:
+            logger.error("Failed to set memory '%s' for user %s: %s", key, user_id, str(e))
+            raise
 
     async def get_memory(self, user_id: str, key: str) -> Any:
         """Get a single memory entry by key."""
-        result = await self.db.execute(
-            select(MemoryEntry).where(
-                MemoryEntry.user_id == user_id,
-                MemoryEntry.key == key,
+        try:
+            result = await self.db.execute(
+                select(MemoryEntry).where(
+                    MemoryEntry.user_id == user_id,
+                    MemoryEntry.key == key,
+                )
             )
-        )
-        entry = result.scalar_one_or_none()
-        return entry.value if entry else None
+            entry = result.scalar_one_or_none()
+            return entry.value if entry else None
+        except Exception as e:
+            logger.error("Failed to get memory '%s' for user %s: %s", key, user_id, str(e))
+            raise

@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -6,6 +7,8 @@ from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User, MemoryEntry
 from app.schemas.user import NotificationOut, NotificationList
+
+logger = logging.getLogger("agentforge.notifications")
 
 router = APIRouter()
 
@@ -49,27 +52,37 @@ async def mark_notification_read(
     db: AsyncSession = Depends(get_db),
 ):
     """Mark a notification as read."""
-    result = await db.execute(
-        select(MemoryEntry).where(
-            MemoryEntry.id == id,
-            MemoryEntry.user_id == user.id,
+    # Input validation
+    if not id or not isinstance(id, str) or len(id.strip()) < 1:
+        raise HTTPException(status_code=422, detail="ID must be a non-empty string")
+
+    try:
+        result = await db.execute(
+            select(MemoryEntry).where(
+                MemoryEntry.id == id,
+                MemoryEntry.user_id == user.id,
+            )
         )
-    )
-    entry = result.scalar_one_or_none()
-    if not entry:
-        raise HTTPException(status_code=404, detail="Notification not found")
-    val = dict(entry.value or {})
-    val["read"] = True
-    entry.value = val
-    await db.flush()
-    return NotificationOut(
-        id=str(entry.id),
-        title=val.get("title", ""),
-        body=val.get("body", ""),
-        type=val.get("type", "info"),
-        read=True,
-        created_at=entry.created_at,
-    )
+        entry = result.scalar_one_or_none()
+        if not entry:
+            raise HTTPException(status_code=404, detail="Notification not found")
+        val = dict(entry.value or {})
+        val["read"] = True
+        entry.value = val
+        await db.flush()
+        return NotificationOut(
+            id=str(entry.id),
+            title=val.get("title", ""),
+            body=val.get("body", ""),
+            type=val.get("type", "info"),
+            read=True,
+            created_at=entry.created_at,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to mark notification as read for user %s: %s", user.id, str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to mark notification as read: {str(e)}")
 
 
 @router.post("/read-all")
@@ -78,16 +91,20 @@ async def mark_all_notifications_read(
     db: AsyncSession = Depends(get_db),
 ):
     """Mark all notifications as read."""
-    result = await db.execute(
-        select(MemoryEntry).where(
-            MemoryEntry.user_id == user.id,
-            MemoryEntry.key.startswith("notification:"),
+    try:
+        result = await db.execute(
+            select(MemoryEntry).where(
+                MemoryEntry.user_id == user.id,
+                MemoryEntry.key.startswith("notification:"),
+            )
         )
-    )
-    entries = result.scalars().all()
-    for entry in entries:
-        val = dict(entry.value or {})
-        val["read"] = True
-        entry.value = val
-    await db.flush()
-    return {"status": "ok"}
+        entries = result.scalars().all()
+        for entry in entries:
+            val = dict(entry.value or {})
+            val["read"] = True
+            entry.value = val
+        await db.flush()
+        return {"status": "ok"}
+    except Exception as e:
+        logger.error("Failed to mark all notifications as read for user %s: %s", user.id, str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to mark all notifications as read: {str(e)}")

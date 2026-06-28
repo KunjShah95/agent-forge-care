@@ -1,269 +1,144 @@
 # AgentForge — Career OS
 
-AgentForge (agent-forge-care) is an integrated career coaching and job search assistant combining a React frontend with a Python backend of modular agents to help users with resumes, interview prep, research, opportunity monitoring, and personalized memory-driven coaching.
+AgentForge is an AI-powered career operating system that automates job search, interview preparation, resume optimization, and networking. It orchestrates **8 specialized agents** coordinated by a central planner to provide personalized career coaching at scale.
 
-## Table of contents
-
-- Overview
-- Why we're building this
-- Problems we solve
-- High-level solution
-- Architecture diagram
-- Component responsibilities
-- Data flow
-- Important design decisions & tradeoffs
-- Security & privacy
-- Local development (quick start)
-- Environment variables
-- Testing
-- Deployment & operations
-- Roadmap
-- Contributing
-- License & contact
-
-## Overview
-
-AgentForge provides:
-
-- Personalized career guidance and ATS-aware resume optimizations
-- Mock technical & behavioral interviews with feedback
-- Opportunity discovery, tracking, and monitoring
-- Persistent memory (user context, past applications, interview feedback)
-- Agent-based workflows (research agent, planner, job/internship agents)
-
-The repository contains a Vite + React frontend (`src/`) and a Python backend (`backend/`) with modular agents, API routes, database models, and tests.
-
-## Why we're building this
-
-- Job search and career development are fragmented across tools and documents.
-- Coaching is expensive and inconsistent; automation + human-in-the-loop can scale high-quality support.
-- Developers and students need contextual, continuous practice and feedback tied to real application history.
-
-## Problems we solve
-
-- Fragmented context across job applications and interviews — persistent memory keeps continuity.
-- Generic, low-quality advice — agents produce role-specific, evidence-driven guidance.
-- Time-consuming tailoring of resumes and cover letters — automated, ATS-aware rewrites.
-- Lack of practice and measurable feedback for interviews — integrated mock interviews with scoring and improvement suggestions.
-- Monitoring opportunities at scale — background monitors surface new matches and changes.
-
-## High-level solution
-
-- Frontend: React + Vite UI providing chat, dashboards, consoles.
-- Backend: Python (FastAPI-style) exposing REST and WebSocket endpoints and orchestrating agents.
-- Postgres (SQLAlchemy/Alembic) for canonical data; Redis for cache/queues; Vector DB for semantic memory.
-- External LLM/embedding providers for natural language capabilities (pluggable).
-
-## Architecture diagram
-
-Rendered architecture diagram (SVG):
-
-![Architecture diagram](docs/architecture.svg)
-
-Mermaid source (if you prefer to render locally):
-
-```mermaid
-flowchart LR
-  Browser[Browser / React (Vite)] -->|HTTPS| CDN[Nginx / CDN]
-  CDN --> Frontend[Frontend App (Vite/React)]
-  Frontend -->|REST / WebSocket| API[Backend API (FastAPI/Uvicorn)]
-  subgraph Backend
-    API --> Agents[(Agent Manager)]
-    Agents --> ResearchAgent[Research Agent]
-    Agents --> PlannerAgent[Planner Agent]
-    Agents --> InterviewAgent[Interview Agent]
-    Agents --> MemoryService[(Memory & Vector Store)]
-    API --> Auth[Auth Layer (Firebase / JWT)]
-    API --> WorkerQueue[Worker / Background Tasks (RQ/Celery)]
-  end
-
-  API -->|SQL| Postgres[(Postgres / SQLAlchemy)]
-  API -->|Cache| Redis[(Redis)]
-  MemoryService -->|Vectors| VectorDB[(Vector DB / Faiss or Pinecone)]
-  WorkerQueue -->|pub/sub| Redis
-  WorkerQueue --> ExternalAI[External LLMs / Embeddings]
-  ExternalAI -->|responses| Agents
-  Storage[(File Storage / S3)] --- API
-  Monitoring[Monitoring / Logging] --- Backend
-  CI/CD -->|deploy| Infra[Docker / Docker-Compose / Cloud]
-```
-
-## Component responsibilities
-
-- Frontend (`src/`): UI pages (Dashboard, Applications, Interview Prep, Memory Viewer), chat components, theme & auth integration.
-- Backend (`backend/app/`): API endpoints, agent orchestration, memory management, models, migrations, and tests.
-- Agents (`backend/app/agents/`): discrete, testable units implementing domain logic (resume rewrite, research, interview simulation).
-- Persistence: Postgres for canonical data, Vector DB for semantic memory, Redis for cache and queues.
-- Integrations: LLM providers, optional job-board connectors, cloud object storage for uploads.
-
-## Data flow (typical)
-
-1. User interacts via browser → frontend calls backend API.
-2. API authenticates and serves cached/DB data or dispatches an Agent for processing.
-3. Agents may call embeddings/LLMs and write to the Vector DB and Postgres.
-4. Responses are stored and returned to the frontend; background monitors update opportunities and notify users.
-
-## Important design decisions & tradeoffs
-
-- Modular agents improve testability and isolation but add orchestration complexity.
-- External LLMs accelerate feature development but require strong privacy controls and cost management.
-- Vector DB enables semantic search (RAG) but adds another datastore to operate and back up.
-
-## Security & privacy considerations
-
-- Scrub or avoid sending raw PII to external LLMs unless explicitly permitted by the user.
-- Provide user-facing data export and deletion flows.
-- Use HTTPS, short-lived tokens, secrets management, and rotate API keys.
-- Validate scanned uploads (resumes, avatars) and limit file types/sizes.
-
-## Local development (quick start)
-
-Prerequisites:
-
-- Node >= 18, npm or pnpm
-- Python 3.10+
-- Postgres (local) and Redis (optional)
-- Docker (recommended for parity)
-
-1) Frontend
+## Quick Start
 
 ```bash
-# from repo root
+# Frontend
 npm install
-npm run dev
-# open http://localhost:5173
-```
+npm run dev               # → http://localhost:8080
 
-1) Backend (dev)
-
-```bash
-# from repo root
+# Backend
 cd backend
-python -m venv .venv
-.venv\Scripts\activate    # Windows
-# or: source .venv/bin/activate  # macOS/Linux
-pip install -r requirements.txt
-# Configure DATABASE_URL (see .env.example)
+python -m venv .venv && .venv\Scripts\activate && pip install -r requirements.txt
 alembic upgrade head
-# Start dev server (note --app-dir to resolve imports on Windows)
-python -m uvicorn app.main:app --reload --app-dir backend
+uvicorn app.main:app --reload --app-dir backend  # → http://localhost:8000
 ```
 
-1) Background worker (optional)
+Or use Docker: `docker compose up` (Postgres, Redis, Qdrant, backend).
 
-```bash
-# Start Redis
-# Start the worker (adapt to your worker entrypoint)
-python -m backend.app.worker
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| **Frontend** | React 18 + Vite + TypeScript + Tailwind CSS |
+| **UI** | shadcn/ui (Radix primitives), Framer Motion, Recharts |
+| **State** | TanStack React Query, React Router DOM |
+| **Backend** | Python FastAPI + SQLAlchemy 2.0 (async) + Alembic |
+| **Database** | PostgreSQL 16 |
+| **Vector DB** | Qdrant (semantic memory / RAG) |
+| **Cache / Queue** | Redis + RQ worker |
+| **AI Agents** | LangGraph + LangChain |
+| **LLM Providers** | OpenAI, Anthropic, Google Gemini, Groq, DeepSeek, Mistral, Ollama (fallback chain) |
+| **Search** | Tavily, Google CSE, Brave, SerpAPI, Exa, SearXNG (adapter chain) |
+| **Auth** | Firebase (email/password + Google SSO) with JWT |
+| **Container** | Docker Compose (4 services) |
+| **Deployment** | Vercel (frontend), Render / Railway (backend) |
+
+## Architecture
+
+```
+Browser → Vite/React → REST/WS → FastAPI → Agents (LangGraph)
+                                          → PostgreSQL (canonical data)
+                                          → Qdrant (vector memory)
+                                          → Redis (cache, queues)
+                                          → LLM providers (fallback chain)
 ```
 
-If you prefer Docker, review `docker-compose.yml` and `docker-compose.prod.yml` for service definitions and environment variables.
+8 agents orchestrated via LangGraph:
+1. **Planner** — career strategy and goal breakdown
+2. **Job Agent** — full-time job discovery and matching
+3. **Internship Agent** — internship, hackathon, fellowship scanning
+4. **Research Agent** — company intelligence and market analysis
+5. **Resume Agent** — ATS analysis and tailored rewrites
+6. **Interview Agent** — mock interviews with scoring and feedback
+7. **Networking Agent** — contact discovery and outreach generation
+8. **Opportunity Monitor** — 24/7 background scanning and alerts
 
-## Environment variables
+A **memory layer** (Qdrant + PostgreSQL) stores user preferences, application history, interview feedback, and career goals so recommendations improve over time.
 
-Create a `.env` or set environment variables. Example placeholders are in `.env.example`.
+## Project Structure
 
-Key variables (examples):
+```
+agent-forge-care/
+├── src/                 # React frontend (Vite)
+│   ├── pages/           # 16 routed pages (Dashboard, Onboarding, ResumeStudio, etc.)
+│   ├── components/      # shadcn/ui + custom components
+│   └── lib/             # API client, auth, utilities
+├── backend/
+│   ├── app/
+│   │   ├── main.py      # FastAPI entry point
+│   │   ├── api/v1/      # 35 REST routes (14 modules)
+│   │   ├── agents/      # LangGraph agent implementations
+│   │   ├── models/      # SQLAlchemy ORM models
+│   │   ├── schemas/     # Pydantic request/response schemas
+│   │   ├── services/    # Business logic (auth, memory, matching, etc.)
+│   │   ├── memory/      # Qdrant vector store client
+│   │   ├── search/      # Multi-provider search adapters
+│   │   ├── tasks/       # Background workers (RQ)
+│   │   └── middleware/  # Auth middleware
+│   ├── tests/           # 119 test functions (22 files, all passing)
+│   └── alembic/         # 5 database migrations
+├── docker-compose.yml   # Local dev services
+├── Dockerfile.frontend  # Frontend container
+└── backend/Dockerfile   # Backend container
+```
 
-- DATABASE_URL=postgres://user:pass@localhost:5432/agentforge
-- REDIS_URL=redis://localhost:6379/0
-- SECRET_KEY=super-secret-key
-- FIREBASE_CREDENTIALS_JSON=/path/to/firebase.json
-- OPENAI_API_KEY=<key> or AZURE_* variables
-- VECTOR_DB_CONFIG (Pinecone/Chroma/host config)
-- S3 / CLOUD_STORAGE credentials for production uploads
+## Scripts
+
+| Command | Purpose |
+|---------|---------|
+| `npm run dev` | Frontend dev server (port 8080) |
+| `npm run build` | Production build → `dist/` |
+| `npm run test` | Vitest (frontend) |
+| `npm run lint` | ESLint |
+| `cd backend && pytest -q` | Backend tests (167 passing) |
+| `cd backend && alembic upgrade head` | Run migrations |
+| `python -m backend.app.worker` | Start background worker |
+
+## Key Features
+
+- **ATS Resume Analysis** — keyword gap detection, tailored rewriting
+- **Mock Interviews** — AI-powered with real-time scoring (STAR, technical, system design)
+- **Opportunity Discovery** — scans 50+ sources with 78% match accuracy
+- **Networking Automation** — contact discovery + personalized outreach
+- **Pipeline Tracking** — Kanban-style application management
+- **Career Analytics** — conversion tracking, skill demand insights
+- **Persistent Memory** — learns from every interaction across sessions
+
+## Environment
+
+Key variables (see `.env.example`):
+
+- `DATABASE_URL` — PostgreSQL connection string
+- `REDIS_URL` — Redis connection string
+- `QDRANT_URL` / `QDRANT_API_KEY` — Vector DB
+- `OPENAI_API_KEY` — Primary LLM provider
+- `FIREBASE_CREDENTIALS_JSON` — Auth credentials
+- `TAVILY_API_KEY` — Primary search provider
+
+## Deployment
+
+- **Frontend:** `vercel.json` → Vercel (SPA rewrite)
+- **Backend:** `render.yaml` / `railway.json` → Render / Railway
+- **Container:** `docker compose -f docker-compose.prod.yml up`
 
 ## Testing
 
-- Backend: run pytest from `backend/`:
-
 ```bash
-cd backend
-pytest -q
+cd backend && pytest -q        # 167 backend tests
+npm run test                   # Frontend tests
 ```
 
-- Frontend: run vitest / npm test:
+## Docs
 
-```bash
-npm run test
-```
+- `docs/product-vision.md` — Full concept walkthrough
+- `docs/status.md` — Current state and known gaps
+- `docs/architecture.svg` — System architecture diagram
+- `frontend.md` — Frontend development guide
+- `backend.md` — Backend development guide
 
-Add integration tests for agent behaviors and the RAG/memory pipeline.
+## License
 
-## Deployment & operations
-
-- Frontend deployment: Vercel via `vercel.json` (SPA rewrite to `index.html`).
-- Backend deployment: Render via `render.yaml` or Railway using the same Python entrypoint (`uvicorn app.main:app`).
-- Build and containerize with the provided Dockerfiles (`Dockerfile.frontend`, `backend/Dockerfile`) when you want image-based hosting.
-- Use CI to run tests, build images, and push to a registry; deploy backend and frontend independently.
-- Recommended production components: managed Postgres, managed Redis, managed Vector DB (Pinecone/Weaviate) or durable Faiss/Chroma, secrets manager, observability (Prometheus/Grafana, Sentry).
-
-## Roadmap (suggested)
-
-- Harden privacy controls and add user data export/delete.
-- Provider-agnostic vector store abstraction.
-- Job-board connectors & OAuth pipelines.
-- Browser extension to capture job posts in one click.
-- Admin dashboards and audit tooling.
-- Human-in-the-loop moderation for generated content.
-
-## Contributing
-
-- Follow existing project style (TypeScript/React lint rules and Python formatting).
-- Add unit tests for agent logic and integration tests for memory/search flows.
-- Open PRs against `main` with a short changelog and test plan. For large changes, open an issue first.
-
-## License & contact
-
-- Add your license (e.g., MIT) and maintainer contact details here.
-
----
-
-## AgentForge Career OS
-
-AgentForge is an AI-powered career operating system that helps people discover internships, jobs, research programs, hackathons, scholarships, and networking opportunities — then turns those results into a guided action plan.
-
-## What it does
-
-- Finds and ranks opportunities based on a user’s profile, goals, and preferences
-- Uses specialized agents for internships, jobs, research, resume tailoring, interview prep, networking, and monitoring
-- Maintains memory for skills, target locations, applications, interview notes, and career goals
-- Runs a daily discovery loop so the system keeps working even when the user is not searching manually
-
-## Product vision
-
-The product is designed as a planner-first multi-agent system:
-
-1. The user states a goal.
-2. A planner breaks the goal into subtasks.
-3. Domain agents search, score, prepare, and track outcomes.
-4. A memory layer stores preferences and outcomes so future recommendations improve.
-
-## Frontend structure
-
-- `src/pages/Landing.tsx` — product story, architecture, agent fleet, workflow, and roadmap
-- `src/pages/Dashboard.tsx` — daily planner view, matches, application pipeline, and activity feed
-- `src/pages/Onboarding.tsx` — captures profile, skills, preferences, and goals
-
-## Suggested core agents
-
-- Planner Agent
-- Internship Agent
-- Job Agent
-- Research Agent
-- Resume Agent
-- Interview Agent
-- Networking Agent
-- Opportunity Monitor
-
-## Next steps
-
-- Connect the frontend to a backend search/memory service
-- Add persisted user profiles and application tracking
-- Add source adapters for internship/job sites and company career pages
-- Add notifications for new matches and deadlines
-- Expand interview prep and networking automation
-
-## Notes
-
-For the full concept and system breakdown, see `docs/product-vision.md`.
+MIT

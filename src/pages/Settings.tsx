@@ -11,8 +11,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Camera, Loader2, CreditCard } from "lucide-react";
+import { Camera, Loader2, CreditCard, LogOut } from "lucide-react";
 import { useProfile, useUpdateProfile, useMemory, useCreateMemory } from "@/api/hooks";
+import { useAuthContext } from "@/lib/auth-context";
 import { profile as profileApi } from "@/api/client";
 import { AGENT_LABELS } from "@/lib/agent-types";
 
@@ -43,6 +44,7 @@ export default function Settings() {
   const queryClient = useQueryClient();
   const { data: memoryData } = useMemory();
   const createMemory = useCreateMemory();
+  const { logout } = useAuthContext();
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const apiBase = import.meta.env.VITE_API_URL?.replace("/api/v1", "") || "http://localhost:8000";
 
@@ -197,7 +199,7 @@ export default function Settings() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="col-span-2"><Label>Full Name</Label><Input {...register("full_name")} className="mt-1.5" /></div>
                   <div><Label>School</Label><Input {...register("school")} className="mt-1.5" /></div>
-                  <div><Label>Graduation Date</Label><Input {...register("graduation_date")} className="mt-1.5" placeholder="e.g., June 2026" /></div>
+                  <div><Label>Graduation Date</Label><Input {...register("graduation_date")} className="mt-1.5" placeholder="e.g., 2026-06-15" /></div>
                   <div><Label>Portfolio URL</Label><Input {...register("portfolio_url")} className="mt-1.5" /></div>
                   <div><Label>LinkedIn</Label><Input {...register("linkedin_url")} className="mt-1.5" /></div>
                   <div><Label>GitHub</Label><Input {...register("github_url")} className="mt-1.5" /></div>
@@ -254,6 +256,18 @@ export default function Settings() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <Card className="bento-card p-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-display font-semibold">Account</h3>
+            <p className="text-sm text-muted-foreground mt-0.5">Sign out of your account.</p>
+          </div>
+          <Button variant="outline" className="gap-2 text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => logout()}>
+            <LogOut className="h-4 w-4" /> Sign out
+          </Button>
+        </div>
+      </Card>
     </div>
   );
 }

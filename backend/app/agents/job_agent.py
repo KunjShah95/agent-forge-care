@@ -27,6 +27,9 @@ from app.services.match_service import MatchService
 from app.search.adapters import SearchAdapter
 from app.memory.memory_layer import AgentMemory
 from app.utils.embedding import get_text_embedding
+from app.utils.location import parse_location
+from app.utils.industry import detect_industry
+from app.utils.work_mode import infer_work_type
 
 logger = logging.getLogger("agentforge.agents.job")
 
@@ -45,118 +48,173 @@ async def discover_jobs(
     skills = params.get("skills", [])
     limit = params.get("limit", 20)
 
+    # Input validation
+    if not query or not isinstance(query, str) or len(query.strip()) < 2:
+        raise ValueError("Invalid query: must be a non-empty string with at least 2 characters")
+    
+    if not isinstance(limit, int) or limit < 1 or limit > 100:
+        limit = 20
+
     memory_service = MemoryService(db)
     profile_service = ProfileService(db)
     match_service = MatchService(db)
 
-    profile = await profile_service.get_or_create_profile(user_id)
-    profile_skills = await profile_service.get_skill_names(profile.id)
-
-    # Retrieve salary preferences from profile
-    salary_min = profile.salary_min
-    salary_max = profile.salary_max
-
-    all_skills = list(set(skills + profile_skills))
-
-    # Search external sources
-    search_adapter = SearchAdapter()
     try:
-        raw_results = await search_adapter.search(
-            query=query,
-            location=location,
-            skills=all_skills,
-            limit=limit,
-            source_filter="job",
-        )
-    except Exception as e:
-        logger.warning("External job search failed, using demo data: %s", e)
-        raw_results = _demo_jobs(query, location)
+        profile = await profile_service.get_or_create_profile(user_id)
+        profile_skills = await profile_service.get_skill_names(profile.id)
 
-    items = []
-    for r in raw_results[:limit]:
-        # Filter by salary range if user specified
-        job_salary_min = r.get("salary_min")
-        if salary_min and job_salary_min and job_salary_min < salary_min * 0.7:
-            continue
+        # Retrieve salary preferences from profile
+        salary_min = profile.salary_min
 
-        opp = Opportunity(
-            user_id=user_id,
-            title=r.get("title", "Untitled Position"),
-            company=r.get("company", "Unknown"),
-            company_logo=r.get("logo"),
-            location=r.get("location"),
-            remote=r.get("remote", False),
-            type="Full-time",
-            salary_min=job_salary_min,
-            salary_max=r.get("salary_max"),
-            description=r.get("description"),
-            apply_url=r.get("apply_url"),
-            company_size=r.get("company_size"),
-            skills_required=r.get("skills", all_skills),
-            source=r.get("source", "job_agent"),
-            posted_date=r.get("posted_date"),
+        all_skills = list(set(skills + profile_skills))
+
+        # Search external sources
+        search_adapter = SearchAdapter()
+        try:
+            raw_results = await search_adapter.search(
+                query=query,
+                location=location,
+                skills=all_skills,
+                limit=limit,
+                source_filter="job",
+            )
+            if not raw_results:
+                logger.warning("External job search returned 0 results, using demo data")
+                raw_results = _demo_jobs(query, location)
+        except Exception as e:
+            logger.warning("External job search failed, using demo data: %s", e)
+            raw_results = _demo_jobs(query, location)
+
+        # Skip jobs the user already has (cross-run dedup so refresh returns
+        # unique openings instead of re-inserting the same ones).
+        existing_result = await db.execute(
+            select(Opportunity.title, Opportunity.company).where(
+                Opportunity.user_id == user_id
+            )
         )
-        db.add(opp)
+        existing_keys = {
+            (t.lower().strip(), (c or "").lower().strip())
+            for t, c in existing_result.all()
+            if t
+        }
+
+        items = []
+        seen_keys = set()
+        for r in raw_results[:limit]:
+            # Filter by salary range if user specified
+            job_salary_min = r.get("salary_min")
+            if salary_min and job_salary_min and job_salary_min < salary_min * 0.7:
+                continue
+
+            title = r.get("title", "Untitled Position")
+            company = r.get("company", "Unknown")
+            key = (title.lower().strip(), (company or "").lower().strip())
+            if key in seen_keys or key in existing_keys:
+                continue
+            seen_keys.add(key)
+
+            # Parse location into city/state/country
+            loc_raw = r.get("location")
+            parsed = parse_location(loc_raw)
+
+            industry = detect_industry(
+                title=title,
+                company=company,
+                description=r.get("description", ""),
+            )
+
+            remote = r.get("remote", False)
+            work_type = r.get("work_type") or infer_work_type(
+                remote, title, r.get("description"), loc_raw
+            )
+
+            opp = Opportunity(
+                user_id=user_id,
+                title=title,
+                company=company,
+                company_logo=r.get("logo"),
+                location=loc_raw,
+                city=parsed["city"],
+                state=parsed["state"],
+                country=parsed["country"],
+                industry=industry,
+                remote=remote,
+                work_type=work_type,
+                type="Full-time",
+                salary_min=job_salary_min,
+                salary_max=r.get("salary_max"),
+                description=r.get("description"),
+                apply_url=r.get("apply_url"),
+                company_size=r.get("company_size"),
+                skills_required=r.get("skills", all_skills),
+                source=r.get("source", "job_agent"),
+                posted_date=r.get("posted_date"),
+            )
+            db.add(opp)
+            await db.flush()
+
+            # Score match
+            match_data = await match_service.calculate_match(user_id, opp)
+            ms = MatchScore(
+                opportunity_id=opp.id,
+                user_id=user_id,
+                overall_score=Decimal(str(match_data["overall"])),
+                skill_score=Decimal(str(match_data["breakdown"]["skills"])),
+                location_score=Decimal(str(match_data["breakdown"]["location"])),
+                company_score=Decimal(str(match_data["breakdown"]["company"])),
+                experience_score=Decimal(str(match_data["breakdown"]["experience"])),
+                reasons=match_data["reasons"],
+            )
+            db.add(ms)
+
+            await _store_job_embedding(user_id, opp, match_data)
+
+            items.append(
+                {
+                    "id": str(opp.id),
+                    "title": opp.title,
+                    "company": opp.company,
+                    "location": opp.location,
+                    "description": opp.description or "",
+                    "skills_required": opp.skills_required or [],
+                    "match_score": match_data["overall"],
+                    "reason": match_data["reasons"][0] if match_data["reasons"] else "",
+                }
+            )
+
+        # ── Rerank with Cohere and blend scores ──
+        if items and query:
+            reranked = await match_service.rerank_and_blend(
+                user_id, query, items, blend_weight=0.4
+            )
+            items = reranked
+
+        # Update memory
+        await memory_service.set_memory(
+            user_id,
+            "last_job_search",
+            {
+                "query": query,
+                "location": location,
+                "results_count": len(items),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            },
+            weight=0.8,
+        )
+
         await db.flush()
 
-        # Score match
-        match_data = await match_service.calculate_match(user_id, opp)
-        ms = MatchScore(
-            opportunity_id=opp.id,
-            user_id=user_id,
-            overall_score=Decimal(str(match_data["overall"])),
-            skill_score=Decimal(str(match_data["breakdown"]["skills"])),
-            location_score=Decimal(str(match_data["breakdown"]["location"])),
-            company_score=Decimal(str(match_data["breakdown"]["company"])),
-            experience_score=Decimal(str(match_data["breakdown"]["experience"])),
-            reasons=match_data["reasons"],
-        )
-        db.add(ms)
+        return {
+            "items": items,
+            "total": len(items),
+            "agent": "job",
+            "message": f"Found {len(items)} job opportunities",
+            "summary": f"Discovered {len(items)} jobs matching your skills in {', '.join(all_skills[:3])}",
+        }
 
-        await _store_job_embedding(user_id, opp, match_data)
-
-        items.append(
-            {
-                "id": str(opp.id),
-                "title": opp.title,
-                "company": opp.company,
-                "location": opp.location,
-                "description": opp.description or "",
-                "skills_required": opp.skills_required or [],
-                "match_score": match_data["overall"],
-                "reason": match_data["reasons"][0] if match_data["reasons"] else "",
-            }
-        )
-
-    # ── Rerank with Cohere and blend scores ──
-    if items and query:
-        reranked = await match_service.rerank_and_blend(
-            user_id, query, items, blend_weight=0.4
-        )
-        items = reranked
-
-    # Update memory
-    await memory_service.set_memory(
-        user_id,
-        "last_job_search",
-        {
-            "query": query,
-            "location": location,
-            "results_count": len(items),
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        },
-        weight=0.8,
-    )
-
-    await db.flush()
-
-    return {
-        "items": items,
-        "total": len(items),
-        "agent": "job",
-        "message": f"Found {len(items)} job opportunities",
-        "summary": f"Discovered {len(items)} jobs matching your skills in {', '.join(all_skills[:3])}",
-    }
+    except Exception as e:
+        logger.error("Job discovery failed for user %s: %s", user_id, str(e))
+        raise
 
 
 async def get_job_recommendations(
@@ -173,7 +231,7 @@ async def get_job_recommendations(
         .where(
             Opportunity.user_id == user_id,
             Opportunity.type == "Full-time",
-            Opportunity.is_active == True,
+            Opportunity.is_active.is_(True),
         )
         .order_by(desc(MatchScore.overall_score))
         .limit(limit)

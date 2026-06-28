@@ -506,3 +506,216 @@ async def test_search_research_respects_limit(mock_settings, mock_httpx_cls, ada
     results = await adapter.search_research("topic", limit=3)
 
     assert len(results) <= 3
+
+
+# ── search() with Tavily ────────────────────────────────────
+
+
+@pytest.mark.asyncio
+@patch("app.search.adapters.httpx.AsyncClient")
+@patch("app.search.adapters.settings")
+async def test_search_uses_tavily(mock_settings, mock_httpx_cls, adapter):
+    mock_settings.google_api_key = ""
+    mock_settings.google_cse_id = ""
+    mock_settings.serpapi_key = ""
+    mock_settings.tavily_api_key = "tavily-key"
+
+    from app.search.adapters import _search_cache
+    _search_cache.clear()
+
+    mock_httpx_cls.return_value = _mock_httpx(_tavily_response([
+        {"title": "Software Engineer at Google", "content": "Remote role at Google", "url": "https://google.com/jobs/1"},
+        {"title": "Data Scientist at Meta", "content": "NYC office", "url": "https://meta.com/jobs/2"},
+    ]))
+
+    results = await adapter.search("unique_tavily_test_query", limit=5)
+
+    assert len(results) >= 2
+    assert results[0]["source"] == "tavily"
+    assert results[0]["title"] == "Software Engineer at Google"
+
+
+# ── search() with Tavily only (no other keys) ───────────────
+
+
+@pytest.mark.asyncio
+@patch("app.search.adapters.httpx.AsyncClient")
+@patch("app.search.adapters.settings")
+async def test_search_tavily_only_source(mock_settings, mock_httpx_cls, adapter):
+    mock_settings.google_api_key = ""
+    mock_settings.google_cse_id = ""
+    mock_settings.serpapi_key = ""
+    mock_settings.tavily_api_key = "tavily-key"
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.text = "<html></html>"
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(return_value=mock_resp)
+    mock_client.post = AsyncMock(return_value=mock_resp)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+    mock_httpx_cls.return_value = mock_client
+
+    results = await adapter.search("python developer", limit=5, source_filter="job")
+
+    post_calls = [c for c in mock_client.post.call_args_list if "tavily" in str(c)]
+    assert len(post_calls) >= 1
+
+
+# ── search() caching ────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+@patch("app.search.adapters.httpx.AsyncClient")
+@patch("app.search.adapters.settings")
+async def test_search_caching(mock_settings, mock_httpx_cls, adapter):
+    mock_settings.google_api_key = "google-key"
+    mock_settings.google_cse_id = "cse-id"
+    mock_settings.serpapi_key = ""
+    mock_settings.tavily_api_key = ""
+
+    mock_httpx_cls.return_value = _mock_httpx(_google_response([
+        {"title": "SWE at Google", "snippet": "Build products", "link": "https://google.com/1"},
+    ]))
+
+    from app.search.adapters import _search_cache
+    _search_cache.clear()
+
+    results1 = await adapter.search("cached search test", limit=5)
+    assert len(results1) >= 1
+
+    call_count_before = mock_httpx_cls.return_value.get.call_count
+
+    results2 = await adapter.search("cached search test", limit=5)
+
+    assert results1 == results2
+    assert mock_httpx_cls.return_value.get.call_count == call_count_before
+
+
+# ── search_research() caching ────────────────────────────────
+
+
+@pytest.mark.asyncio
+@patch("app.search.adapters.httpx.AsyncClient")
+@patch("app.search.adapters.settings")
+async def test_search_research_caching(mock_settings, mock_httpx_cls, adapter):
+    mock_settings.google_api_key = ""
+    mock_settings.google_cse_id = ""
+    mock_settings.tavily_api_key = "tavily-key"
+
+    mock_httpx_cls.return_value = _mock_httpx(_tavily_response([
+        {"title": "Research Result", "content": "Content", "url": "https://r.com"},
+    ]))
+
+    from app.search.adapters import _search_cache
+    _search_cache.clear()
+
+    results1 = await adapter.search_research("cached research", limit=5)
+    assert len(results1) >= 1
+
+    call_count_before = mock_httpx_cls.return_value.post.call_count
+
+    results2 = await adapter.search_research("cached research", limit=5)
+
+    assert results1 == results2
+    assert mock_httpx_cls.return_value.post.call_count == call_count_before
+
+
+# ── cache miss after clearing ────────────────────────────────
+
+
+@pytest.mark.asyncio
+@patch("app.search.adapters.httpx.AsyncClient")
+@patch("app.search.adapters.settings")
+async def test_cache_miss_after_clear(mock_settings, mock_httpx_cls, adapter):
+    mock_settings.google_api_key = "google-key"
+    mock_settings.google_cse_id = "cse-id"
+    mock_settings.serpapi_key = ""
+    mock_settings.tavily_api_key = ""
+
+    google_items = _google_response([
+        {"title": f"Job {i}", "snippet": f"Desc {i}", "link": f"https://c{i}.com"}
+        for i in range(3)
+    ])
+    mock_httpx_cls.return_value = _mock_httpx(google_items)
+
+    from app.search.adapters import _search_cache
+    _search_cache.clear()
+
+    await adapter.search("cache miss test", limit=3)
+    calls_after_first = mock_httpx_cls.return_value.get.call_count
+
+    _search_cache.clear()
+
+    await adapter.search("cache miss test", limit=3)
+    assert mock_httpx_cls.return_value.get.call_count > calls_after_first
+
+
+# ── _parse_serp_results with fallback selectors ──────────────
+
+
+@pytest.mark.asyncio
+@patch("app.search.adapters.httpx.AsyncClient")
+@patch("app.search.adapters.settings")
+async def test_search_fallback_selector_data_hveid(mock_settings, mock_httpx_cls, adapter):
+    mock_settings.google_api_key = ""
+    mock_settings.google_cse_id = ""
+    mock_settings.serpapi_key = ""
+    mock_settings.tavily_api_key = ""
+
+    html = """
+    <html><body>
+    <div data-hveid="ABC123">
+        <a href="https://example.com/r1"><h3>Fallback Selector Result</h3></a>
+        <span class="aCOpRe">Found via data-hveid</span>
+    </div>
+    </body></html>
+    """
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.text = html
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(return_value=mock_resp)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+    mock_httpx_cls.return_value = mock_client
+
+    results = await adapter.search("fallback test", limit=5)
+
+    assert len(results) >= 1
+    assert results[0]["title"] == "Fallback Selector Result"
+
+
+# ── search() empty result logging ────────────────────────────
+
+
+@pytest.mark.asyncio
+@patch("app.search.adapters.httpx.AsyncClient")
+@patch("app.search.adapters.settings")
+async def test_search_empty_logs_warning(mock_settings, mock_httpx_cls, adapter, caplog):
+    mock_settings.google_api_key = ""
+    mock_settings.google_cse_id = ""
+    mock_settings.serpapi_key = ""
+    mock_settings.tavily_api_key = ""
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.text = "<html><body><div>no results</div></body></html>"
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(return_value=mock_resp)
+    mock_client.post = AsyncMock(return_value=mock_resp)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+    mock_httpx_cls.return_value = mock_client
+
+    from app.search.adapters import _search_cache
+    _search_cache.clear()
+
+    import logging
+    caplog.set_level(logging.WARNING, logger="agentforge.search")
+
+    results = await adapter.search("nothing should match", limit=5)
+
+    assert len(results) == 0
+    assert any("0 results" in rec.message for rec in caplog.records)

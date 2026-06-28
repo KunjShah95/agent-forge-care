@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,6 +26,8 @@ from app.schemas.user import (
     InternshipDiscoverRequest,
     JobDiscoverRequest,
 )
+
+logger = logging.getLogger("agentforge.agents")
 
 router = APIRouter()
 
@@ -67,8 +70,22 @@ async def run_planner(
     """Submit a goal to the planner agent for execution."""
     from app.agents.graph import run_planner_agent
 
-    task_id = await run_planner_agent(str(user.id), data.goal)
-    return PlannerRunResponse(task_id=task_id)
+    # Input validation
+    if not data.goal or not isinstance(data.goal, str) or len(data.goal.strip()) < 3:
+        raise HTTPException(
+            status_code=422,
+            detail="Goal must be a non-empty string with at least 3 characters"
+        )
+
+    try:
+        task_id = await run_planner_agent(str(user.id), data.goal.strip())
+        return PlannerRunResponse(task_id=task_id)
+    except Exception as e:
+        logger.error("Planner agent failed for user %s: %s", user.id, str(e))
+        raise HTTPException(
+            status_code=500,
+            detail=f"Planner agent failed: {str(e)}"
+        )
 
 
 @router.get("/planner/status")
@@ -205,9 +222,15 @@ async def retry_task(
             from app.agents.graph import run_planner_agent
             goal = task.input.get("goal") or task.input.get("goal_text") or ""
             await run_planner_agent(str(user.id), goal)
+            task.status = TaskStatus.completed
+            task.completed_at = datetime.now(timezone.utc)
+            await db.commit()
         elif task.agent_type == AgentType.monitor:
             from app.agents.graph import run_opportunity_scan
             await run_opportunity_scan(str(user.id))
+            task.status = TaskStatus.completed
+            task.completed_at = datetime.now(timezone.utc)
+            await db.commit()
         elif task.agent_type == AgentType.resume:
             from app.agents.graph import run_resume_tailoring
             app_id = task.input.get("application_id")
@@ -281,21 +304,25 @@ async def get_monitor_alerts(
     db: AsyncSession = Depends(get_db),
 ):
     """Get recent alerts from the opportunity monitor."""
-    result = await db.execute(
-        select(AgentTask)
-        .where(
-            AgentTask.user_id == user.id,
-            AgentTask.agent_type == AgentType.monitor,
+    try:
+        result = await db.execute(
+            select(AgentTask)
+            .where(
+                AgentTask.user_id == user.id,
+                AgentTask.agent_type == AgentType.monitor,
+            )
+            .order_by(desc(AgentTask.created_at))
+            .limit(10)
         )
-        .order_by(desc(AgentTask.created_at))
-        .limit(10)
-    )
-    tasks = result.scalars().all()
-    alerts = []
-    for task in tasks:
-        if task.output and task.output.get("alerts"):
-            alerts.extend(task.output["alerts"])
-    return {"items": alerts[:20]}
+        tasks = result.scalars().all()
+        alerts = []
+        for task in tasks:
+            if task.output and task.output.get("alerts"):
+                alerts.extend(task.output["alerts"])
+        return {"items": alerts[:20]}
+    except Exception as e:
+        logger.error("Failed to get monitor alerts for user %s: %s", user.id, str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve monitor alerts: {str(e)}")
 
 
 @router.post("/interview-prep", status_code=200)
@@ -306,16 +333,32 @@ async def interview_prep(
 ):
     from app.agents.assistant_agent import prepare_interview
 
-    task = AgentTask(
-        user_id=user.id,
-        agent_type=AgentType.interview,
-        status=TaskStatus.running,
-        input=data.model_dump(),
-    )
-    db.add(task)
-    await db.commit()
+    # Input validation
+    if not data.company or not isinstance(data.company, str) or len(data.company.strip()) < 2:
+        raise HTTPException(status_code=422, detail="Company name must be a non-empty string with at least 2 characters")
+    
+    if not data.role or not isinstance(data.role, str) or len(data.role.strip()) < 2:
+        raise HTTPException(status_code=422, detail="Role must be a non-empty string with at least 2 characters")
+    
+    if not data.type or not isinstance(data.type, str) or data.type not in ["behavioral", "technical", "system", "mixed"]:
+        raise HTTPException(status_code=422, detail="Type must be one of: behavioral, technical, system, mixed")
+
+    params = data.model_dump()
+    # Map frontend's "role" to backend's "role_type"
+    if "role" in params and "role_type" not in params:
+        params["role_type"] = params.pop("role")
+
     try:
-        result = await prepare_interview(str(user.id), data.model_dump(), db)
+        task = AgentTask(
+            user_id=user.id,
+            agent_type=AgentType.interview,
+            status=TaskStatus.running,
+            input=params,
+        )
+        db.add(task)
+        await db.commit()
+
+        result = await prepare_interview(str(user.id), params, db)
         task.status = TaskStatus.completed
         task.output = result
         await db.commit()
@@ -328,15 +371,16 @@ async def interview_prep(
         )
         return result
     except Exception as e:
-        task.status = TaskStatus.failed
-        task.error = str(e)
-        await db.commit()
+        logger.error("Interview prep failed for user %s: %s", user.id, str(e))
+        # Clean up task if it was created
+        if 'task' in locals():
+            task.status = TaskStatus.failed
+            task.error = str(e)
+            await db.commit()
         await create_notification(
             db, user.id, title="Interview prep failed", body=str(e)[:200], type="error"
         )
-        from fastapi import HTTPException
-
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Interview preparation failed: {str(e)}")
 
 
 @router.post("/research", status_code=200)
@@ -347,16 +391,26 @@ async def research(
 ):
     from app.agents.research_agent import conduct_research
 
-    task = AgentTask(
-        user_id=user.id,
-        agent_type=AgentType.research,
-        status=TaskStatus.running,
-        input=data.model_dump(),
-    )
-    db.add(task)
-    await db.commit()
+    # Input validation
+    if not data.company or not isinstance(data.company, str) or len(data.company.strip()) < 2:
+        raise HTTPException(status_code=422, detail="Company name must be a non-empty string with at least 2 characters")
+
+    params = data.model_dump()
+    # Map frontend's "company" to backend's "query"
+    if "company" in params and "query" not in params:
+        params["query"] = params["company"]
+
     try:
-        result = await conduct_research(str(user.id), data.model_dump(), db)
+        task = AgentTask(
+            user_id=user.id,
+            agent_type=AgentType.research,
+            status=TaskStatus.running,
+            input=params,
+        )
+        db.add(task)
+        await db.commit()
+
+        result = await conduct_research(str(user.id), params, db)
         task.status = TaskStatus.completed
         task.output = result
         await db.commit()
@@ -369,15 +423,16 @@ async def research(
         )
         return result
     except Exception as e:
-        task.status = TaskStatus.failed
-        task.error = str(e)
-        await db.commit()
+        logger.error("Research failed for user %s: %s", user.id, str(e))
+        # Clean up task if it was created
+        if 'task' in locals():
+            task.status = TaskStatus.failed
+            task.error = str(e)
+            await db.commit()
         await create_notification(
             db, user.id, title="Research failed", body=str(e)[:200], type="error"
         )
-        from fastapi import HTTPException
-
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Research failed: {str(e)}")
 
 
 @router.post("/cover-letter", status_code=200)
@@ -388,15 +443,23 @@ async def cover_letter(
 ):
     from app.agents.assistant_agent import generate_cover_letter
 
-    task = AgentTask(
-        user_id=user.id,
-        agent_type=AgentType.resume,
-        status=TaskStatus.running,
-        input=data.model_dump(),
-    )
-    db.add(task)
-    await db.commit()
+    # Input validation
+    if not data.company or not isinstance(data.company, str) or len(data.company.strip()) < 2:
+        raise HTTPException(status_code=422, detail="Company name must be a non-empty string with at least 2 characters")
+    
+    if not data.role or not isinstance(data.role, str) or len(data.role.strip()) < 2:
+        raise HTTPException(status_code=422, detail="Role must be a non-empty string with at least 2 characters")
+
     try:
+        task = AgentTask(
+            user_id=user.id,
+            agent_type=AgentType.resume,
+            status=TaskStatus.running,
+            input=data.model_dump(),
+        )
+        db.add(task)
+        await db.commit()
+
         result = await generate_cover_letter(str(user.id), data.model_dump(), db)
         task.status = TaskStatus.completed
         task.output = result
@@ -410,9 +473,12 @@ async def cover_letter(
         )
         return result
     except Exception as e:
-        task.status = TaskStatus.failed
-        task.error = str(e)
-        await db.commit()
+        logger.error("Cover letter generation failed for user %s: %s", user.id, str(e))
+        # Clean up task if it was created
+        if 'task' in locals():
+            task.status = TaskStatus.failed
+            task.error = str(e)
+            await db.commit()
         await create_notification(
             db,
             user.id,
@@ -420,9 +486,7 @@ async def cover_letter(
             body=str(e)[:200],
             type="error",
         )
-        from fastapi import HTTPException
-
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Cover letter generation failed: {str(e)}")
 
 
 @router.post("/resume-tailor", status_code=200)
@@ -433,15 +497,23 @@ async def resume_tailor(
 ):
     from app.agents.assistant_agent import tailor_resume
 
-    task = AgentTask(
-        user_id=user.id,
-        agent_type=AgentType.resume,
-        status=TaskStatus.running,
-        input=data.model_dump(),
-    )
-    db.add(task)
-    await db.commit()
+    # Input validation
+    if not data.role_type or not isinstance(data.role_type, str) or len(data.role_type.strip()) < 2:
+        raise HTTPException(status_code=422, detail="Role type must be a non-empty string with at least 2 characters")
+
+    # Note: skills are optional — the agent merges the user's profile skills, so
+    # the UI can tailor with just a role/company. Don't reject an empty list.
+
     try:
+        task = AgentTask(
+            user_id=user.id,
+            agent_type=AgentType.resume,
+            status=TaskStatus.running,
+            input=data.model_dump(),
+        )
+        db.add(task)
+        await db.commit()
+
         result = await tailor_resume(str(user.id), data.model_dump(), db)
         task.status = TaskStatus.completed
         task.output = result
@@ -455,9 +527,12 @@ async def resume_tailor(
         )
         return result
     except Exception as e:
-        task.status = TaskStatus.failed
-        task.error = str(e)
-        await db.commit()
+        logger.error("Resume tailoring failed for user %s: %s", user.id, str(e))
+        # Clean up task if it was created
+        if 'task' in locals():
+            task.status = TaskStatus.failed
+            task.error = str(e)
+            await db.commit()
         await create_notification(
             db,
             user.id,
@@ -465,9 +540,7 @@ async def resume_tailor(
             body=str(e)[:200],
             type="error",
         )
-        from fastapi import HTTPException
-
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Resume tailoring failed: {str(e)}")
 
 
 @router.post("/career-guidance", status_code=200)
@@ -478,15 +551,26 @@ async def career_guidance(
 ):
     from app.agents.assistant_agent import get_career_guidance
 
-    task = AgentTask(
-        user_id=user.id,
-        agent_type=AgentType.research,
-        status=TaskStatus.running,
-        input=data.model_dump(),
-    )
-    db.add(task)
-    await db.commit()
+    # Input validation
+    if not data.career_goal or not isinstance(data.career_goal, str) or len(data.career_goal.strip()) < 3:
+        raise HTTPException(status_code=422, detail="Career goal must be a non-empty string with at least 3 characters")
+    
+    if not data.current_role or not isinstance(data.current_role, str) or len(data.current_role.strip()) < 2:
+        raise HTTPException(status_code=422, detail="Current role must be a non-empty string with at least 2 characters")
+    
+    if not data.target_role or not isinstance(data.target_role, str) or len(data.target_role.strip()) < 2:
+        raise HTTPException(status_code=422, detail="Target role must be a non-empty string with at least 2 characters")
+
     try:
+        task = AgentTask(
+            user_id=user.id,
+            agent_type=AgentType.research,
+            status=TaskStatus.running,
+            input=data.model_dump(),
+        )
+        db.add(task)
+        await db.commit()
+
         result = await get_career_guidance(str(user.id), data.model_dump(), db)
         task.status = TaskStatus.completed
         task.output = result
@@ -500,15 +584,16 @@ async def career_guidance(
         )
         return result
     except Exception as e:
-        task.status = TaskStatus.failed
-        task.error = str(e)
-        await db.commit()
+        logger.error("Career guidance failed for user %s: %s", user.id, str(e))
+        # Clean up task if it was created
+        if 'task' in locals():
+            task.status = TaskStatus.failed
+            task.error = str(e)
+            await db.commit()
         await create_notification(
             db, user.id, title="Career guidance failed", body=str(e)[:200], type="error"
         )
-        from fastapi import HTTPException
-
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Career guidance failed: {str(e)}")
 
 
 @router.post("/networking-outreach", status_code=200)
@@ -519,15 +604,23 @@ async def networking_outreach(
 ):
     from app.agents.assistant_agent import generate_outreach
 
-    task = AgentTask(
-        user_id=user.id,
-        agent_type=AgentType.networking,
-        status=TaskStatus.running,
-        input=data.model_dump(),
-    )
-    db.add(task)
-    await db.commit()
+    # Input validation
+    if not data.target_companies or not isinstance(data.target_companies, list) or len(data.target_companies) == 0:
+        raise HTTPException(status_code=422, detail="Target companies must be a non-empty list")
+    
+    if not data.message_purpose or not isinstance(data.message_purpose, str) or len(data.message_purpose.strip()) < 3:
+        raise HTTPException(status_code=422, detail="Message purpose must be a non-empty string with at least 3 characters")
+
     try:
+        task = AgentTask(
+            user_id=user.id,
+            agent_type=AgentType.networking,
+            status=TaskStatus.running,
+            input=data.model_dump(),
+        )
+        db.add(task)
+        await db.commit()
+
         result = await generate_outreach(str(user.id), data.model_dump(), db)
         task.status = TaskStatus.completed
         task.output = result
@@ -541,9 +634,12 @@ async def networking_outreach(
         )
         return result
     except Exception as e:
-        task.status = TaskStatus.failed
-        task.error = str(e)
-        await db.commit()
+        logger.error("Networking outreach failed for user %s: %s", user.id, str(e))
+        # Clean up task if it was created
+        if 'task' in locals():
+            task.status = TaskStatus.failed
+            task.error = str(e)
+            await db.commit()
         await create_notification(
             db,
             user.id,
@@ -551,9 +647,7 @@ async def networking_outreach(
             body=str(e)[:200],
             type="error",
         )
-        from fastapi import HTTPException
-
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Networking outreach failed: {str(e)}")
 
 
 @router.post("/internship-discover", status_code=200)
@@ -564,15 +658,23 @@ async def internship_discover(
 ):
     from app.agents.internship_agent import discover_internships
 
-    task = AgentTask(
-        user_id=user.id,
-        agent_type=AgentType.internship,
-        status=TaskStatus.running,
-        input=data.model_dump(),
-    )
-    db.add(task)
-    await db.commit()
+    # Input validation
+    if not data.query or not isinstance(data.query, str) or len(data.query.strip()) < 2:
+        raise HTTPException(status_code=422, detail="Query must be a non-empty string with at least 2 characters")
+    
+    if not data.location or not isinstance(data.location, str) or len(data.location.strip()) < 2:
+        raise HTTPException(status_code=422, detail="Location must be a non-empty string with at least 2 characters")
+
     try:
+        task = AgentTask(
+            user_id=user.id,
+            agent_type=AgentType.internship,
+            status=TaskStatus.running,
+            input=data.model_dump(),
+        )
+        db.add(task)
+        await db.commit()
+
         result = await discover_internships(str(user.id), data.model_dump(), db)
         task.status = TaskStatus.completed
         task.output = result
@@ -586,9 +688,12 @@ async def internship_discover(
         )
         return result
     except Exception as e:
-        task.status = TaskStatus.failed
-        task.error = str(e)
-        await db.commit()
+        logger.error("Internship discovery failed for user %s: %s", user.id, str(e))
+        # Clean up task if it was created
+        if 'task' in locals():
+            task.status = TaskStatus.failed
+            task.error = str(e)
+            await db.commit()
         await create_notification(
             db,
             str(user.id),
@@ -596,9 +701,7 @@ async def internship_discover(
             body=str(e)[:200],
             type="error",
         )
-        from fastapi import HTTPException
-
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Internship discovery failed: {str(e)}")
 
 
 @router.post("/job-discover", status_code=200)
@@ -609,15 +712,23 @@ async def job_discover(
 ):
     from app.agents.job_agent import discover_jobs
 
-    task = AgentTask(
-        user_id=user.id,
-        agent_type=AgentType.job,
-        status=TaskStatus.running,
-        input=data.model_dump(),
-    )
-    db.add(task)
-    await db.commit()
+    # Input validation
+    if not data.query or not isinstance(data.query, str) or len(data.query.strip()) < 2:
+        raise HTTPException(status_code=422, detail="Query must be a non-empty string with at least 2 characters")
+    
+    if not data.location or not isinstance(data.location, str) or len(data.location.strip()) < 2:
+        raise HTTPException(status_code=422, detail="Location must be a non-empty string with at least 2 characters")
+
     try:
+        task = AgentTask(
+            user_id=user.id,
+            agent_type=AgentType.job,
+            status=TaskStatus.running,
+            input=data.model_dump(),
+        )
+        db.add(task)
+        await db.commit()
+
         result = await discover_jobs(str(user.id), data.model_dump(), db)
         task.status = TaskStatus.completed
         task.output = result
@@ -631,9 +742,12 @@ async def job_discover(
         )
         return result
     except Exception as e:
-        task.status = TaskStatus.failed
-        task.error = str(e)
-        await db.commit()
+        logger.error("Job discovery failed for user %s: %s", user.id, str(e))
+        # Clean up task if it was created
+        if 'task' in locals():
+            task.status = TaskStatus.failed
+            task.error = str(e)
+            await db.commit()
         await create_notification(
             db,
             str(user.id),
@@ -641,9 +755,7 @@ async def job_discover(
             body=str(e)[:200],
             type="error",
         )
-        from fastapi import HTTPException
-
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Job discovery failed: {str(e)}")
 
 
 # ─── Interview Sessions ─────────────────────────────────────
@@ -656,15 +768,19 @@ async def list_interview_sessions(
 ):
     from app.models.user import MemoryEntry
 
-    result = await db.execute(
-        select(MemoryEntry).where(
-            MemoryEntry.user_id == user.id,
-            MemoryEntry.key == "interview_sessions",
+    try:
+        result = await db.execute(
+            select(MemoryEntry).where(
+                MemoryEntry.user_id == user.id,
+                MemoryEntry.key == "interview_sessions",
+            )
         )
-    )
-    entry = result.scalar_one_or_none()
-    sessions = entry.value if entry and entry.value else []
-    return InterviewSessionList(items=[InterviewSessionOut(**s) for s in sessions])
+        entry = result.scalar_one_or_none()
+        sessions = entry.value if entry and entry.value else []
+        return InterviewSessionList(items=[InterviewSessionOut(**s) for s in sessions])
+    except Exception as e:
+        logger.error("Failed to list interview sessions for user %s: %s", user.id, str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve interview sessions: {str(e)}")
 
 
 @router.post("/interview-sessions", status_code=201)
@@ -676,34 +792,51 @@ async def create_interview_session(
     from app.models.user import MemoryEntry
     import uuid
 
-    result = await db.execute(
-        select(MemoryEntry).where(
-            MemoryEntry.user_id == user.id,
-            MemoryEntry.key == "interview_sessions",
+    # Input validation
+    if not data.company or not isinstance(data.company, str) or len(data.company.strip()) < 2:
+        raise HTTPException(status_code=422, detail="Company must be a non-empty string with at least 2 characters")
+    
+    if not data.type or not isinstance(data.type, str) or data.type not in ["behavioral", "technical", "system", "mixed"]:
+        raise HTTPException(status_code=422, detail="Type must be one of: behavioral, technical, system, mixed")
+    
+    if not isinstance(data.score, (int, float)) or data.score < 0 or data.score > 100:
+        raise HTTPException(status_code=422, detail="Score must be a number between 0 and 100")
+    
+    if not isinstance(data.duration, (int, float)) or data.duration < 0:
+        raise HTTPException(status_code=422, detail="Duration must be a non-negative number")
+
+    try:
+        result = await db.execute(
+            select(MemoryEntry).where(
+                MemoryEntry.user_id == user.id,
+                MemoryEntry.key == "interview_sessions",
+            )
         )
-    )
-    entry = result.scalar_one_or_none()
-    session = {
-        "id": str(uuid.uuid4())[:8],
-        "company": data.company,
-        "type": data.type,
-        "date": datetime.now(timezone.utc).strftime("%b %d"),
-        "score": data.score,
-        "duration": data.duration,
-    }
-    if entry:
-        sessions = entry.value or []
-        sessions.append(session)
-        entry.value = sessions
-    else:
-        entry = MemoryEntry(
-            user_id=user.id,
-            key="interview_sessions",
-            value=[session],
-        )
-        db.add(entry)
-    await db.flush()
-    return InterviewSessionOut(**session)
+        entry = result.scalar_one_or_none()
+        session = {
+            "id": str(uuid.uuid4())[:8],
+            "company": data.company,
+            "type": data.type,
+            "date": datetime.now(timezone.utc).strftime("%b %d"),
+            "score": data.score,
+            "duration": data.duration,
+        }
+        if entry:
+            sessions = entry.value or []
+            sessions.append(session)
+            entry.value = sessions
+        else:
+            entry = MemoryEntry(
+                user_id=user.id,
+                key="interview_sessions",
+                value=[session],
+            )
+            db.add(entry)
+        await db.flush()
+        return InterviewSessionOut(**session)
+    except Exception as e:
+        logger.error("Failed to create interview session for user %s: %s", user.id, str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to create interview session: {str(e)}")
 
 
 # ─── Interview Feedback ─────────────────────────────────────
@@ -717,5 +850,22 @@ async def interview_feedback(
 ):
     from app.agents.assistant_agent import review_interview_answer
 
-    result = await review_interview_answer(str(user.id), data.model_dump(), db)
-    return result
+    # Input validation
+    if not data.question or not isinstance(data.question, str) or len(data.question.strip()) < 3:
+        raise HTTPException(status_code=422, detail="Question must be a non-empty string with at least 3 characters")
+    
+    if not data.answer or not isinstance(data.answer, str) or len(data.answer.strip()) < 3:
+        raise HTTPException(status_code=422, detail="Answer must be a non-empty string with at least 3 characters")
+    
+    if not data.company or not isinstance(data.company, str) or len(data.company.strip()) < 2:
+        raise HTTPException(status_code=422, detail="Company must be a non-empty string with at least 2 characters")
+    
+    if not data.role or not isinstance(data.role, str) or len(data.role.strip()) < 2:
+        raise HTTPException(status_code=422, detail="Role must be a non-empty string with at least 2 characters")
+
+    try:
+        result = await review_interview_answer(str(user.id), data.model_dump(), db)
+        return result
+    except Exception as e:
+        logger.error("Interview feedback failed for user %s: %s", user.id, str(e))
+        raise HTTPException(status_code=500, detail=f"Interview feedback failed: {str(e)}")

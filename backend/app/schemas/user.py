@@ -1,25 +1,7 @@
 from datetime import date, datetime
 from typing import Optional, Any
 from uuid import UUID
-from pydantic import BaseModel, EmailStr, Field
-
-
-# ─── Auth ───────────────────────────────────────────────────
-
-
-class RegisterRequest(BaseModel):
-    email: EmailStr
-    password: str = Field(min_length=8)
-    full_name: str = Field(min_length=1)
-
-
-class LoginRequest(BaseModel):
-    email: EmailStr
-    password: str
-
-
-class RefreshRequest(BaseModel):
-    token: str
+from pydantic import BaseModel, EmailStr
 
 
 # ─── Users ──────────────────────────────────────────────────
@@ -86,6 +68,8 @@ class ProfileUpdate(BaseModel):
 class ProfileOut(BaseModel):
     id: UUID
     user_id: UUID
+    full_name: Optional[str] = None
+    avatar_url: Optional[str] = None
     school: Optional[str] = None
     graduation_date: Optional[date] = None
     bio: Optional[str] = None
@@ -108,12 +92,17 @@ class ProfileOut(BaseModel):
 
 
 class OpportunityOut(BaseModel):
-    id: str
+    id: UUID
     title: str
     company: str
     company_logo: Optional[str] = None
     location: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    country: Optional[str] = None
+    industry: Optional[str] = None
     remote: bool = False
+    work_type: Optional[str] = None
     type: str
     salary_min: Optional[int] = None
     salary_max: Optional[int] = None
@@ -150,7 +139,7 @@ class ScoredOpportunityList(BaseModel):
 
 
 class ApplicationCreate(BaseModel):
-    opportunity_id: str
+    opportunity_id: UUID
     notes: Optional[str] = None
 
 
@@ -162,8 +151,8 @@ class ApplicationUpdate(BaseModel):
 
 
 class ApplicationOut(BaseModel):
-    id: str
-    opportunity_id: str
+    id: UUID
+    opportunity_id: UUID
     stage: str
     applied_date: Optional[date] = None
     next_step: Optional[str] = None
@@ -209,7 +198,7 @@ class ContactUpdate(BaseModel):
 
 
 class ContactOut(BaseModel):
-    id: str
+    id: UUID
     name: str
     role: Optional[str] = None
     company: Optional[str] = None
@@ -238,7 +227,7 @@ class PlannerRunRequest(BaseModel):
 
 
 class TaskOut(BaseModel):
-    id: str
+    id: UUID
     agent_type: str
     status: str
     input: Optional[dict] = None
@@ -256,7 +245,7 @@ class TaskList(BaseModel):
 
 
 class PlannerRunResponse(BaseModel):
-    task_id: str
+    task_id: UUID
 
 
 # ─── Memory ─────────────────────────────────────────────────
@@ -274,7 +263,7 @@ class MemoryUpdate(BaseModel):
 
 
 class MemoryOut(BaseModel):
-    id: str
+    id: UUID
     key: str
     value: Any
     weight: float
@@ -343,7 +332,7 @@ class AlertConfigUpdate(BaseModel):
 
 
 class AlertConfigOut(BaseModel):
-    id: str
+    id: UUID
     name: str
     keywords: list[str] = []
     locations: list[str] = []
@@ -406,6 +395,9 @@ class MonitorSettingsUpdate(BaseModel):
     min_match_score: Optional[int] = None
     max_results: Optional[int] = None
     frequency: Optional[str] = None
+    digest: Optional[bool] = None
+    push: Optional[bool] = None
+    realtime: Optional[bool] = None
 
 
 class CareerGuidanceRequest(BaseModel):
@@ -423,7 +415,7 @@ class NetworkingOutreachRequest(BaseModel):
 
 
 class NotificationOut(BaseModel):
-    id: str
+    id: UUID
     title: str
     body: str
     type: str

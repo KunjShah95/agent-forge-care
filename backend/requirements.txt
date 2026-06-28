@@ -20,8 +20,27 @@ langsmith>=0.4.0
 langgraph
 langchain-openai
 langchain-core
+
+# ── Additional AI Model Providers ────────────────────────────
+# Anthropic Claude
+langchain-anthropic>=0.3.0
+# Google Gemini (free tier available)
+langchain-google-genai>=2.0.0
+# Groq (free tier for fast open-source inference)
+langchain-groq>=0.2.0
+# Ollama (free, local open-source models)
+langchain-ollama>=0.2.0
+# Mistral AI (free tier available)
+langchain-mistralai>=0.2.0
+# DeepSeek (very cheap, open-source reasoning)
+langchain-deepseek>=0.1.0
+# HuggingFace (free, local embeddings)
+langchain-huggingface>=0.1.0
+sentence-transformers>=3.0.0
 email-validator
 pypdf>=5.0.0
+PyMuPDF>=1.26.0
+pymupdf4llm>=0.0.27
 rq>=1.9.0
 pytest>=8.0.0
 pytest-asyncio>=0.24.0

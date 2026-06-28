@@ -7,7 +7,6 @@ Integrates with:
 - Web search for real-time company data
 """
 
-import asyncio
 import logging
 import re
 from datetime import datetime, timezone
@@ -18,28 +17,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.search.adapters import SearchAdapter
 from app.services.memory_service import MemoryService
 from app.memory.memory_layer import AgentMemory
-from app.utils.embedding import get_text_embedding, compute_similarity
+from app.utils.embedding import get_text_embedding
+from app.services.model_manager import get_completion_llm
 
 import json
-from app.config import settings
 
 logger = logging.getLogger("agentforge.agents.research")
-
-
-def _get_llm(temperature: float = 0.7):
-    if not settings.openai_api_key:
-        return None
-    try:
-        from langchain_openai import ChatOpenAI
-
-        return ChatOpenAI(
-            model="gpt-4o-mini",
-            temperature=temperature,
-            api_key=settings.openai_api_key,
-        )
-    except ImportError:
-        logger.warning("langchain_openai not available")
-        return None
 
 
 def _strip_json_fences(content) -> str:
@@ -62,102 +45,117 @@ async def conduct_research(
     Conduct research on companies, roles, interview insights, and market trends.
     Stores findings in memory for future retrieval.
     """
+    # Input validation
     query = params.get("query", "")
     topics = params.get("topics", [])
     focus = params.get("focus", "company")  # company | interview-prep | market | skills
 
+    if not isinstance(query, str):
+        raise ValueError("Invalid query: must be a string")
+    
+    if not isinstance(topics, list):
+        topics = []
+    
+    if not isinstance(focus, str) or focus not in ["company", "interview-prep", "market", "skills"]:
+        focus = "company"
+
     memory_service = MemoryService(db)
     agent_memory = AgentMemory(user_id)
 
-    # Check memory for existing research on this topic
-    existing = await memory_service.get_memory(user_id, "research_topics")
-    if existing and isinstance(existing, dict):
-        existing_topics = existing.get("topics", [])
-        # Merge topics
-        topics = list(set(topics + existing_topics))
+    try:
+        # Check memory for existing research on this topic
+        existing = await memory_service.get_memory(user_id, "research_topics")
+        if existing and isinstance(existing, dict):
+            existing_topics = existing.get("topics", [])
+            # Merge topics
+            topics = list(set(topics + existing_topics))
 
-    if search_adapter is None:
-        search_adapter = SearchAdapter()
+        if search_adapter is None:
+            search_adapter = SearchAdapter()
 
-    results = {}
+        results = {}
 
-    if focus == "company" or (query and not focus):
-        results["company_info"] = await _search_company(query, search_adapter)
+        if focus == "company" or (query and not focus):
+            results["company_info"] = await _search_company(query, search_adapter)
 
-    if focus == "interview-prep" or "interview" in query.lower():
-        results["interview_insights"] = await _search_interview_insights(
-            query, topics, search_adapter
+        if focus == "interview-prep" or "interview" in query.lower():
+            results["interview_insights"] = await _search_interview_insights(
+                query, topics, search_adapter
+            )
+
+        if focus == "market" or "trend" in query.lower():
+            results["market_trends"] = await _search_market_intelligence(
+                topics, search_adapter
+            )
+
+        if focus == "skills":
+            results["skill_analysis"] = await _search_skill_insights(topics, search_adapter)
+
+        # Store full research in memory
+        await memory_service.set_memory(
+            user_id,
+            f"research_{datetime.now(timezone.utc).timestamp()}",
+            {
+                "query": query,
+                "topics": topics,
+                "results": results,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            },
+            weight=0.9,
         )
 
-    if focus == "market" or "trend" in query.lower():
-        results["market_trends"] = await _search_market_intelligence(
-            topics, search_adapter
+        # Update consolidated research topics
+        await memory_service.set_memory(
+            user_id,
+            "research_topics",
+            {"topics": topics, "last_query": query},
+            weight=0.7,
         )
 
-    if focus == "skills":
-        results["skill_analysis"] = await _search_skill_insights(topics, search_adapter)
+        # Store research vectors in Qdrant for semantic retrieval
+        for topic in topics:
+            await _store_research_embedding(user_id, agent_memory, topic, results)
 
-    # Store full research in memory
-    await memory_service.set_memory(
-        user_id,
-        f"research_{datetime.now(timezone.utc).timestamp()}",
-        {
-            "query": query,
-            "topics": topics,
+        # Build summary
+        sections = []
+        if results.get("company_info"):
+            c = results["company_info"]
+            sections.append(f"🏢 {c.get('name', 'Company')} — {c.get('industry', 'Tech')}")
+            sections.append(c.get("summary", ""))
+
+        if results.get("interview_insights"):
+            insights = results["interview_insights"]
+            sections.append(
+                f"🎙️ Interview Tips: {insights.get('tips', 'Focus on fundamentals and problem-solving.')}"
+            )
+            questions = insights.get("common_questions", [])
+            if questions:
+                sections.append("Sample questions: " + "; ".join(questions[:3]))
+
+        if results.get("market_trends"):
+            trends = results["market_trends"]
+            sections.append(
+                f"📈 Market: {trends.get('outlook', 'Growing demand across roles.')}"
+            )
+
+        if results.get("skill_analysis"):
+            sa = results["skill_analysis"]
+            sections.append(
+                f"🛠️ Skills: {sa.get('insight', 'Your skills align with current market needs.')}"
+            )
+
+        return {
             "results": results,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        },
-        weight=0.9,
-    )
+            "summary": "\n\n".join(sections)
+            if sections
+            else "Research completed. No specific findings for the given query.",
+            "topics": topics,
+            "message": f"Research complete on {len(topics)} topics",
+        }
 
-    # Update consolidated research topics
-    await memory_service.set_memory(
-        user_id,
-        "research_topics",
-        {"topics": topics, "last_query": query},
-        weight=0.7,
-    )
-
-    # Store research vectors in Qdrant for semantic retrieval
-    for topic in topics:
-        await _store_research_embedding(user_id, agent_memory, topic, results)
-
-    # Build summary
-    sections = []
-    if results.get("company_info"):
-        c = results["company_info"]
-        sections.append(f"🏢 {c.get('name', 'Company')} — {c.get('industry', 'Tech')}")
-        sections.append(c.get("summary", ""))
-
-    if results.get("interview_insights"):
-        insights = results["interview_insights"]
-        sections.append(
-            f"🎙️ Interview Tips: {insights.get('tips', 'Focus on fundamentals and problem-solving.')}"
-        )
-        questions = insights.get("common_questions", [])
-        if questions:
-            sections.append("Sample questions: " + "; ".join(questions[:3]))
-
-    if results.get("market_trends"):
-        trends = results["market_trends"]
-        sections.append(
-            f"📈 Market: {trends.get('outlook', 'Growing demand across roles.')}"
-        )
-
-    if results.get("skill_analysis"):
-        sa = results["skill_analysis"]
-        sections.append(
-            f"🛠️ Skills: {sa.get('insight', 'Your skills align with current market needs.')}"
-        )
-
-    return {
-        "results": results,
-        "summary": "\n\n".join(sections)
-        if sections
-        else "Research completed. No specific findings for the given query.",
-        "topics": topics,
-        "message": f"Research complete on {len(topics)} topics",
-    }
+    except Exception as e:
+        logger.error("Research failed for user %s: %s", user_id, str(e))
+        raise
 
 
 async def _fetch_github_org_data(company_name: str) -> dict | None:
@@ -166,13 +164,9 @@ async def _fetch_github_org_data(company_name: str) -> dict | None:
         return None
     org_name = re.sub(r'[^a-zA-Z0-9-]', '', company_name.lower().replace(" ", ""))
     
-    headers = {
-        "User-Agent": "AgentForge-CareerOS"
-    }
-    import os
-    token = os.environ.get("GITHUB_TOKEN")
-    if token:
-        headers["Authorization"] = f"token {token}"
+    headers = {"User-Agent": "AgentForge-CareerOS"}
+    if settings.github_token:
+        headers["Authorization"] = f"token {settings.github_token}"
         
     try:
         import httpx
@@ -215,7 +209,7 @@ async def _fetch_github_org_data(company_name: str) -> dict | None:
                             "updated_at": repo.get("updated_at")
                         })
                 
-                sorted_languages = [l for l, _ in sorted(languages.items(), key=lambda x: x[1], reverse=True)]
+                sorted_languages = [lang for lang, _ in sorted(languages.items(), key=lambda x: x[1], reverse=True)]
                 
                 return {
                     "login": org_data.get("login"),
@@ -250,7 +244,7 @@ async def _search_company(company: str, search_adapter: SearchAdapter) -> dict:
         # Fetch live GitHub organization metadata
         github_data = await _fetch_github_org_data(company)
 
-        llm = _get_llm(temperature=0.5)
+        llm = get_completion_llm(temperature=0.5, preferred_provider="openai")
         if llm:
             try:
                 from langchain_core.messages import HumanMessage
