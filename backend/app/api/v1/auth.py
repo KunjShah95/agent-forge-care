@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 logger = logging.getLogger("agentforge.auth")
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user_unverified
 from app.models.user import User
 from app.schemas.user import (
     UserOut,
@@ -16,7 +16,7 @@ router = APIRouter()
 
 
 @router.get("/me", response_model=UserOut)
-async def get_me(user: User = Depends(get_current_user)):
+async def get_me(user: User = Depends(get_current_user_unverified)):
     """Get current authenticated user."""
     return user
 
@@ -24,7 +24,7 @@ async def get_me(user: User = Depends(get_current_user)):
 @router.patch("/me", response_model=UserOut)
 async def update_me(
     data: UserUpdate,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_current_user_unverified),
     db: AsyncSession = Depends(get_db),
 ):
     """Update current user."""

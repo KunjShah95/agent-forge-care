@@ -6,7 +6,6 @@ alembic>=1.14.0
 pydantic>=2.10.0
 pydantic-settings>=2.6.0
 python-jose[cryptography]>=3.3.0
-passlib[bcrypt]>=1.7.4
 httpx>=0.28.0
 beautifulsoup4>=4.13.0
 lxml>=5.3.0
@@ -17,25 +16,26 @@ redis>=5.2.0
 python-multipart>=0.0.12
 cohere>=5.0.0
 langsmith>=0.4.0
-langgraph
-langchain-openai
-langchain-core
+langgraph>=1.0.0
+# Pinned versions for production stability
+langchain-openai>=1.1.0,<2.0.0
+langchain-core>=1.4.0,<2.0.0
 
-# ── Additional AI Model Providers ────────────────────────────
+# ── Additional AI Model Providers (pinned) ───────────────────
 # Anthropic Claude
-langchain-anthropic>=0.3.0
+langchain-anthropic>=1.4.0,<2.0.0
 # Google Gemini (free tier available)
-langchain-google-genai>=2.0.0
+langchain-google-genai>=4.2.0,<5.0.0
 # Groq (free tier for fast open-source inference)
-langchain-groq>=0.2.0
+langchain-groq>=1.1.0,<2.0.0
 # Ollama (free, local open-source models)
-langchain-ollama>=0.2.0
+langchain-ollama>=1.1.0,<2.0.0
 # Mistral AI (free tier available)
-langchain-mistralai>=0.2.0
+langchain-mistralai>=1.1.0,<2.0.0
 # DeepSeek (very cheap, open-source reasoning)
-langchain-deepseek>=0.1.0
+langchain-deepseek>=1.1.0,<2.0.0
 # HuggingFace (free, local embeddings)
-langchain-huggingface>=0.1.0
+langchain-huggingface>=1.1.0,<2.0.0
 sentence-transformers>=3.0.0
 email-validator
 pypdf>=5.0.0

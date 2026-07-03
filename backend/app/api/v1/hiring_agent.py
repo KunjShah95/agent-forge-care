@@ -1,5 +1,5 @@
+import asyncio
 import logging
-import io
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
@@ -42,6 +42,9 @@ class EvaluateTextRequest(BaseModel):
     portfolio_url: str | None = None
 
 
+PDF_TIMEOUT_SECONDS = 30
+
+
 @router.post("/pipeline", response_model=PipelineResult)
 async def run_full_pipeline(
     file: UploadFile = File(...),
@@ -58,10 +61,16 @@ async def run_full_pipeline(
     if len(content) > 10 * 1024 * 1024:
         raise HTTPException(400, detail="File too large (max 10MB)")
     service = HiringAgentService(db, str(user.id))
-    result = await service.run_pipeline(
-        pdf_content=content, jd_text=jd_text, position_type=position_type,
-        github_url=github_url, portfolio_url=portfolio_url,
-    )
+    try:
+        result = await asyncio.wait_for(
+            service.run_pipeline(
+                pdf_content=content, jd_text=jd_text, position_type=position_type,
+                github_url=github_url, portfolio_url=portfolio_url,
+            ),
+            timeout=PDF_TIMEOUT_SECONDS,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(408, detail="PDF processing timed out")
     if not result:
         raise HTTPException(500, detail="Pipeline failed to extract resume data")
     return result
@@ -79,7 +88,13 @@ async def extract_resume(
     if len(content) > 10 * 1024 * 1024:
         raise HTTPException(400, detail="File too large (max 10MB)")
     service = HiringAgentService(db, str(user.id))
-    resume = await service.extract_resume(content)
+    try:
+        resume = await asyncio.wait_for(
+            service.extract_resume(content),
+            timeout=PDF_TIMEOUT_SECONDS,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(408, detail="PDF processing timed out")
     return resume
 
 
@@ -131,7 +146,13 @@ async def ats_analysis(
     if len(content) > 10 * 1024 * 1024:
         raise HTTPException(400, detail="File too large (max 10MB)")
     service = HiringAgentService(db, str(user.id))
-    resume = await service.extract_resume(content)
+    try:
+        resume = await asyncio.wait_for(
+            service.extract_resume(content),
+            timeout=PDF_TIMEOUT_SECONDS,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(408, detail="PDF processing timed out")
     if not resume or not resume.raw_text:
         raise HTTPException(500, detail="Failed to extract resume text")
     return await service.compute_ats_analysis(resume.raw_text, jd_text)
@@ -152,7 +173,13 @@ async def match_jd(
     if len(content) > 10 * 1024 * 1024:
         raise HTTPException(400, detail="File too large (max 10MB)")
     service = HiringAgentService(db, str(user.id))
-    resume = await service.extract_resume(content)
+    try:
+        resume = await asyncio.wait_for(
+            service.extract_resume(content),
+            timeout=PDF_TIMEOUT_SECONDS,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(408, detail="PDF processing timed out")
     if not resume or not resume.raw_text:
         raise HTTPException(500, detail="Failed to extract resume text")
     gh_text = ""
@@ -194,7 +221,13 @@ async def generate_cover_letter(
     if len(content) > 10 * 1024 * 1024:
         raise HTTPException(400, detail="File too large (max 10MB)")
     service = HiringAgentService(db, str(user.id))
-    resume = await service.extract_resume(content)
+    try:
+        resume = await asyncio.wait_for(
+            service.extract_resume(content),
+            timeout=PDF_TIMEOUT_SECONDS,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(408, detail="PDF processing timed out")
     if not resume or not resume.raw_text:
         raise HTTPException(500, detail="Failed to extract resume text")
     name = resume.basics.name if resume.basics else None
@@ -265,10 +298,16 @@ async def generate_report(
     if len(content) > 10 * 1024 * 1024:
         raise HTTPException(400, detail="File too large (max 10MB)")
     service = HiringAgentService(db, str(user.id))
-    result = await service.run_pipeline(
-        pdf_content=content, position_type=position_type,
-        github_url=github_url, portfolio_url=portfolio_url,
-    )
+    try:
+        result = await asyncio.wait_for(
+            service.run_pipeline(
+                pdf_content=content, position_type=position_type,
+                github_url=github_url, portfolio_url=portfolio_url,
+            ),
+            timeout=PDF_TIMEOUT_SECONDS,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(408, detail="PDF processing timed out")
     if not result:
         raise HTTPException(500, detail="Pipeline failed")
     html = await service.generate_report_html(result)

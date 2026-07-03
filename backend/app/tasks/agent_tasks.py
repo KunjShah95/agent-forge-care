@@ -11,14 +11,43 @@ from app.services.memory_service import MemoryService
 logger = logging.getLogger("agentforge.tasks")
 
 
-def process_research_task(task_id: str, user_id: str, query: str, focus: str) -> None:
-    """RQ worker entrypoint — runs inside worker process (sync function).
-
-    It runs the async conduct_research coroutine using asyncio.
-    Updates AgentTask status in the DB.
+def _run_async(coro):
+    """Run an async coroutine from a sync RQ worker context.
+    Uses the existing event loop if one exists, otherwise creates a new one.
+    This avoids blocking the worker thread pool with nested asyncio.run() calls.
     """
     try:
-        asyncio.run(_run_task(task_id, user_id, query, focus))
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            # Event loop is already running (e.g., in tests or async context)
+            import threading
+            result = []
+            exception = []
+            def _run():
+                try:
+                    new_loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(new_loop)
+                    result.append(new_loop.run_until_complete(coro))
+                except Exception as e:
+                    exception.append(e)
+                finally:
+                    new_loop.close()
+            thread = threading.Thread(target=_run)
+            thread.start()
+            thread.join()
+            if exception:
+                raise exception[0]
+            return result[0] if result else None
+        else:
+            return loop.run_until_complete(coro)
+    except RuntimeError:
+        return asyncio.run(coro)
+
+
+def process_research_task(task_id: str, user_id: str, query: str, focus: str) -> None:
+    """RQ worker entrypoint — runs inside worker process (sync function)."""
+    try:
+        _run_async(_run_task(task_id, user_id, query, focus))
     except Exception:
         logger.exception("process_research_task failed")
 
@@ -48,7 +77,7 @@ async def _run_task(task_id: str, user_id: str, query: str, focus: str) -> None:
 def process_github_scrape(task_id: str, user_id: str, github_url: str) -> None:
     """RQ worker entrypoint: scrape a GitHub user profile and store results."""
     try:
-        asyncio.run(_run_github_scrape(task_id, user_id, github_url))
+        _run_async(_run_github_scrape(task_id, user_id, github_url))
     except Exception:
         logger.exception("process_github_scrape failed")
 
@@ -79,7 +108,7 @@ async def _run_github_scrape(task_id: str, user_id: str, github_url: str) -> Non
 def process_portfolio_scrape(task_id: str, user_id: str, portfolio_url: str) -> None:
     """RQ worker entrypoint: scrape a portfolio website and store results."""
     try:
-        asyncio.run(_run_portfolio_scrape(task_id, user_id, portfolio_url))
+        _run_async(_run_portfolio_scrape(task_id, user_id, portfolio_url))
     except Exception:
         logger.exception("process_portfolio_scrape failed")
 

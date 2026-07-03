@@ -192,7 +192,22 @@ async def upload_avatar(
     if len(content) > MAX_AVATAR_SIZE:
         raise HTTPException(status_code=400, detail="File too large (max 2MB)")
 
+    # Validate file content (magic bytes) in addition to content-type
+    _VALID_MAGIC_BYTES = {
+        b"\xff\xd8\xff": "image/jpeg",
+        b"\x89PNG": "image/png",
+        b"GIF87a": "image/gif",
+        b"GIF89a": "image/gif",
+        b"RIFF": "image/webp",
+    }
+    is_valid_content = any(content.startswith(magic) for magic in _VALID_MAGIC_BYTES)
+    if not is_valid_content:
+        raise HTTPException(status_code=400, detail="File content does not match image format")
+
     ext = file.filename.rsplit(".", 1)[-1] if file.filename else "png"
+    # Only allow safe extensions
+    if ext.lower() not in {"jpg", "jpeg", "png", "gif", "webp"}:
+        ext = "png"
     filename = f"{uuid.uuid4().hex}.{ext}"
     filepath = AVATAR_DIR / filename
     os.makedirs(AVATAR_DIR, exist_ok=True)

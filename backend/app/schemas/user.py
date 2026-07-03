@@ -10,6 +10,7 @@ from pydantic import BaseModel, EmailStr
 class UserOut(BaseModel):
     id: UUID
     email: str
+    email_verified: bool = False
     full_name: str
     avatar_url: Optional[str] = None
     created_at: datetime

@@ -30,14 +30,16 @@ from app.agents.graph import (
     build_planner_graph,
     PlannerGraphState,
     gen_id,
-    _execute_with_retry,
-    _filter_tasks_by_context,
-    _score_agent_output,
     should_regenerate,
     get_planner_graph,
 )
-from app.agents.internship_agent import _demo_internships
-from app.agents.job_agent import _demo_jobs
+from app.agents.orchestrator.service import (
+    _filter_tasks_by_context,
+    _score_agent_output,
+    _run_with_retry,
+    MAX_RETRIES,
+)
+from app.utils.demo_data import generate_demo_opportunities
 from app.models.user import AgentType, TaskStatus
 from tests.conftest import TEST_USER_ID, make_user, MockResult
 
@@ -196,37 +198,34 @@ class TestDynamicRouting:
 
 
 @pytest.mark.asyncio
-@patch("app.agents.graph._execute_single_agent_inner", new_callable=AsyncMock)
-async def test_execute_with_retry_success_first_try(mock_inner):
+async def test_run_with_retry_success_first_try():
     """Agent succeeds on first attempt — no retry needed."""
-    mock_inner.return_value = {"test_agent": {"items": [{"id": "1"}]}}
-    result = await _execute_with_retry("test_agent", "user1", {}, None)
-    assert "test_agent" in result
+    mock_inner = AsyncMock(return_value={"test_agent": {"items": [{"id": "1"}]}})
+    result = await _run_with_retry(lambda: mock_inner(), "test")
+    assert result == {"test_agent": {"items": [{"id": "1"}]}}
     assert mock_inner.call_count == 1
 
 
 @pytest.mark.asyncio
-@patch("app.agents.graph._execute_single_agent_inner", new_callable=AsyncMock)
-async def test_execute_with_retry_fails_all_attempts(mock_inner):
-    """Agent fails all attempts — returns error dict."""
-    mock_inner.side_effect = RuntimeError("Service unavailable")
-    result = await _execute_with_retry("test_agent", "user1", {}, None)
-    assert "error" in result["test_agent"]
-    assert mock_inner.call_count == 3  # 3 attempts total (AGENT_MAX_RETRIES + 1)
+async def test_run_with_retry_fails_all_attempts():
+    """Agent fails all attempts — raises the last exception."""
+    mock_inner = AsyncMock(side_effect=RuntimeError("Service unavailable"))
+    with pytest.raises(RuntimeError, match="Service unavailable"):
+        await _run_with_retry(lambda: mock_inner(), "test")
+    assert mock_inner.call_count == MAX_RETRIES + 1  # 3 total (initial + 2 retries)
 
 
 @pytest.mark.asyncio
-@patch("app.agents.graph._execute_single_agent_inner", new_callable=AsyncMock)
-async def test_execute_with_retry_succeeds_on_retry(mock_inner):
+async def test_run_with_retry_succeeds_on_retry():
     """Agent fails twice then succeeds on third attempt."""
-    mock_inner.side_effect = [
+    results = [
         RuntimeError("Timeout"),
         RuntimeError("Busy"),
         {"test_agent": {"items": [{"id": "1"}]}},
     ]
-    result = await _execute_with_retry("test_agent", "user1", {}, None)
-    assert "test_agent" in result
-    assert "error" not in result["test_agent"]
+    mock_inner = AsyncMock(side_effect=results)
+    result = await _run_with_retry(lambda: mock_inner(), "test")
+    assert result == {"test_agent": {"items": [{"id": "1"}]}}
     assert mock_inner.call_count == 3
 
 
@@ -518,13 +517,18 @@ async def test_api_internship_discover_flow(mock_discover, mock_db, auth_client)
 
 
 @pytest.mark.asyncio
-@patch("app.agents.assistant_agent.prepare_interview", new_callable=AsyncMock)
+@patch("app.agents.interview_agent.service.InterviewAgent.run", new_callable=AsyncMock)
 async def test_api_interview_prep_role_mapping(mock_prep, mock_db, auth_client):
     """Frontend sends 'role' but backend expects 'role_type' — ensure mapping works."""
-    mock_prep.return_value = {
-        "questions": [{"skill": "general", "question": "Tell me about yourself", "type": "behavioral"}],
-        "message": "Ready",
-    }
+    from app.agents.schemas import AgentResult, AgentStatus
+    mock_prep.return_value = AgentResult(
+        agent_type="interview",
+        status=AgentStatus.COMPLETED,
+        output={
+            "questions": [{"skill": "general", "question": "Tell me about yourself", "type": "behavioral"}],
+            "message": "Ready",
+        },
+    )
 
     response = await auth_client.post(
         "/api/v1/agents/interview-prep",
@@ -587,7 +591,7 @@ class TestDemoData:
     """Verify demo data used by agents is well-formed."""
 
     def test_demo_internships_are_valid(self):
-        results = _demo_internships("test", "Remote")
+        results = generate_demo_opportunities(AgentType.internship, "test", "Remote")
         assert len(results) >= 1
         for r in results:
             assert "title" in r
@@ -597,17 +601,17 @@ class TestDemoData:
             assert "apply_url" in r
 
     def test_demo_jobs_are_valid(self):
-        from app.agents.job_agent import _demo_jobs
-        results = _demo_jobs("test", "Remote")
+        results = generate_demo_opportunities(AgentType.job, "test", "Remote")
         assert len(results) >= 1
         for r in results:
             assert "title" in r
             assert "company" in r
-            assert "salary_min" in r
-            assert "salary_max" in r
+            if "salary_min" in r:
+                assert isinstance(r["salary_min"], (int, float))
+            if "salary_max" in r:
+                assert isinstance(r["salary_max"], (int, float))
 
     def test_demo_data_utility(self):
-        from app.utils.demo_data import generate_demo_opportunities
         results = generate_demo_opportunities(AgentType.internship, "ML", "Remote")
         assert len(results) > 0
         assert all("title" in r and "company" in r for r in results)

@@ -216,12 +216,12 @@ agentforge/
 │   ├── k8s/                    # Kubernetes manifests
 │   ├── terraform/              # AWS infrastructure
 │   └── docker/                 # Dockerfiles
-├── docs/
-│   ├── SKULL.md                # ← You are here
-│   ├── CLAUDE.md               # AI behavior spec
-│   ├── FRONTEND.md             # Frontend architecture
-│   ├── BACKEND.md              # Backend architecture
-│   └── AIML.md                 # AI/ML architecture
+├── FRONTEND.md                # Frontend architecture
+├── BACKEND.md                 # Backend architecture
+├── AIML.md                    # AI/ML architecture
+├── AGENTS.md                  # Agent capabilities reference
+├── SKULL.md                   # ← You are here
+├── CLAUDE.md                  # AI behavior spec
 └── scripts/
     ├── seed.py                 # DB seeding
     └── eval/                   # Agent evaluation scripts

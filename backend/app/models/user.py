@@ -81,6 +81,7 @@ class User(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=gen_uuid)
     email = Column(String(255), unique=True, nullable=False, index=True)
+    email_verified = Column(Boolean, default=False, nullable=False, server_default="false")
     password_hash = Column(String(255), nullable=True)
     firebase_uid = Column(String(255), unique=True, nullable=True)
     full_name = Column(String(255), nullable=False)
@@ -173,6 +174,9 @@ class Skill(Base):
 
 class ProfileSkill(Base):
     __tablename__ = "profile_skills"
+    __table_args__ = (
+        UniqueConstraint("profile_id", "skill_id", name="uq_profile_skill"),
+    )
 
     profile_id = Column(
         UUID(as_uuid=True),
@@ -408,7 +412,7 @@ class MemoryEntry(Base):
     key = Column(String(255), nullable=False)
     value = Column(JSON, nullable=False)
     weight = Column(DECIMAL(3, 2), default=1.0)
-    ttl_days = Column(Integer, nullable=True, default=None)
+    ttl_days = Column(Integer, nullable=True, default=90)  # Auto-expire after 90 days
     created_at = Column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

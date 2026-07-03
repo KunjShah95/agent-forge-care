@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import re
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -20,9 +21,64 @@ from app.database import init_db, close_db, get_db
 from app.api.router import router as api_router
 from app.middleware.auth import RequestLogMiddleware
 from app.memory.qdrant_client import init_collections, get_qdrant_client
-from app.dependencies import rate_limiter, _get_rate_limit_key
+from app.dependencies import rate_limiter, _get_rate_limit_key, _get_rate_limit_config
 from app.tasks.memory_cleanup import cleanup_expired_memory
 from app.tasks.hackathon_scanner import run_scheduled_hackathon_scan
+
+
+# ─── Log Sanitization ──────────────────────────────────────
+# Patterns that match sensitive data in log messages
+_SENSITIVE_PATTERNS = [
+    (re.compile(r'(?i)(password|secret|token|key|authorization|bearer\s+)[=:\s]*[\w\-._~+/]{8,}'), r'\1=***REDACTED***'),
+    (re.compile(r'(?i)(api[_-]?key)[=:\s]*[\w\-._~+/]{8,}'), r'\1=***REDACTED***'),
+    (re.compile(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b'), '***EMAIL***'),
+]
+
+
+def sanitize_log_message(msg: str) -> str:
+    """Remove sensitive information from log messages before logging."""
+    sanitized = msg
+    for pattern, replacement in _SENSITIVE_PATTERNS:
+        sanitized = pattern.sub(replacement, sanitized)
+    return sanitized
+
+
+class SanitizedLogger:
+    """Logger wrapper that auto-sanitizes sensitive data from all log messages."""
+    def __init__(self, logger):
+        self._logger = logger
+
+    def _sanitize(self, args, kwargs):
+        sanitized_args = [sanitize_log_message(str(a)) if isinstance(a, str) else a for a in args]
+        if 'exc_info' in kwargs and kwargs['exc_info']:
+            # Don't sanitize exc_info — it's formatted separately and we never
+            # log raw exception messages that contain user data
+            pass
+        return sanitized_args, kwargs
+
+    def debug(self, *args, **kwargs):
+        a, k = self._sanitize(args, kwargs)
+        self._logger.debug(*a, **k)
+
+    def info(self, *args, **kwargs):
+        a, k = self._sanitize(args, kwargs)
+        self._logger.info(*a, **k)
+
+    def warning(self, *args, **kwargs):
+        a, k = self._sanitize(args, kwargs)
+        self._logger.warning(*a, **k)
+
+    def error(self, *args, **kwargs):
+        a, k = self._sanitize(args, kwargs)
+        self._logger.error(*a, **k)
+
+    def exception(self, *args, **kwargs):
+        a, k = self._sanitize(args, kwargs)
+        self._logger.exception(*a, **k)
+
+    def critical(self, *args, **kwargs):
+        a, k = self._sanitize(args, kwargs)
+        self._logger.critical(*a, **k)
 
 class JSONFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
@@ -42,7 +98,9 @@ logging.basicConfig(
     level=logging.INFO if settings.debug else logging.WARNING,
     handlers=[handler],
 )
-logger = logging.getLogger("agentforge")
+_raw_logger = logging.getLogger("agentforge")
+# Wrap with sanitization to automatically redact sensitive data from logs
+logger = SanitizedLogger(_raw_logger)
 
 
 _cleanup_task = None
@@ -93,6 +151,47 @@ app = FastAPI(
 )
 
 
+# ─── Global Exception Handler (A-2: Centralized error handling) ─────
+
+
+class AppError(Exception):
+    """Base application error with sanitized message."""
+    def __init__(self, message: str, status_code: int = 500, detail: str = ""):
+        self.status_code = status_code
+        self.detail = detail or message
+        # Store sanitized version for logs
+        self.sanitized_message = sanitize_log_message(message)
+        super().__init__(self.sanitized_message)
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Global exception handler that returns consistent JSON error responses."""
+    if isinstance(exc, HTTPException):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"error": exc.detail, "status_code": exc.status_code},
+        )
+    
+    # Log the sanitized error
+    logger.error(
+        "Unhandled error: %s %s -> %s",
+        request.method,
+        request.url.path,
+        sanitize_log_message(str(exc)),
+        exc_info=True,
+    )
+    
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "Internal server error",
+            "status_code": 500,
+            "message": "An unexpected error occurred. Please try again later.",
+        },
+    )
+
+
 # Security middleware
 if not settings.debug:
     app.add_middleware(
@@ -133,11 +232,20 @@ async def security_headers_middleware(request: Request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    response.headers["Content-Security-Policy"] = "default-src 'self';"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
     
-    response.headers["X-RateLimit-Limit"] = str(settings.rate_limit_per_minute)
-    response.headers["X-RateLimit-Remaining"] = "100"
-    response.headers["X-RateLimit-Reset"] = str(int(time.time()) + 60)
+    max_req, window_sec = _get_rate_limit_config(request)
+    response.headers["X-RateLimit-Limit"] = str(max_req)
+    try:
+        from app.dependencies import _get_rate_limit_key, rate_limiter
+        limiter = await rate_limiter()
+        key = _get_rate_limit_key(request)
+        remaining = await limiter.get_remaining(key, max_req, window_sec)
+        response.headers["X-RateLimit-Remaining"] = str(remaining)
+    except Exception:
+        response.headers["X-RateLimit-Remaining"] = str(max_req)
+    response.headers["X-RateLimit-Reset"] = str(int(time.time()) + window_sec)
     
     return response
 
@@ -146,21 +254,35 @@ async def security_headers_middleware(request: Request, call_next):
 async def rate_limit_middleware(request: Request, call_next):
     if settings.debug:
         return await call_next(request)
+    max_req, window_sec = _get_rate_limit_config(request)
     try:
         limiter = await rate_limiter()
         key = _get_rate_limit_key(request)
-        if await limiter.is_rate_limited(key, max_requests=settings.rate_limit_per_minute, window_seconds=60):
+        if await limiter.is_rate_limited(key, max_requests=max_req, window_seconds=window_sec):
             return JSONResponse(
                 status_code=429,
                 content={
                     "error": "Too many requests",
                     "message": "Please slow down and try again later.",
-                    "retry_after": 60,
-                    "limit": settings.rate_limit_per_minute,
+                    "retry_after": window_sec,
+                    "limit": max_req,
                 },
             )
-    except Exception:
-        logger.warning("Rate limiter unavailable (Redis down?) — allowing request")
+    except Exception as e:
+        # Fall back to in-memory rate limiter when Redis is unavailable
+        from app.dependencies import _in_memory_is_rate_limited
+        logger.warning(f"Redis rate limiter unavailable ({e}) — falling back to in-memory limiter")
+        key = _get_rate_limit_key(request)
+        if _in_memory_is_rate_limited(key, max_requests=max_req, window_seconds=window_sec):
+            return JSONResponse(
+                status_code=429,
+                content={
+                    "error": "Too many requests",
+                    "message": "Please slow down and try again later.",
+                    "retry_after": window_sec,
+                    "limit": max_req,
+                },
+            )
     return await call_next(request)
 
 

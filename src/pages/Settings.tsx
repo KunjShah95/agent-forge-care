@@ -11,9 +11,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Camera, Loader2, CreditCard, LogOut } from "lucide-react";
+import { Camera, Loader2, CreditCard, LogOut, Shield, ChevronDown, Trash2 } from "lucide-react";
 import { useProfile, useUpdateProfile, useMemory, useCreateMemory } from "@/api/hooks";
 import { useAuthContext } from "@/lib/auth-context";
+import {
+  hasAnalyticsConsent,
+  grantAnalyticsConsent,
+  revokeAnalyticsConsent,
+  clearAllStoredData,
+} from "@/lib/firebase";
 import { profile as profileApi } from "@/api/client";
 import { AGENT_LABELS } from "@/lib/agent-types";
 
@@ -40,6 +46,7 @@ export default function Settings() {
   const updateProfile = useUpdateProfile();
   const [agentToggles, setAgentToggles] = useState<Record<string, boolean>>({});
   const [togglesLoaded, setTogglesLoaded] = useState(false);
+  const [consentState, setConsentState] = useState(hasAnalyticsConsent());
   const [avatarUploading, setAvatarUploading] = useState(false);
   const queryClient = useQueryClient();
   const { data: memoryData } = useMemory();
@@ -148,8 +155,8 @@ export default function Settings() {
       <Tabs defaultValue="profile">
         <TabsList className="glass">
           <TabsTrigger value="profile">Profile</TabsTrigger>
-          <TabsTrigger value="agents">Agents</TabsTrigger>
-          <TabsTrigger value="billing">Billing</TabsTrigger>
+          <TabsTrigger value="agents">Agents</TabsTrigger>            <TabsTrigger value="billing">Billing</TabsTrigger>
+          <TabsTrigger value="privacy">Privacy</TabsTrigger>
         </TabsList>
 
         <TabsContent value="profile" className="mt-4 space-y-4">
@@ -253,6 +260,90 @@ export default function Settings() {
             <p className="text-sm text-muted-foreground max-w-md mx-auto">
               Subscription management, usage tracking, and plan upgrades will be available in a future release.
             </p>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="privacy" className="mt-4 space-y-4">
+          <Card className="bento-card p-6">
+            <div className="flex items-start gap-3">
+              <div className="h-10 w-10 shrink-0 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
+                <Shield className="h-5 w-5 text-primary" />
+              </div>
+              <div className="flex-1 space-y-3">
+                <div>
+                  <h3 className="font-display font-semibold text-lg">Analytics &amp; Privacy</h3>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    We use analytics to understand feature usage and improve AgentForge. Your resumes, job applications, and personal data are never tracked.
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-between rounded-lg border border-border/50 p-3">
+                  <div>
+                    <div className="text-sm font-medium">Usage analytics</div>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Page views, feature interactions, session duration
+                    </p>
+                  </div>
+                  <Switch
+                    checked={hasAnalyticsConsent()}
+                    onCheckedChange={(checked) => {
+                      if (checked) {
+                        grantAnalyticsConsent();
+                      } else {
+                        revokeAnalyticsConsent();
+                      }
+                      // Force re-render
+                      setConsentState(checked);
+                    }}
+                  />
+                </div>
+
+                <details className="group rounded-lg border border-border/50 p-3">
+                  <summary className="text-sm font-medium cursor-pointer list-none flex items-center justify-between">
+                    <span>What we collect</span>
+                    <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180" />
+                  </summary>
+                  <div className="mt-2 space-y-2 text-xs text-muted-foreground">
+                    <p><strong>Collected:</strong> Page views, feature usage frequency, session duration, error events, browser type (non-identifying).</p>
+                    <p><strong>NOT collected:</strong> Resume content, cover letters, job applications, personal contact info, search queries, AI conversation history.</p>
+                    <p><strong>Third parties:</strong> Firebase Analytics (Google). Data is anonymized and used only for product improvement.</p>
+                    <p className="mt-2">
+                      You can request full data deletion at any time by contacting{' '}
+                      <a href="mailto:support@agentforge.ai" className="text-primary hover:underline">support@agentforge.ai</a>.
+                    </p>
+                  </div>
+                </details>
+              </div>
+            </div>
+          </Card>
+
+          <Card className="bento-card p-6">
+            <div className="flex items-start gap-3">
+              <div className="h-10 w-10 shrink-0 rounded-lg bg-destructive/10 border border-destructive/20 flex items-center justify-center">
+                <Trash2 className="h-5 w-5 text-destructive" />
+              </div>
+              <div className="flex-1 space-y-2">
+                <div>
+                  <h3 className="font-display font-semibold">Clear local data</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Clear all locally stored data including auth tokens and preferences. You will be signed out and need to log in again.
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/30"
+                  onClick={() => {
+                    clearAllStoredData();
+                    logout();
+                    toast.success("Local data cleared");
+                  }}
+                >
+                  <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                  Clear local data
+                </Button>
+              </div>
+            </div>
           </Card>
         </TabsContent>
       </Tabs>

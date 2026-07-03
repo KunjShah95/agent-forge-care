@@ -225,6 +225,9 @@ async def search_upcoming_hackathons(
         )
 
 
+FILTER_RESULT_LIMIT = 100
+
+
 @router.get("/filters")
 async def get_filter_options(
     user: User = Depends(get_current_user),
@@ -232,28 +235,28 @@ async def get_filter_options(
 ):
     """Get available filter options (distinct cities, states, countries, industries)."""
     try:
-        # Get distinct values for each filter field
+        # Get distinct values for each filter field, limited to prevent unbounded results
         queries = {
             "cities": select(Opportunity.city).where(
                 Opportunity.user_id == user.id,
                 Opportunity.city.isnot(None),
                 Opportunity.city != "",
-            ).distinct().order_by(Opportunity.city),
+            ).distinct().order_by(Opportunity.city).limit(FILTER_RESULT_LIMIT),
             "states": select(Opportunity.state).where(
                 Opportunity.user_id == user.id,
                 Opportunity.state.isnot(None),
                 Opportunity.state != "",
-            ).distinct().order_by(Opportunity.state),
+            ).distinct().order_by(Opportunity.state).limit(FILTER_RESULT_LIMIT),
             "countries": select(Opportunity.country).where(
                 Opportunity.user_id == user.id,
                 Opportunity.country.isnot(None),
                 Opportunity.country != "",
-            ).distinct().order_by(Opportunity.country),
+            ).distinct().order_by(Opportunity.country).limit(FILTER_RESULT_LIMIT),
             "industries": select(Opportunity.industry).where(
                 Opportunity.user_id == user.id,
                 Opportunity.industry.isnot(None),
                 Opportunity.industry != "",
-            ).distinct().order_by(Opportunity.industry),
+            ).distinct().order_by(Opportunity.industry).limit(FILTER_RESULT_LIMIT),
         }
 
         result = {}
@@ -612,7 +615,7 @@ async def refresh_opportunities(
     db: AsyncSession = Depends(get_db),
 ):
     """Trigger an agent search to refresh opportunities."""
-    from app.agents.graph import run_opportunity_scan
+    from app.agents.orchestrator.service import run_opportunity_scan
 
     try:
         query = body.query if body else None

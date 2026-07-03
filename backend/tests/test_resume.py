@@ -65,20 +65,22 @@ async def test_upload_resume_success(auth_client, mock_db):
     mock_result = MockResult(scalar_value=None)
     mock_db.execute = AsyncMock(return_value=mock_result)
 
-    with patch("app.api.v1.resume.pypdf.PdfReader") as mock_pdf_reader:
-        mock_page = MagicMock()
-        mock_page.extract_text.return_value = "John Doe\nSoftware Engineer\nExperience: Built APIs"
-        mock_pdf_reader.return_value.pages = [mock_page]
+    # Mock the hiring agent pdf extractor to raise (trigger pypdf fallback)
+    with patch("app.hiring_agent.pdf_extractor.extract_pdf_text", side_effect=Exception("Mock: hiring agent unavailable")):
+        with patch("app.api.v1.resume.pypdf.PdfReader") as mock_pdf_reader:
+            mock_page = MagicMock()
+            mock_page.extract_text.return_value = "John Doe\nSoftware Engineer\nExperience: Built APIs"
+            mock_pdf_reader.return_value.pages = [mock_page]
 
-        with patch("app.api.v1.resume.AgentMemory") as mock_agent_memory:
-            mock_memory_instance = MagicMock()
-            mock_agent_memory.return_value = mock_memory_instance
+            with patch("app.api.v1.resume.AgentMemory") as mock_agent_memory:
+                mock_memory_instance = MagicMock()
+                mock_agent_memory.return_value = mock_memory_instance
 
-            with patch("app.api.v1.resume.get_text_embedding", new_callable=AsyncMock) as mock_embedding:
-                mock_embedding.return_value = [0.1] * 1536
+                with patch("app.api.v1.resume.get_text_embedding", new_callable=AsyncMock) as mock_embedding:
+                    mock_embedding.return_value = [0.1] * 1536
 
-                files = {"file": ("test_resume.pdf", io.BytesIO(pdf_content), "application/pdf")}
-                response = await auth_client.post("/api/v1/resume/upload", files=files)
+                    files = {"file": ("test_resume.pdf", io.BytesIO(pdf_content), "application/pdf")}
+                    response = await auth_client.post("/api/v1/resume/upload", files=files)
 
     assert response.status_code == 200
     data = response.json()

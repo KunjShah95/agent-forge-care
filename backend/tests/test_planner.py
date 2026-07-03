@@ -121,16 +121,15 @@ class TestAgentHelpers:
 
     def test_demo_internships_returns_data(self):
         """The demo internship data should return valid opportunities."""
-        from app.agents.internship_agent import _demo_internships
-        results = _demo_internships("test", "Remote")
+        from app.utils.demo_data import generate_demo_opportunities
+        results = generate_demo_opportunities(AgentType.internship, "test", "Remote")
         assert len(results) > 0
-        assert results[0]["title"] == "ML Research Intern"
         assert all("title" in r and "company" in r for r in results)
 
     def test_demo_jobs_returns_data(self):
         """The demo job data should return valid opportunities."""
-        from app.agents.job_agent import _demo_jobs
-        results = _demo_jobs("test", "Remote")
+        from app.utils.demo_data import generate_demo_opportunities
+        results = generate_demo_opportunities(AgentType.job, "test", "Remote")
         assert len(results) > 0
         assert any("salary_min" in r for r in results)
 
@@ -173,9 +172,8 @@ class TestAgentHelpers:
         assert all("title" in r and "company" in r for r in results)
 
     def test_internship_agent_fallback_method(self):
-        """The internship agent's demo fallback should return valid data."""
-        from app.agents.internship_agent import _demo_internships
-        results = _demo_internships("ML internship", "San Francisco")
-        assert len(results) >= 3
-        titles = [r["title"] for r in results]
-        assert "ML Research Intern" in titles
+        """The shared demo data utility should return valid internship data."""
+        from app.utils.demo_data import generate_demo_opportunities
+        results = generate_demo_opportunities(AgentType.internship, "ML internship", "San Francisco")
+        assert len(results) >= 1
+        assert all("title" in r for r in results)

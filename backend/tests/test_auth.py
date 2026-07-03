@@ -72,7 +72,7 @@ async def test_verify_firebase_token_valid():
     )
     cert_pem = cert.public_bytes(serialization.Encoding.PEM).decode()
 
-    with patch("app.dependencies._get_certs", return_value={"test-kid-001": cert_pem}):
+    with patch("app.dependencies._get_certs_sync", return_value={"test-kid-001": cert_pem}):
         payload = verify_firebase_token(token)
         assert payload["sub"] == TEST_FIREBASE_UID
         assert payload["email"] == TEST_USER_EMAIL
@@ -111,7 +111,7 @@ async def test_verify_firebase_token_wrong_key():
     wrong_cert_pem = wrong_cert.public_bytes(serialization.Encoding.PEM).decode()
 
     with patch(
-        "app.dependencies._get_certs", return_value={"test-kid-001": wrong_cert_pem}
+        "app.dependencies._get_certs_sync", return_value={"test-kid-001": wrong_cert_pem}
     ):
         with pytest.raises(ValueError, match="Token verification failed"):
             verify_firebase_token(token)
@@ -163,6 +163,7 @@ async def test_auto_provision_new_user(async_client, mock_db):
             "sub": new_uid,
             "email": new_email,
             "name": "New Firebase User",
+            "email_verified": True,
             "aud": "test-firebase-project",
             "iss": "https://securetoken.google.com/test-firebase-project",
         },
@@ -172,6 +173,7 @@ async def test_auto_provision_new_user(async_client, mock_db):
 
         assert user.email == new_email
         assert user.firebase_uid == new_uid
+        assert user.email_verified is True
         assert user.password_hash is None
         assert user.full_name == "New Firebase User"
         assert mock_db.add.called
@@ -197,6 +199,7 @@ async def test_auto_provision_links_existing_user(async_client, mock_db):
             "sub": TEST_FIREBASE_UID,
             "email": TEST_USER_EMAIL,
             "name": TEST_USER_NAME,
+            "email_verified": True,
             "aud": "test-firebase-project",
             "iss": "https://securetoken.google.com/test-firebase-project",
         },
@@ -206,6 +209,7 @@ async def test_auto_provision_links_existing_user(async_client, mock_db):
 
         assert user.id == existing_user.id
         assert user.firebase_uid == TEST_FIREBASE_UID
+        assert user.email_verified is True
 
 
 # ─── PATCH /me ───────────────────────────────────────────────

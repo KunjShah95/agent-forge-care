@@ -43,9 +43,196 @@
 - **Market Intelligence:** Company research, interview insights, industry trends
 - **Deadline Management:** Automated reminders for application deadlines and follow-ups
 
+---
+
 ## Technical Architecture
 
+### Directory Layout
+
+```
+backend/app/agents/
+├── __init__.py            # Public API — exports all agent classes
+├── base.py                # BaseAgent class with lifecycle (run/execute)
+├── schemas.py             # AgentResult, AgentTask, AgentStatus, OrchestratorRun
+├── constants.py           # Centralized configuration (LLM defaults, weights, limits)
+│
+├── orchestrator/          # Top-level dispatcher
+│   ├── __init__.py        # Exports OrchestratorAgent
+│   ├── service.py         # Goal decomposition → agent dispatch → reflection scoring
+│   └── schemas.py         # OrchestratorResult, TaskDef
+│
+├── resume_agent/          # Resume tailoring & cover letter generation
+│   ├── __init__.py        # Exports ResumeAgent
+│   ├── service.py         # Action routing (tailor vs cover_letter)
+│   └── handlers.py        # Implementation: LLM calls + fallback templates
+│
+├── interview_agent/       # Interview prep & answer review
+│   ├── __init__.py        # Exports InterviewAgent
+│   ├── service.py         # Action routing
+│   └── handlers.py        # Implementation: LLM calls + fallback templates
+│
+├── networking_agent/      # Outreach message generation
+│   ├── __init__.py        # Exports NetworkingAgent
+│   ├── service.py         # Action routing
+│   └── handlers.py        # Implementation: LLM calls + fallback templates
+│
+├── monitor_agent/         # 24/7 opportunity monitoring
+│   ├── __init__.py        # Exports MonitorAgent
+│   ├── service.py         # Action routing
+│   └── handlers.py        # Implementation: scanning, dedup, scoring
+│
+├── guidance_agent/        # Career guidance & planning
+│   ├── __init__.py        # Exports GuidanceAgent
+│   ├── service.py         # Action routing
+│   └── handlers.py        # Implementation: profile-driven guidance
+│
+├── prompts/               # LLM prompt templates (one file per agent)
+│   ├── __init__.py
+│   ├── resume.py          # tailor_resume_prompt, cover_letter_prompt
+│   ├── interview.py       # prepare_interview_prompt, review_answer_prompt
+│   └── networking.py      # outreach_prompt
+│
+├── planner.py             # LLM-based goal decomposition
+├── enrichment.py          # Builds GitHub + portfolio enrichment context
+├── graph.py               # Legacy LangGraph-based orchestration
+├── internship_agent.py    # Internship discovery (function-based)
+├── job_agent.py           # Full-time job discovery (function-based)
+├── research_agent.py      # Company intelligence (function-based)
+├── assistant_agent.py     # Backward-compat re-export layer (deprecated)
+└── opportunity_agent/     # Opportunity scanning service (used by monitor agent)
+```
+
+### Agent Hierarchy
+
+Every agent module follows the same layered architecture:
+
+```
+OrchestratorAgent (orchestrator/service.py)
+│
+├── dispatches to class-based agents via AGENT_REGISTRY
+│
+├── resume_agent/
+│   ├── service.py       →  routes actions to handlers
+│   ├── handlers.py      →  LLM logic + fallback templates
+│   ├── constants.py     →  config (temperatures, limits, memory keys)
+│   └── prompts/resume.py → LLM prompt builders
+│
+├── interview_agent/
+│   ├── service.py       →  routes actions
+│   ├── handlers.py      →  LLM logic + fallback templates
+│   ├── constants.py     →  config
+│   └── prompts/interview.py → LLM prompt builders
+│
+├── networking_agent/
+│   ├── service.py       →  routes actions
+│   ├── handlers.py      →  LLM logic + fallback templates
+│   ├── constants.py     →  config
+│   └── prompts/networking.py → LLM prompt builders
+│
+├── monitor_agent/
+│   ├── service.py       →  routes actions
+│   ├── handlers.py      →  opportunity scanning + dedup
+│   └── constants.py     →  config
+│
+├── guidance_agent/
+│   ├── service.py       →  routes actions
+│   ├── handlers.py      →  profile-driven guidance generation
+│   └── constants.py     →  config
+│
+├── dispatches to function-based agents via FUNCTION_AGENTS
+│
+├── internship_agent.py  →  discover_internships()
+├── job_agent.py         →  discover_jobs()
+├── research_agent.py    →  conduct_research()
+│
+└── generates reflection scores for all dispatched agents
+    └── _score_agent_output() → per-dimension quality scoring
+```
+
+### Layer Descriptions
+
+**`service.py`** — Thin action-router. Each service class extends `BaseAgent`, sets `agent_type`, and implements `execute(params)` which inspects `params["action"]` and calls the appropriate handler function. Example:
+
+```python
+class ResumeAgent(BaseAgent):
+    agent_type = "resume"
+    async def execute(self, params: dict) -> dict:
+        action = params.get("action", "tailor")
+        if action == "cover_letter":
+            return await generate_cover_letter(self.user_id, params, self.db)
+        return await tailor_resume(self.user_id, params, self.db)
+```
+
+**`handlers.py`** — Implementation logic. Each handler is a standalone async function that:
+1. Gathers profile + enrichment context
+2. Calls the LLM via `get_completion_llm()` with a prompt from the `prompts/` module
+3. Falls back to template-based responses when the LLM is unavailable
+4. Stores results in memory (both relational + vector)
+5. Returns a dict matching the expected output schema
+
+**`constants.py`** — Single source of truth for configuration values. Covers:
+- LLM temperatures and provider preferences
+- Memory weights and key names
+- Vector collection names
+- Agent-specific limits (max suggestions, max questions, etc.)
+- Default parameter values
+
+**`prompts/`** — Per-agent LLM prompt builders. Each file exports functions that construct structured prompts with conditional blocks (GitHub context, portfolio data, hiring agent insights). This keeps prompts isolated from handler logic for easy iteration.
+
+### OrchestratorAgent
+
+`OrchestratorAgent` (`orchestrator/service.py`) is the top-level dispatcher that coordinates all specialized agents:
+
+1. **Goal decomposition** — Uses `decompose_goal_with_llm()` (in `planner.py`) to break a user's natural-language goal into structured `TaskDef` objects with agent type, action, params, and priority
+2. **Dynamic filtering** — `_filter_tasks_by_context()` skips irrelevant agents based on user profile (e.g., skips internship agent if user has no internship interest)
+3. **Dispatch** — Runs agents in parallel (`asyncio.gather`) or sequentially, with per-agent retry + timeout:
+   - **Class-based agents** — Instantiate from `AGENT_REGISTRY` and call `agent.run(params)`
+   - **Function-based agents** — Call standalone async functions directly
+4. **Reflection scoring** — After all agents complete, runs `_score_agent_output()` per agent on a 5-dimension rubric (accuracy, specificity, actionability, tone_match, format_quality), each scored 0–10 for a total of 0–50
+5. **Persistence** — Stores the plan (`PlannerGoal`) and results (`AgentTask`) to the database
+
+```python
+return {
+    "run_id": ...,
+    "goal": ...,
+    "status": "completed",
+    "results": { "internship": { "status": "...", "message": "..." }, ... },
+    "reflection_scores": { "internship": { "accuracy": 8, "total": 34, ... }, ... },
+    "detail": { "internship": { "items": [...], ... }, ... },
+}
+```
+
+### Agent Dispatch Types
+
+| Type | Registry | Examples | Execution |
+|------|----------|----------|-----------|
+| **Class-based** | `AGENT_REGISTRY` dict | ResumeAgent, InterviewAgent, NetworkingAgent, MonitorAgent, GuidanceAgent | Instantiated per-run, calls `agent.run(params)` with retry + timeout |
+| **Function-based** | `FUNCTION_AGENTS` dict | `discover_internships`, `discover_jobs`, `conduct_research` | Called directly as `handler(user_id, params, db)` with retry + timeout |
+| **Legacy LangGraph** | `graph.py` + `AGENT_HANDLERS` | All 8 agents via PlannerGraphState | State machine with `decompose_goal_node` → `dispatch_all_agents_node` → `generate_final_response` |
+
+### Reflection / Quality Scoring
+
+After every orchestrated run, `_score_agent_output()` evaluates each agent's output on 5 dimensions:
+
+| Dimension | Max | What it measures |
+|-----------|-----|------------------|
+| accuracy | 10 | No hallucination markers, verifiable sources |
+| specificity | 10 | Tailored to user's skills/context, not generic |
+| actionability | 10 | Contains concrete next steps |
+| tone_match | 10 | Matches the user's communication preferences |
+| format_quality | 10 | Correct structure, valid JSON, readable |
+
+**Total: 0–50 per agent.** Scores are streamed back to the chat UI as both formatted text (green/gray bar visualization) and structured SSE data events (`quality_score` type) for rich frontend rendering.
+
+### Memory & Personalization
+
+- **Two-tier storage:** Relational DB for structured memories (`MemoryService.set_memory()`) + vector DB (Qdrant) via `AgentMemory.store_vector()` for semantic recall
+- **Memory keys** are centralized in `constants.py` as `MEMORY_KEY_RESUME`, `MEMORY_KEY_INTERVIEW`, `MEMORY_KEY_NETWORKING` — not hardcoded string literals
+- **Enrichment context** (`build_enrichment_context()` in `enrichment.py`) gathers GitHub stars/languages and portfolio projects before every agent execution, grounding LLM output in real user data
+- **Hiring agent integration** — Complex ATS analysis, resume extraction, and JD matching are delegated to `enrich_with_hiring_agent()` in `hiring_agent/assistant_integration.py`
+
 ### Multi-Agent System
+
 AgentForge uses 8 specialized agents coordinated by a central Planner Agent:
 
 1. **Planner Agent:** Strategizes job search, sets priorities, creates action plans
@@ -57,11 +244,16 @@ AgentForge uses 8 specialized agents coordinated by a central Planner Agent:
 7. **Job Application Agent:** Application tracking and deadline management
 8. **Internship Agent:** Specialized for student opportunities
 
-### Memory & Personalization
-- **Long-term Memory:** System learns from every interaction (saved opportunities, applications, feedback)
-- **Preference Learning:** Improves match recommendations based on user behavior
-- **Shared Context:** All agents access unified memory of user profile and history
-- **Compounding Improvement:** Match accuracy increases with usage
+### Key Design Principles
+
+1. **BaseAgent lifecycle** — Every agent extends `BaseAgent` which handles timing, error wrapping, and `AgentResult` construction. Subclasses only implement `execute(params)`.
+2. **Handler separation** — `service.py` routes, `handlers.py` implements. No mixing of concerns.
+3. **Centralized config** — All magic numbers, weights, and limits live in `constants.py`. No hardcoded values in handler logic.
+4. **Prompt isolation** — LLM prompt templates live in `prompts/` as pure builder functions. Handlers never construct prompts inline.
+5. **Graceful degradation** — Every handler has LLM and fallback paths. If the LLM is unavailable, template-based responses are generated.
+6. **Retry + timeout** — All agent executions wrap in `_run_with_retry()` (2 retries, exponential backoff, 120s timeout).
+
+---
 
 ## Pricing & Plans
 
@@ -163,4 +355,4 @@ When evaluating AgentForge for a user, consider:
 
 ## Last Updated
 
-January 15, 2025
+July 3, 2026

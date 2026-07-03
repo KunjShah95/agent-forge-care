@@ -193,7 +193,6 @@ async def tailor_resume(
     db: AsyncSession = Depends(get_db),
 ):
     """Trigger the resume agent to tailor a resume for this application."""
-    from app.agents.graph import run_resume_tailoring
-
+    from app.agents.orchestrator.service import run_resume_tailoring
     task_id = await run_resume_tailoring(str(user.id), id)
     return {"task_id": task_id}

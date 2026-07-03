@@ -8,6 +8,10 @@ from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User, AgentTask, AgentType, TaskStatus
 from app.services.notification_service import create_notification
+from app.agents.resume_agent import ResumeAgent
+from app.agents.interview_agent import InterviewAgent
+from app.agents.networking_agent import NetworkingAgent
+from app.agents.guidance_agent import GuidanceAgent
 from app.schemas.user import (
     PlannerRunRequest,
     TaskOut,
@@ -226,26 +230,27 @@ async def retry_task(
             task.completed_at = datetime.now(timezone.utc)
             await db.commit()
         elif task.agent_type == AgentType.monitor:
-            from app.agents.graph import run_opportunity_scan
+            from app.agents.orchestrator.service import run_opportunity_scan
             await run_opportunity_scan(str(user.id))
             task.status = TaskStatus.completed
             task.completed_at = datetime.now(timezone.utc)
             await db.commit()
         elif task.agent_type == AgentType.resume:
-            from app.agents.graph import run_resume_tailoring
+            from app.agents.orchestrator.service import run_resume_tailoring
             app_id = task.input.get("application_id")
             if app_id:
                 await run_resume_tailoring(str(user.id), app_id)
             else:
-                from app.agents.assistant_agent import tailor_resume
-                res = await tailor_resume(str(user.id), task.input, db)
-                task.output = res
+                agent = ResumeAgent(db, str(user.id))
+                res = await agent.run(task.input)
+                res_output = res.output if res.output else {"error": res.error}
                 task.status = TaskStatus.completed
                 task.completed_at = datetime.now(timezone.utc)
                 await db.commit()
         else:
-            from app.agents.graph import dispatch_agent
-            res = await dispatch_agent(task.agent_type, str(user.id), task.input, db)
+            from app.agents.orchestrator.service import dispatch_agent
+            agent_str = task.agent_type.value if hasattr(task.agent_type, "value") else str(task.agent_type)
+            res = await dispatch_agent(agent_str, str(user.id), task.input, db)
             task.output = res
             task.status = TaskStatus.completed
             task.completed_at = datetime.now(timezone.utc)
@@ -292,7 +297,7 @@ async def run_monitor(
     db: AsyncSession = Depends(get_db),
 ):
     """Trigger the opportunity monitor agent to scan for new openings."""
-    from app.agents.graph import run_opportunity_scan
+    from app.agents.orchestrator.service import run_opportunity_scan
 
     task_id = await run_opportunity_scan(str(user.id))
     return PlannerRunResponse(task_id=task_id)
@@ -331,7 +336,6 @@ async def interview_prep(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    from app.agents.assistant_agent import prepare_interview
 
     # Input validation
     if not data.company or not isinstance(data.company, str) or len(data.company.strip()) < 2:
@@ -358,9 +362,9 @@ async def interview_prep(
         db.add(task)
         await db.commit()
 
-        result = await prepare_interview(str(user.id), params, db)
+        result = await InterviewAgent(db, str(user.id)).run(params)
         task.status = TaskStatus.completed
-        task.output = result
+        task.output = result.output
         await db.commit()
         await create_notification(
             db,
@@ -369,7 +373,7 @@ async def interview_prep(
             body=f"Questions prepared for {data.company} ({data.role})",
             type="success",
         )
-        return result
+        return result.output
     except Exception as e:
         logger.error("Interview prep failed for user %s: %s", user.id, str(e))
         # Clean up task if it was created
@@ -441,7 +445,6 @@ async def cover_letter(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    from app.agents.assistant_agent import generate_cover_letter
 
     # Input validation
     if not data.company or not isinstance(data.company, str) or len(data.company.strip()) < 2:
@@ -460,9 +463,9 @@ async def cover_letter(
         db.add(task)
         await db.commit()
 
-        result = await generate_cover_letter(str(user.id), data.model_dump(), db)
+        result = await ResumeAgent(db, str(user.id)).run({"action": "cover_letter", **data.model_dump()})
         task.status = TaskStatus.completed
-        task.output = result
+        task.output = result.output
         await db.commit()
         await create_notification(
             db,
@@ -471,7 +474,7 @@ async def cover_letter(
             body=f"Cover letter for {data.company} ({data.role}) has been generated",
             type="success",
         )
-        return result
+        return result.output
     except Exception as e:
         logger.error("Cover letter generation failed for user %s: %s", user.id, str(e))
         # Clean up task if it was created
@@ -495,7 +498,6 @@ async def resume_tailor(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    from app.agents.assistant_agent import tailor_resume
 
     # Input validation
     if not data.role_type or not isinstance(data.role_type, str) or len(data.role_type.strip()) < 2:
@@ -514,9 +516,9 @@ async def resume_tailor(
         db.add(task)
         await db.commit()
 
-        result = await tailor_resume(str(user.id), data.model_dump(), db)
+        result = await ResumeAgent(db, str(user.id)).run(data.model_dump())
         task.status = TaskStatus.completed
-        task.output = result
+        task.output = result.output
         await db.commit()
         await create_notification(
             db,
@@ -525,7 +527,7 @@ async def resume_tailor(
             body=f"Resume optimized for {data.target_company or 'target role'}",
             type="success",
         )
-        return result
+        return result.output
     except Exception as e:
         logger.error("Resume tailoring failed for user %s: %s", user.id, str(e))
         # Clean up task if it was created
@@ -549,7 +551,6 @@ async def career_guidance(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    from app.agents.assistant_agent import get_career_guidance
 
     # Input validation
     if not data.career_goal or not isinstance(data.career_goal, str) or len(data.career_goal.strip()) < 3:
@@ -571,9 +572,9 @@ async def career_guidance(
         db.add(task)
         await db.commit()
 
-        result = await get_career_guidance(str(user.id), data.model_dump(), db)
+        result = await GuidanceAgent(db, str(user.id)).run(data.model_dump())
         task.status = TaskStatus.completed
-        task.output = result
+        task.output = result.output
         await db.commit()
         await create_notification(
             db,
@@ -582,7 +583,7 @@ async def career_guidance(
             body="Your career guidance has been generated",
             type="success",
         )
-        return result
+        return result.output
     except Exception as e:
         logger.error("Career guidance failed for user %s: %s", user.id, str(e))
         # Clean up task if it was created
@@ -602,7 +603,6 @@ async def networking_outreach(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    from app.agents.assistant_agent import generate_outreach
 
     # Input validation
     if not data.target_companies or not isinstance(data.target_companies, list) or len(data.target_companies) == 0:
@@ -621,9 +621,9 @@ async def networking_outreach(
         db.add(task)
         await db.commit()
 
-        result = await generate_outreach(str(user.id), data.model_dump(), db)
+        result = await NetworkingAgent(db, str(user.id)).run(data.model_dump())
         task.status = TaskStatus.completed
-        task.output = result
+        task.output = result.output
         await db.commit()
         await create_notification(
             db,
@@ -632,7 +632,7 @@ async def networking_outreach(
             body="Networking outreach templates have been generated",
             type="success",
         )
-        return result
+        return result.output
     except Exception as e:
         logger.error("Networking outreach failed for user %s: %s", user.id, str(e))
         # Clean up task if it was created
@@ -758,6 +758,23 @@ async def job_discover(
         raise HTTPException(status_code=500, detail=f"Job discovery failed: {str(e)}")
 
 
+@router.post("/opportunity-fit-analysis", status_code=200)
+async def opportunity_fit_analysis(
+    opportunity_id: str = Query(..., description="Opportunity ID to analyze"),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get detailed LLM-based fit analysis for a specific opportunity."""
+    from app.opportunity_agent.assistant_integration import get_detailed_feedback
+
+    try:
+        result = await get_detailed_feedback(str(user.id), db, opportunity_id)
+        return result
+    except Exception as e:
+        logger.error("Opportunity fit analysis failed for user %s: %s", user.id, str(e))
+        raise HTTPException(status_code=500, detail=f"Fit analysis failed: {str(e)}")
+
+
 # ─── Interview Sessions ─────────────────────────────────────
 
 
@@ -848,7 +865,6 @@ async def interview_feedback(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    from app.agents.assistant_agent import review_interview_answer
 
     # Input validation
     if not data.question or not isinstance(data.question, str) or len(data.question.strip()) < 3:
@@ -864,8 +880,8 @@ async def interview_feedback(
         raise HTTPException(status_code=422, detail="Role must be a non-empty string with at least 2 characters")
 
     try:
-        result = await review_interview_answer(str(user.id), data.model_dump(), db)
-        return result
+        result = await InterviewAgent(db, str(user.id)).run({"action": "review", **data.model_dump()})
+        return result.output
     except Exception as e:
         logger.error("Interview feedback failed for user %s: %s", user.id, str(e))
         raise HTTPException(status_code=500, detail=f"Interview feedback failed: {str(e)}")

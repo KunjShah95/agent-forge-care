@@ -3,6 +3,7 @@ from pydantic import model_validator, field_validator
 from typing import List, Optional
 import os
 import re
+import secrets
 from pathlib import Path
 
 # Resolve .env path relative to this config file so it works from any working directory
@@ -26,6 +27,17 @@ if _ENV_FILE.exists():
                 os.environ[key] = value.strip().strip("\"'")
 
 
+# Known default secrets that must never be used in production
+_KNOWN_INSECURE_SECRETS = {
+    "change-me-to-a-random-secret-key",
+    "dev-secret-change-in-production",
+    "secret",
+    "password",
+    "changeme",
+    "default",
+}
+
+
 class Settings(BaseSettings):
     # App
     app_name: str = "AgentForge Career OS"
@@ -47,14 +59,14 @@ class Settings(BaseSettings):
         "postgresql+asyncpg://postgres:postgres@localhost:5432/agentforge"
     )
 
-    # JWT
-    jwt_secret: str = "change-me-to-a-random-secret-key"
+    # JWT — auto-generated cryptographically random key if not set
+    jwt_secret: str = ""
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 7
 
-    # Firebase
-    firebase_project_id: str = "developer-portfolio-aggregator"
+    # Firebase — must be configured per environment
+    firebase_project_id: str = ""
 
     # Qdrant
     qdrant_url: str = "http://localhost:6333"
@@ -63,88 +75,47 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379"
 
     # ── AI Model Providers ────────────────────────────────────
-
-    # OpenAI (paid)
     openai_api_key: str = ""
-
-    # Anthropic Claude (paid)
     anthropic_api_key: str = ""
-
-    # Google Gemini (free tier: 60 req/min)
     google_api_key: str = ""
-
-    # Groq (free tier available — fast open-source inference)
     groq_api_key: str = ""
-
-    # Ollama (free, local — no API key needed)
     ollama_base_url: str = "http://localhost:11434"
-
-    # OpenRouter (gateway to 200+ models, free tier available)
     openrouter_api_key: str = ""
-
-    # Mistral AI (free tier available)
     mistral_api_key: str = ""
-
-    # HuggingFace (optional, for embeddings via inference API)
     huggingface_api_key: str = ""
-
-    # DeepSeek (very cheap, open-source reasoning models)
     deepseek_api_key: str = ""
-
-    # Together AI (OpenAI-compatible, wide open-source model catalog)
     together_api_key: str = ""
-
-    # Fireworks AI (OpenAI-compatible, fast open-source inference, $1 free credits)
     fireworks_api_key: str = ""
 
     # ── Embeddings / Rerank ────────────────────────────────────
-
-    # Cohere (used for reranking)
     cohere_api_key: str = ""
 
     # ── Observability ──────────────────────────────────────────
-
-    # LangSmith
     langchain_api_key: str = ""
 
     # ── Email ──────────────────────────────────────────────────
-
-    # SendGrid
     sendgrid_api_key: str = ""
     from_email: str = "noreply@agentforge.ai"
 
     # ── Search APIs ────────────────────────────────────────────
-
     google_cse_id: str = ""
     serpapi_key: str = ""
     tavily_api_key: str = ""
-
-    # Brave Search (2,000 free queries/month)
     brave_api_key: str = ""
-
-    # Exa (formerly Metaphor) — AI-native search
     exa_api_key: str = ""
-
-    # Mojeek — privacy-focused search (free tier, no API key required for scraping)
     mojeek_api_key: str = ""
-
-    # SearXNG — self-hosted meta search engine URL
     searxng_base_url: str = ""
 
     # ── Match Scoring ──────────────────────────────────────────
-
-    # Blend weight for profile-based skill match vs combined (profile + GitHub + portfolio)
-    # 0.7 = 70% profile, 30% external. Lower = more weight on external skills.
     match_profile_weight: float = 0.7
     match_external_weight: float = 0.3
 
     # ── Security ───────────────────────────────────────────────
-
-    # GitHub Token (for authenticated GitHub API calls — 5,000 req/hr vs 60 unauthenticated)
     github_token: str = ""
-
     secret_key: str = ""
     rate_limit_per_minute: int = 100
+    # Stricter rate limit for auth endpoints (login/register) to prevent brute force
+    auth_rate_limit_per_minute: int = 5
 
     model_config = {
         "env_file": str(_ENV_FILE),
@@ -154,9 +125,37 @@ class Settings(BaseSettings):
 
     @field_validator("jwt_secret")
     @classmethod
-    def validate_jwt_secret(cls, v: str, info) -> str:
+    def validate_jwt_secret(cls, v: str) -> str:
         if not v or v.strip() == "":
-            raise ValueError("jwt_secret cannot be empty")
+            # Auto-generate a cryptographically secure key
+            generated = secrets.token_urlsafe(48)
+            return generated
+        # Warn if an insecure default is still being used
+        if v.strip().lower() in _KNOWN_INSECURE_SECRETS:
+            import warnings
+            warnings.warn(
+                f"jwt_secret is set to a known insecure value ('{v[:20]}...'). "
+                "This is dangerous in production. Generate a strong random key."
+            )
+        return v
+
+    @field_validator("firebase_project_id")
+    @classmethod
+    def validate_firebase_project_id(cls, v: str) -> str:
+        if not v or v.strip() == "":
+            import warnings
+            warnings.warn(
+                "firebase_project_id is not set. Firebase authentication will fail. "
+                "Set FIREBASE_PROJECT_ID environment variable."
+            )
+        return v
+
+    @field_validator("secret_key")
+    @classmethod
+    def validate_secret_key(cls, v: str) -> str:
+        if not v or v.strip() == "":
+            # Auto-generate if empty
+            return secrets.token_urlsafe(32)
         return v
 
     @field_validator("database_url")
@@ -179,8 +178,11 @@ class Settings(BaseSettings):
     def validate_required_fields(self):
         if self.debug:
             return self
+        if not self.firebase_project_id:
+            raise ValueError("firebase_project_id is required in non-debug mode. Set FIREBASE_PROJECT_ID env var.")
         if not self.secret_key or self.secret_key.strip() == "":
             raise ValueError("secret_key cannot be empty in non-debug mode")
+        # Log info about auto-generated keys in non-debug mode
         return self
 
 

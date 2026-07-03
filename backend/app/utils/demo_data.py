@@ -38,19 +38,24 @@ def generate_demo_opportunities(agent_type: AgentType, query: str, location: str
         AgentType.job: [
             {"title": "Software Engineer, New Grad", "company": "Google", "type": "Full-time",
              "location": "Multiple", "remote": False, "skills": ["Python", "C++", "Algorithms"],
-             "description": "Build products used by billions globally.", "apply_url": "https://google.com/careers"},
+             "description": "Build products used by billions globally.", "apply_url": "https://google.com/careers",
+             "salary_min": 150000, "salary_max": 200000},
             {"title": "Product Engineer", "company": "Linear", "type": "Full-time",
              "location": "New York", "remote": False, "skills": ["React", "TypeScript", "Design"],
-             "description": "Build the most loved issue tracking tool.", "apply_url": "https://linear.app/jobs"},
+             "description": "Build the most loved issue tracking tool.", "apply_url": "https://linear.app/jobs",
+             "salary_min": 130000, "salary_max": 180000},
             {"title": "Founding Engineer", "company": "Helia Labs", "type": "Full-time",
              "location": "San Francisco", "remote": True, "skills": ["Full-stack", "AI", "TypeScript"],
-             "description": "Early-stage AI startup.", "apply_url": "https://helia.dev/jobs"},
+             "description": "Early-stage AI startup.", "apply_url": "https://helia.dev/jobs",
+             "salary_min": 140000, "salary_max": 200000},
             {"title": "ML Engineer", "company": "OpenAI", "type": "Full-time",
              "location": "San Francisco", "remote": False, "skills": ["Python", "PyTorch", "ML", "Distributed Systems"],
-             "description": "Develop and deploy cutting-edge AI models.", "apply_url": "https://openai.com/careers"},
+             "description": "Develop and deploy cutting-edge AI models.", "apply_url": "https://openai.com/careers",
+             "salary_min": 200000, "salary_max": 300000},
             {"title": "DevTools Engineer", "company": "GitHub", "type": "Full-time",
              "location": "Remote", "remote": True, "skills": ["Ruby", "Go", "API Design"],
-             "description": "Build the platform that powers developer collaboration.", "apply_url": "https://github.com/careers"},
+             "description": "Build the platform that powers developer collaboration.", "apply_url": "https://github.com/careers",
+             "salary_min": 120000, "salary_max": 170000},
         ],
         AgentType.monitor: [
             {"title": "AI Safety Fellowship", "company": "MATS Program", "type": "Fellowship",
@@ -70,4 +75,8 @@ def generate_demo_opportunities(agent_type: AgentType, query: str, location: str
              "description": "Advanced research training in mechanistic interpretability.", "apply_url": "https://arena.org"},
         ],
     }
-    return demos.get(agent_type, demos[AgentType.monitor])
+    results = demos.get(agent_type, demos[AgentType.monitor])
+    # Mark all demo entries clearly to prevent mixing with real data
+    for r in results:
+        r["is_demo"] = True
+    return results

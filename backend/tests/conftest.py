@@ -12,7 +12,6 @@ os.environ.setdefault("JWT_SECRET", "test-secret-key-for-testing-only")
 os.environ.setdefault("FIREBASE_PROJECT_ID", "test-firebase-project")
 
 from httpx import AsyncClient, ASGITransport
-from passlib.context import CryptContext
 
 from app.main import app
 from app.database import get_db
@@ -42,12 +41,9 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.backends import default_backend
 from app.config import settings
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 TEST_USER_ID = str(uuid.uuid4())
 TEST_USER_EMAIL = "test@example.com"
 TEST_USER_PASSWORD = "password123"
-TEST_USER_HASH = pwd_context.hash(TEST_USER_PASSWORD)
 TEST_USER_NAME = "Test User"
 TEST_FIREBASE_UID = "firebase-uid-12345"
 
@@ -81,12 +77,14 @@ def create_firebase_token(
     uid: str = TEST_FIREBASE_UID,
     email: str = TEST_USER_EMAIL,
     name: str = TEST_USER_NAME,
+    email_verified: bool = True,
 ) -> str:
     now = time.time()
     payload = {
         "sub": uid,
         "email": email,
         "name": name,
+        "email_verified": email_verified,
         "aud": settings.firebase_project_id,
         "iss": f"https://securetoken.google.com/{settings.firebase_project_id}",
         "iat": int(now),
@@ -107,6 +105,7 @@ def make_user(**overrides) -> User:
     defaults = dict(
         id=TEST_USER_ID,
         email=TEST_USER_EMAIL,
+        email_verified=True,
         password_hash=None,
         firebase_uid=TEST_FIREBASE_UID,
         full_name=TEST_USER_NAME,
@@ -382,14 +381,20 @@ async def async_client(mock_db):
 
 @pytest_asyncio.fixture
 async def auth_client(mock_db, test_user):
+    from app.dependencies import get_current_user_unverified
+
     async def override_get_db():
         yield mock_db
 
     async def override_get_current_user():
         return test_user
 
+    async def override_get_current_user_unverified():
+        return test_user
+
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_current_user] = override_get_current_user
+    app.dependency_overrides[get_current_user_unverified] = override_get_current_user_unverified
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:

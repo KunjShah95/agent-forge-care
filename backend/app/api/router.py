@@ -44,6 +44,10 @@ def register_routes():
     router.include_router(
         hiring_agent.router, prefix="/hiring-agent", tags=["Hiring Agent"]
     )
+    from app.agents.orchestrator.router import router as orchestrator_router
+    router.include_router(
+        orchestrator_router, prefix="/orchestrator", tags=["Orchestrator"]
+    )
 
 
 register_routes()

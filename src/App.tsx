@@ -28,6 +28,7 @@ const CareerCoach = lazy(() => import("./pages/CareerCoach"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 import { HelmetProvider } from "react-helmet-async";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import { ConsentBanner } from "@/components/ConsentBanner";
 
 const queryClient = new QueryClient();
 
@@ -37,6 +38,7 @@ const App = () => (
       <ThemeProvider>
         <TooltipProvider>
           <Toaster />
+          <ConsentBanner />
           <BrowserRouter>
             <HelmetProvider>
             <ErrorBoundary>
