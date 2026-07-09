@@ -1,4 +1,4 @@
-﻿"""
+"""
 Profile Scraper Service — extracts user profile data from external sources.
 
 Provides:
@@ -25,6 +25,37 @@ logger = logging.getLogger("agentforge.profile_scraper")
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
+
+
+# ─── Shared HTTPX Client with Connection Pooling ─────────────
+# Reusing a single AsyncClient across all scraper functions eliminates
+# TCP handshake overhead for repeated calls to the same hosts (api.github.com, etc.).
+_shared_client: httpx.AsyncClient | None = None
+_client_lock = asyncio.Lock()
+
+
+async def _get_client() -> httpx.AsyncClient:
+    """Get or create the shared httpx client with connection pooling.
+
+    Connection pool limits:
+    - max_keepalive_connections=10: keep up to 10 idle connections alive
+    - max_connections=20: allow up to 20 concurrent connections
+    - keepalive_expiry=60.0: keep idle connections for 60 seconds
+    """
+    global _shared_client
+    if _shared_client is None:
+        async with _client_lock:
+            if _shared_client is None:
+                limits = httpx.Limits(
+                    max_keepalive_connections=10,
+                    max_connections=20,
+                    keepalive_expiry=60.0,
+                )
+                _shared_client = httpx.AsyncClient(
+                    limits=limits,
+                    timeout=httpx.Timeout(15.0, connect=10.0, read=15.0),
+                )
+    return _shared_client
 
 
 def _get_github_headers() -> dict:
@@ -73,76 +104,76 @@ async def scrape_github_profile(github_url: str) -> dict:
     }
 
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            # ── Fetch user profile ──
-            user_resp = await client.get(f"https://api.github.com/users/{username}", headers=headers)
-            if user_resp.status_code == 404:
-                return {"error": f"GitHub user '{username}' not found", "source": github_url}
-            if user_resp.status_code == 403:
-                return {"error": "GitHub API rate limited. Set GITHUB_TOKEN for higher limits.", "source": github_url}
-            if user_resp.status_code != 200:
-                return {"error": f"GitHub API returned {user_resp.status_code}", "source": github_url}
+        client = await _get_client()
+        # ── Fetch user profile ──
+        user_resp = await client.get(f"https://api.github.com/users/{username}", headers=headers, timeout=10.0)
+        if user_resp.status_code == 404:
+            return {"error": f"GitHub user '{username}' not found", "source": github_url}
+        if user_resp.status_code == 403:
+            return {"error": "GitHub API rate limited. Set GITHUB_TOKEN for higher limits.", "source": github_url}
+        if user_resp.status_code != 200:
+            return {"error": f"GitHub API returned {user_resp.status_code}", "source": github_url}
 
-            user_data = user_resp.json()
-            result["profile"] = {
-                "name": user_data.get("name"),
-                "bio": user_data.get("bio"),
-                "location": user_data.get("location"),
-                "company": user_data.get("company"),
-                "blog": user_data.get("blog"),
-                "email": user_data.get("email"),
-                "twitter_username": user_data.get("twitter_username"),
-                "followers": user_data.get("followers", 0),
-                "following": user_data.get("following", 0),
-                "public_repos": user_data.get("public_repos", 0),
-                "public_gists": user_data.get("public_gists", 0),
-                "created_at": user_data.get("created_at"),
-                "avatar_url": user_data.get("avatar_url"),
-                "html_url": user_data.get("html_url"),
-                "hireable": user_data.get("hireable"),
-            }
+        user_data = user_resp.json()
+        result["profile"] = {
+            "name": user_data.get("name"),
+            "bio": user_data.get("bio"),
+            "location": user_data.get("location"),
+            "company": user_data.get("company"),
+            "blog": user_data.get("blog"),
+            "email": user_data.get("email"),
+            "twitter_username": user_data.get("twitter_username"),
+            "followers": user_data.get("followers", 0),
+            "following": user_data.get("following", 0),
+            "public_repos": user_data.get("public_repos", 0),
+            "public_gists": user_data.get("public_gists", 0),
+            "created_at": user_data.get("created_at"),
+            "avatar_url": user_data.get("avatar_url"),
+            "html_url": user_data.get("html_url"),
+            "hireable": user_data.get("hireable"),
+        }
 
-            # ── Fetch repositories (top 30 by stars) ──
-            repos_resp = await client.get(
-                f"https://api.github.com/users/{username}/repos",
-                params={"sort": "stars", "direction": "desc", "per_page": 30, "type": "owner"},
-                headers=headers,
-            )
+        # ── Fetch repositories (top 30 by stars) ──
+        repos_resp = await client.get(
+            f"https://api.github.com/users/{username}/repos",
+            params={"sort": "stars", "direction": "desc", "per_page": 30, "type": "owner"},
+            headers=headers,
+        )
 
-            if repos_resp.status_code == 200:
-                repos_raw = repos_resp.json()
-                lang_map = {}
-                total_stars = 0
+        if repos_resp.status_code == 200:
+            repos_raw = repos_resp.json()
+            lang_map = {}
+            total_stars = 0
 
-                for repo in repos_raw:
-                    name = repo.get("name", "")
-                    lang = repo.get("language")
-                    stars = repo.get("stargazers_count", 0)
-                    total_stars += stars
+            for repo in repos_raw:
+                name = repo.get("name", "")
+                lang = repo.get("language")
+                stars = repo.get("stargazers_count", 0)
+                total_stars += stars
 
-                    if lang:
-                        lang_map[lang] = lang_map.get(lang, 0) + 1
+                if lang:
+                    lang_map[lang] = lang_map.get(lang, 0) + 1
 
-                    result["repositories"].append(
-                        {
-                            "name": name,
-                            "full_name": repo.get("full_name", ""),
-                            "description": repo.get("description"),
-                            "language": lang,
-                            "stars": stars,
-                            "forks": repo.get("forks_count", 0),
-                            "topics": repo.get("topics", []),
-                            "is_fork": repo.get("fork", False),
-                            "html_url": repo.get("html_url", ""),
-                            "homepage": repo.get("homepage"),
-                            "updated_at": repo.get("updated_at"),
-                        }
-                    )
+                result["repositories"].append(
+                    {
+                        "name": name,
+                        "full_name": repo.get("full_name", ""),
+                        "description": repo.get("description"),
+                        "language": lang,
+                        "stars": stars,
+                        "forks": repo.get("forks_count", 0),
+                        "topics": repo.get("topics", []),
+                        "is_fork": repo.get("fork", False),
+                        "html_url": repo.get("html_url", ""),
+                        "homepage": repo.get("homepage"),
+                        "updated_at": repo.get("updated_at"),
+                    }
+                )
 
-                result["languages"] = dict(sorted(lang_map.items(), key=lambda x: x[1], reverse=True))
-                result["total_stars"] = total_stars
+            result["languages"] = dict(sorted(lang_map.items(), key=lambda x: x[1], reverse=True))
+            result["total_stars"] = total_stars
 
-            return result
+        return result
 
     except httpx.TimeoutException:
         return {"error": "GitHub API request timed out", "source": github_url}
@@ -312,48 +343,48 @@ async def scrape_github_commits(github_url: str, max_commits: int = 500) -> dict
     seen_shas: set[str] = set()
 
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            # ── Step 1: Fetch public events (pushes, PRs, issues, etc.) ──
-            events = []
-            events_url = f"https://api.github.com/users/{username}/events/public"
-            events_resp = await client.get(events_url, headers=headers)
-            if events_resp.status_code == 200:
-                events_raw = events_resp.json()
-                for ev in events_raw[:100]:
-                    event_type = ev.get("type", "")
-                    repo_name = ev.get("repo", {}).get("name", "") if ev.get("repo") else ""
-                    created_at = ev.get("created_at", "")
-                    payload = ev.get("payload", {}) or {}
+        client = await _get_client()
+        # ── Step 1: Fetch public events (pushes, PRs, issues, etc.) ──
+        events = []
+        events_url = f"https://api.github.com/users/{username}/events/public"
+        events_resp = await client.get(events_url, headers=headers, timeout=10.0)
+        if events_resp.status_code == 200:
+            events_raw = events_resp.json()
+            for ev in events_raw[:100]:
+                event_type = ev.get("type", "")
+                repo_name = ev.get("repo", {}).get("name", "") if ev.get("repo") else ""
+                created_at = ev.get("created_at", "")
+                payload = ev.get("payload", {}) or {}
 
-                    entry = {
-                        "type": event_type,
-                        "repo": repo_name,
-                        "date": created_at,
-                    }
+                entry = {
+                    "type": event_type,
+                    "repo": repo_name,
+                    "date": created_at,
+                }
 
-                    # Extract commit messages from PushEvents
-                    if event_type == "PushEvent" and payload.get("commits"):
-                        commits = []
-                        for c in payload["commits"][:10]:
-                            sha = c.get("sha", "")[:7]
-                            msg = (c.get("message") or "").split("\n")[0][:120]
-                            commits.append({
-                                "sha": sha,
-                                "message": msg,
-                            })
-                            if sha and sha not in seen_shas:
-                                seen_shas.add(sha)
-                                result["commit_messages"].append(msg)
-                                result["commits_by_repo"].setdefault(repo_name, []).append(msg)
-                                result["total_commits"] += 1
-                                result["commit_dates"].append(created_at[:10])
-                        entry["commits"] = commits
+                # Extract commit messages from PushEvents
+                if event_type == "PushEvent" and payload.get("commits"):
+                    commits = []
+                    for c in payload["commits"][:10]:
+                        sha = c.get("sha", "")[:7]
+                        msg = (c.get("message") or "").split("\n")[0][:120]
+                        commits.append({
+                            "sha": sha,
+                            "message": msg,
+                        })
+                        if sha and sha not in seen_shas:
+                            seen_shas.add(sha)
+                            result["commit_messages"].append(msg)
+                            result["commits_by_repo"].setdefault(repo_name, []).append(msg)
+                            result["total_commits"] += 1
+                            result["commit_dates"].append(created_at[:10])
+                    entry["commits"] = commits
 
-                    events.append(entry)
+                events.append(entry)
 
-                result["recent_events"] = events
+            result["recent_events"] = events
 
-            # ── Step 2: Fetch repos and get per-repo commit counts ──
+        # ── Step 2: Fetch repos and get per-repo commit counts ──
             repos_resp = await client.get(
                 f"https://api.github.com/users/{username}/repos",
                 params={"sort": "pushed", "direction": "desc", "per_page": 10, "type": "owner"},
@@ -362,54 +393,62 @@ async def scrape_github_commits(github_url: str, max_commits: int = 500) -> dict
 
             if repos_resp.status_code == 200:
                 repos_data = repos_resp.json()
+                # Track languages from repos
                 for repo in repos_data:
-                    repo_name = repo.get("full_name", repo.get("name", ""))
                     lang = repo.get("language")
-                    pushed_at = repo.get("pushed_at", "")
-
-                    # Track languages
                     if lang and lang not in result["commit_languages"]:
                         result["commit_languages"][lang] = 0
                     if lang:
                         result["commit_languages"][lang] += 1
 
-                    # Only fetch commits for repos pushed to in last 90 days
-                    if pushed_at:
+                # ── Fetch commits from all active repos in parallel ──
+                # Use a semaphore to avoid hitting GitHub rate limits with too many concurrent requests
+                commit_semaphore = asyncio.Semaphore(3)
+
+                async def _fetch_repo_commits(repo: dict) -> None:
+                    repo_name = repo.get("full_name", repo.get("name", ""))
+                    pushed_at = repo.get("pushed_at", "")
+
+                    if not pushed_at:
+                        return
+
+                    try:
+                        from datetime import datetime, timezone
+                        pushed_dt = datetime.fromisoformat(pushed_at.replace("Z", "+00:00"))
+                        now = datetime.now(timezone.utc)
+                        days_since_push = (now - pushed_dt).days
+                    except Exception:
+                        days_since_push = 0
+
+                    if days_since_push >= 180:
+                        return
+
+                    async with commit_semaphore:
                         try:
-                            from datetime import datetime, timezone
-                            pushed_dt = datetime.fromisoformat(pushed_at.replace("Z", "+00:00"))
-                            now = datetime.now(timezone.utc)
-                            days_since_push = (now - pushed_dt).days
-                        except Exception:
-                            days_since_push = 0
+                            commits_resp = await client.get(
+                                f"https://api.github.com/repos/{repo_name}/commits",
+                                params={"author": username, "per_page": 20},
+                                headers=headers,
+                                timeout=5.0,
+                            )
+                            if commits_resp.status_code == 200:
+                                commits_data = commits_resp.json()
+                                for c in commits_data:
+                                    sha = c.get("sha", "")[:7]
+                                    msg = (c.get("commit", {}).get("message", "") or "").split("\n")[0][:120]
+                                    date = c.get("commit", {}).get("author", {}).get("date", "")[:10]
 
-                        if days_since_push < 180:  # Only recently active repos
-                            try:
-                                commits_resp = await client.get(
-                                    f"https://api.github.com/repos/{repo_name}/commits",
-                                    params={"author": username, "per_page": 20},
-                                    headers=headers,
-                                    timeout=5.0,
-                                )
-                                if commits_resp.status_code == 200:
-                                    commits_data = commits_resp.json()
-                                    for c in commits_data:
-                                        sha = c.get("sha", "")[:7]
-                                        msg = (c.get("commit", {}).get("message", "") or "").split("\n")[0][:120]
-                                        date = c.get("commit", {}).get("author", {}).get("date", "")[:10]
+                                    if sha and msg and sha not in seen_shas:
+                                        seen_shas.add(sha)
+                                        result["commits_by_repo"].setdefault(repo_name, []).append(msg)
+                                        result["commit_messages"].append(msg)
+                                        result["total_commits"] += 1
+                                        result["commit_dates"].append(date)
+                        except Exception as e:
+                            logger.debug("Failed to fetch commits for %s: %s", repo_name, e)
 
-                                        if sha and msg and sha not in seen_shas:
-                                            seen_shas.add(sha)
-                                            result["commits_by_repo"].setdefault(repo_name, []).append(msg)
-                                            result["commit_messages"].append(msg)
-                                            result["total_commits"] += 1
-                                            result["commit_dates"].append(date)
-
-                                    # Avoid hitting rate limits — pause briefly
-                                    await asyncio.sleep(0.1)
-                            except Exception as e:
-                                logger.debug("Failed to fetch commits for %s: %s", repo_name, e)
-                                continue
+                # Fire all per-repo commit fetches in parallel (up to 3 at a time via semaphore)
+                await asyncio.gather(*[_fetch_repo_commits(repo) for repo in repos_data])
 
             # ── Step 3: Compute commit frequency patterns ──
             dates = result["commit_dates"]
@@ -501,26 +540,27 @@ async def scrape_github_contributions(github_url: str) -> dict:
             }
             """
 
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                gql_resp = await client.post(
-                    graphql_url,
-                    json={"query": query, "variables": {"username": username}},
-                    headers={
-                        "Authorization": f"bearer {settings.github_token}",
-                        "User-Agent": "AgentForge-CareerOS",
-                    },
-                )
+            client = await _get_client()
+            gql_resp = await client.post(
+                graphql_url,
+                json={"query": query, "variables": {"username": username}},
+                headers={
+                    "Authorization": f"bearer {settings.github_token}",
+                    "User-Agent": "AgentForge-CareerOS",
+                },
+                timeout=10.0,
+            )
 
-                if gql_resp.status_code == 200:
-                    gql_data = gql_resp.json()
-                    cal_data = (
+        if gql_resp.status_code == 200:
+            gql_data = gql_resp.json()
+            cal_data = (
                         gql_data.get("data", {})
                         .get("user", {})
                         .get("contributionsCollection", {})
                         .get("contributionCalendar", {})
                     )
 
-                    if cal_data:
+            if cal_data:
                         total = cal_data.get("totalContributions", 0)
                         result["total_contributions"] = total
 
@@ -570,13 +610,14 @@ async def scrape_github_contributions(github_url: str) -> dict:
 
         # Fallback: scrape profile page HTML for contribution graph
         profile_url = f"https://github.com/{username}"
-        async with httpx.AsyncClient(
+        client = await _get_client()
+        resp = await client.get(
+            profile_url,
             headers={"User-Agent": USER_AGENT},
             follow_redirects=True,
             timeout=10.0,
-        ) as client:
-            resp = await client.get(profile_url)
-            if resp.status_code == 200:
+        )
+        if resp.status_code == 200:
                 soup = BeautifulSoup(resp.text, "html.parser")
 
                 # Parse contribution squares from the graph
@@ -632,7 +673,7 @@ async def scrape_github_contributions(github_url: str) -> dict:
 
                 return result
 
-            return {"error": f"Profile page returned HTTP {resp.status_code}"}
+        return {"error": f"Profile page returned HTTP {resp.status_code}"}
 
     except httpx.TimeoutException:
         return {"error": "GitHub contribution request timed out"}
@@ -667,69 +708,72 @@ async def scrape_github_oss_contributions(github_url: str, max_results: int = 30
     }
 
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            # ── Search for PRs authored by this user ──
-            pr_query = f"author:{username} type:pr is:public"
-            pr_resp = await client.get(
-                "https://api.github.com/search/issues",
-                params={"q": pr_query, "sort": "created", "order": "desc", "per_page": min(max_results, 30)},
-                headers=headers,
-            )
+        client = await _get_client()
+        # ── Search for PRs and Issues in parallel ──
+            # Both queries hit the same GitHub Search API endpoint with different params.
+            # Running them concurrently cuts this step's wall time in half.
+        pr_query = f"author:{username} type:pr is:public"
+        issue_query = f"author:{username} type:issue is:public"
 
-            if pr_resp.status_code == 200:
-                pr_data = pr_resp.json()
-                result["total_prs"] = pr_data.get("total_count", 0)
+        async def _fetch_prs() -> None:
+                pr_resp = await client.get(
+                    "https://api.github.com/search/issues",
+                    params={"q": pr_query, "sort": "created", "order": "desc", "per_page": min(max_results, 30)},
+                    headers=headers,
+                )
+                if pr_resp.status_code == 200:
+                    pr_data = pr_resp.json()
+                    result["total_prs"] = pr_data.get("total_count", 0)
 
-                for item in pr_data.get("items", [])[:max_results]:
-                    repo_url = item.get("repository_url", "")
-                    repo_name = repo_url.replace("https://api.github.com/repos/", "") if repo_url else ""
-                    html_url = item.get("html_url", "")
+                    for item in pr_data.get("items", [])[:max_results]:
+                        repo_url = item.get("repository_url", "")
+                        repo_name = repo_url.replace("https://api.github.com/repos/", "") if repo_url else ""
+                        html_url = item.get("html_url", "")
 
-                    # Only count as OSS if it's not the user's own repo
-                    if repo_name and not repo_name.startswith(f"{username}/"):
-                        pr_entry = {
-                            "title": item.get("title", ""),
-                            "url": html_url,
-                            "repo": repo_name,
-                            "state": item.get("state", ""),
-                            "created_at": item.get("created_at", ""),
-                            "comments": item.get("comments", 0),
-                        }
-                        result["pull_requests"].append(pr_entry)
-                        if repo_name not in result["repos_contributed_to"]:
-                            result["repos_contributed_to"].append(repo_name)
+                        if repo_name and not repo_name.startswith(f"{username}/"):
+                            pr_entry = {
+                                "title": item.get("title", ""),
+                                "url": html_url,
+                                "repo": repo_name,
+                                "state": item.get("state", ""),
+                                "created_at": item.get("created_at", ""),
+                                "comments": item.get("comments", 0),
+                            }
+                            result["pull_requests"].append(pr_entry)
+                            if repo_name not in result["repos_contributed_to"]:
+                                result["repos_contributed_to"].append(repo_name)
 
-            # ── Search for issues authored by this user to other repos ──
-            issue_query = f"author:{username} type:issue is:public"
-            issue_resp = await client.get(
-                "https://api.github.com/search/issues",
-                params={"q": issue_query, "sort": "created", "order": "desc", "per_page": min(max_results, 30)},
-                headers=headers,
-            )
+        async def _fetch_issues() -> None:
+                issue_resp = await client.get(
+                    "https://api.github.com/search/issues",
+                    params={"q": issue_query, "sort": "created", "order": "desc", "per_page": min(max_results, 30)},
+                    headers=headers,
+                )
+                if issue_resp.status_code == 200:
+                    issue_data = issue_resp.json()
+                    result["total_issues"] = issue_data.get("total_count", 0)
 
-            if issue_resp.status_code == 200:
-                issue_data = issue_resp.json()
-                result["total_issues"] = issue_data.get("total_count", 0)
+                    for item in issue_data.get("items", [])[:max_results]:
+                        repo_url = item.get("repository_url", "")
+                        repo_name = repo_url.replace("https://api.github.com/repos/", "") if repo_url else ""
 
-                for item in issue_data.get("items", [])[:max_results]:
-                    repo_url = item.get("repository_url", "")
-                    repo_name = repo_url.replace("https://api.github.com/repos/", "") if repo_url else ""
+                        if repo_name and not repo_name.startswith(f"{username}/"):
+                            issue_entry = {
+                                "title": item.get("title", ""),
+                                "url": item.get("html_url", ""),
+                                "repo": repo_name,
+                                "state": item.get("state", ""),
+                                "created_at": item.get("created_at", ""),
+                                "comments": item.get("comments", 0),
+                            }
+                            result["issues"].append(issue_entry)
+                            if repo_name not in result["repos_contributed_to"]:
+                                result["repos_contributed_to"].append(repo_name)
 
-                    if repo_name and not repo_name.startswith(f"{username}/"):
-                        issue_entry = {
-                            "title": item.get("title", ""),
-                            "url": item.get("html_url", ""),
-                            "repo": repo_name,
-                            "state": item.get("state", ""),
-                            "created_at": item.get("created_at", ""),
-                            "comments": item.get("comments", 0),
-                        }
-                        result["issues"].append(issue_entry)
-                        if repo_name not in result["repos_contributed_to"]:
-                            result["repos_contributed_to"].append(repo_name)
+        await asyncio.gather(_fetch_prs(), _fetch_issues())
 
             # Build summary
-            if result["pull_requests"] or result["issues"]:
+        if result["pull_requests"] or result["issues"]:
                 merged_prs = sum(1 for pr in result["pull_requests"] if pr["state"] == "merged" or pr["state"] == "closed")
                 open_prs = sum(1 for pr in result["pull_requests"] if pr["state"] == "open")
 
@@ -740,7 +784,7 @@ async def scrape_github_oss_contributions(github_url: str, max_results: int = 30
                     parts.append(f"contributed to {len(result['repos_contributed_to'])} repos")
                 result["summary"] = ", ".join(parts) if parts else "No OSS contributions found"
 
-            return result
+        return result
 
     except httpx.TimeoutException:
         return {"error": "GitHub OSS search request timed out"}
@@ -934,49 +978,54 @@ async def scrape_portfolio(portfolio_url: str) -> dict:
     headers = {"User-Agent": USER_AGENT, "Accept-Language": "en-US,en;q=0.9"}
 
     try:
-        async with httpx.AsyncClient(headers=headers, follow_redirects=True, timeout=15.0) as client:
-            resp = await client.get(portfolio_url)
-            if resp.status_code != 200:
+        client = await _get_client()
+        resp = await client.get(
+            portfolio_url,
+            headers=headers,
+            follow_redirects=True,
+            timeout=15.0,
+        )
+        if resp.status_code != 200:
                 return {"error": f"Portfolio returned HTTP {resp.status_code}", "source": portfolio_url}
 
-            soup = BeautifulSoup(resp.text, "html.parser")
+        soup = BeautifulSoup(resp.text, "html.parser")
 
             # Remove scripts, styles, nav, footer for clean text
-            for tag in soup(["script", "style", "nav", "footer", "header"]):
+        for tag in soup(["script", "style", "nav", "footer", "header"]):
                 tag.decompose()
 
-            page_title = soup.title.string.strip() if soup.title and soup.title.string else ""
-            meta_desc = ""
-            meta_tag = soup.find("meta", attrs={"name": "description"})
-            if meta_tag and meta_tag.get("content"):
+        page_title = soup.title.string.strip() if soup.title and soup.title.string else ""
+        meta_desc = ""
+        meta_tag = soup.find("meta", attrs={"name": "description"})
+        if meta_tag and meta_tag.get("content"):
                 meta_desc = meta_tag["content"].strip()
 
             # Extract all visible text
-            body_text = soup.get_text(separator="\n", strip=True)
+        body_text = soup.get_text(separator="\n", strip=True)
             # Limit to prevent token blowup
-            body_text = body_text[:10000]
+        body_text = body_text[:10000]
 
             # Extract links (potential project links)
-            links = []
-            for a in soup.find_all("a", href=True):
+        links = []
+        for a in soup.find_all("a", href=True):
                 href = a["href"]
                 text = a.get_text(strip=True)
                 if href.startswith(("http://", "https://")) and text:
                     links.append({"text": text[:80], "url": href})
-            links = links[:20]
+        links = links[:20]
 
             # Extract headings as section markers
-            headings = []
-            for h in soup.find_all(["h1", "h2", "h3"]):
+        headings = []
+        for h in soup.find_all(["h1", "h2", "h3"]):
                 text = h.get_text(strip=True)
                 if text:
                     headings.append(text)
-            headings = headings[:15]
+        headings = headings[:15]
 
             # ── Use LLM to structure the findings ──
-            llm = get_completion_llm(temperature=0.3, preferred_provider="openai")
+        llm = get_completion_llm(temperature=0.3, preferred_provider="openai")
 
-            if llm:
+        if llm:
                 try:
                     from langchain_core.messages import HumanMessage
 
@@ -1019,7 +1068,7 @@ No markdown, no explanations."""
                     logger.debug("LLM portfolio analysis failed, using rule-based: %s", e)
 
             # Rule-based fallback
-            tech_keywords = [
+        tech_keywords = [
                 "python",
                 "javascript",
                 "typescript",
@@ -1047,9 +1096,9 @@ No markdown, no explanations."""
                 "git",
                 "api",
             ]
-            detected = [kw for kw in tech_keywords if kw.lower() in body_text.lower()]
+        detected = [kw for kw in tech_keywords if kw.lower() in body_text.lower()]
 
-            return {
+        return {
                 "name": None,
                 "role": None,
                 "skills": [d.title() for d in detected[:15]],

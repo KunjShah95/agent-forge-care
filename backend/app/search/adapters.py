@@ -84,18 +84,50 @@ def _make_headers() -> dict:
     return h
 
 
+# ─── Shared HTTPX Client with Connection Pooling ─────────────
+# Reusing a single AsyncClient across all search/scrape functions eliminates
+# TCP handshake overhead for repeated calls to the same hosts.
+# Each call passes per-request headers (with randomized User-Agent) and timeout.
+_shared_client: httpx.AsyncClient | None = None
+_client_lock = asyncio.Lock()
+
+
+async def _get_client() -> httpx.AsyncClient:
+    """Get or create the shared httpx client with connection pooling.
+
+    Connection pool limits:
+    - max_keepalive_connections=10: keep up to 10 idle connections alive
+    - max_connections=20: allow up to 20 concurrent connections
+    - keepalive_expiry=60.0: keep idle connections for 60 seconds
+    """
+    global _shared_client
+    if _shared_client is None:
+        async with _client_lock:
+            if _shared_client is None:
+                limits = httpx.Limits(
+                    max_keepalive_connections=10,
+                    max_connections=20,
+                    keepalive_expiry=60.0,
+                )
+                _shared_client = httpx.AsyncClient(
+                    limits=limits,
+                    timeout=httpx.Timeout(15.0, connect=10.0, read=15.0),
+                )
+    return _shared_client
+
+
 async def _safe_get(url: str, headers: dict, follow_redirects: bool = True, timeout: int = 10) -> httpx.Response:
-    """HTTP GET with proper AsyncClient context manager to avoid resource leaks."""
-    async with httpx.AsyncClient(headers=headers, follow_redirects=follow_redirects, timeout=timeout) as client:
-        return await client.get(url)
+    """HTTP GET using shared connection pool."""
+    client = await _get_client()
+    return await client.get(url, headers=headers, follow_redirects=follow_redirects, timeout=timeout)
 
 
 async def _safe_post(
     url: str, headers: dict, data: dict | None = None, follow_redirects: bool = True, timeout: int = 15
 ) -> httpx.Response:
-    """HTTP POST with proper AsyncClient context manager to avoid resource leaks."""
-    async with httpx.AsyncClient(headers=headers, follow_redirects=follow_redirects, timeout=timeout) as client:
-        return await client.post(url, data=data)
+    """HTTP POST using shared connection pool."""
+    client = await _get_client()
+    return await client.post(url, data=data, headers=headers, follow_redirects=follow_redirects, timeout=timeout)
 
 
 # ─── In-Memory Search Cache ─────────────────────────────────
@@ -472,15 +504,15 @@ class SearchAdapter:
 
         url = "http://suggestqueries.google.com/complete/search"
         params = {"client": "chrome", "q": query}
-        async with httpx.AsyncClient(timeout=5) as client:
-            try:
-                resp = await client.get(url, params=params)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    if len(data) > 1 and isinstance(data[1], list):
-                        return data[1][:5]
-            except Exception as e:
-                logger.debug("Failed to get suggestions: %s", e)
+        client = await _get_client()
+        try:
+            resp = await client.get(url, params=params, timeout=5.0)
+            if resp.status_code == 200:
+                data = resp.json()
+                if len(data) > 1 and isinstance(data[1], list):
+                    return data[1][:5]
+        except Exception as e:
+            logger.debug("Failed to get suggestions: %s", e)
         return []
 
     # ─── Google Custom Search ──────────────────────────────
@@ -496,18 +528,18 @@ class SearchAdapter:
         if location:
             q += f" {location}"
 
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(
-                "https://www.googleapis.com/customsearch/v1",
-                params={
-                    "key": settings.google_api_key,
-                    "cx": settings.google_cse_id,
-                    "q": f"{q}",
-                    "num": min(limit, 10),
-                },
-                timeout=10,
-            )
-            data = resp.json()
+        client = await _get_client()
+        resp = await client.get(
+            "https://www.googleapis.com/customsearch/v1",
+            params={
+                "key": settings.google_api_key,
+                "cx": settings.google_cse_id,
+                "q": f"{q}",
+                "num": min(limit, 10),
+            },
+            timeout=10,
+        )
+        data = resp.json()
 
         if "error" in data:
             raise RuntimeError(data["error"].get("message", "Google API error"))
@@ -545,18 +577,18 @@ class SearchAdapter:
         if location:
             q += f" {location}"
 
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(
-                "https://serpapi.com/search",
-                params={
-                    "api_key": settings.serpapi_key,
-                    "engine": "google_jobs",
-                    "q": q,
-                    "hl": "en",
-                },
-                timeout=10,
-            )
-            data = resp.json()
+        client = await _get_client()
+        resp = await client.get(
+            "https://serpapi.com/search",
+            params={
+                "api_key": settings.serpapi_key,
+                "engine": "google_jobs",
+                "q": q,
+                "hl": "en",
+            },
+            timeout=10,
+        )
+        data = resp.json()
 
         results = []
         for job in data.get("jobs_results", [])[:limit]:
@@ -881,22 +913,22 @@ class SearchAdapter:
         limit: int = 5,
     ) -> list[dict]:
         """Search using Brave Search API (2,000 free queries/month)."""
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(
-                "https://api.search.brave.com/res/v1/web/search",
-                params={
-                    "q": query,
-                    "count": min(limit, 20),
-                    "safesearch": "moderate",
-                },
-                headers={
-                    "Accept": "application/json",
-                    "Accept-Encoding": "gzip",
-                    "X-Subscription-Token": settings.brave_api_key,
-                },
-                timeout=10,
-            )
-            data = resp.json()
+        client = await _get_client()
+        resp = await client.get(
+            "https://api.search.brave.com/res/v1/web/search",
+            params={
+                "q": query,
+                "count": min(limit, 20),
+                "safesearch": "moderate",
+            },
+            headers={
+                "Accept": "application/json",
+                "Accept-Encoding": "gzip",
+                "X-Subscription-Token": settings.brave_api_key,
+            },
+            timeout=10,
+        )
+        data = resp.json()
 
         results = []
         for r in data.get("web", {}).get("results", [])[:limit]:
@@ -919,22 +951,22 @@ class SearchAdapter:
         limit: int = 5,
     ) -> list[dict]:
         """Search using Exa (formerly Metaphor) — AI-native search API."""
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                "https://api.exa.ai/search",
-                json={
-                    "query": query,
-                    "numResults": limit,
-                    "useAutoprompt": True,
-                    "type": "keyword",
-                },
-                headers={
-                    "Authorization": f"Bearer {settings.exa_api_key}",
-                    "Content-Type": "application/json",
-                },
-                timeout=15,
-            )
-            data = resp.json()
+        client = await _get_client()
+        resp = await client.post(
+            "https://api.exa.ai/search",
+            json={
+                "query": query,
+                "numResults": limit,
+                "useAutoprompt": True,
+                "type": "keyword",
+            },
+            headers={
+                "Authorization": f"Bearer {settings.exa_api_key}",
+                "Content-Type": "application/json",
+            },
+            timeout=15,
+        )
+        data = resp.json()
 
         results = []
         for r in data.get("results", [])[:limit]:
@@ -958,23 +990,23 @@ class SearchAdapter:
     ) -> list[dict]:
         """Search using self-hosted SearXNG meta search engine."""
         base_url = settings.searxng_base_url.rstrip("/")
-        async with httpx.AsyncClient() as client:
-            try:
-                resp = await client.get(
-                    f"{base_url}/search",
-                    params={
-                        "q": query,
-                        "format": "json",
-                        "language": "en",
-                        "categories": "general",
-                        "pageno": 1,
-                    },
-                    timeout=10,
-                )
-                data = resp.json()
-            except Exception as e:
-                logger.debug("SearXNG search failed: %s", e)
-                return []
+        client = await _get_client()
+        try:
+            resp = await client.get(
+                f"{base_url}/search",
+                params={
+                    "q": query,
+                    "format": "json",
+                    "language": "en",
+                    "categories": "general",
+                    "pageno": 1,
+                },
+                timeout=10,
+            )
+            data = resp.json()
+        except Exception as e:
+            logger.debug("SearXNG search failed: %s", e)
+            return []
 
         results = []
         for r in data.get("results", [])[:limit]:
@@ -997,19 +1029,19 @@ class SearchAdapter:
         limit: int = 5,
     ) -> list[dict]:
         """Search using Mojeek Search API (free tier available with API key)."""
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(
-                "https://www.mojeek.com/search",
-                params={
-                    "api_key": settings.mojeek_api_key,
-                    "q": query,
-                    "fmt": "json",
-                    "t": min(limit, 20),
-                    "s": 1,
-                },
-                timeout=10,
-            )
-            data = resp.json()
+        client = await _get_client()
+        resp = await client.get(
+            "https://www.mojeek.com/search",
+            params={
+                "api_key": settings.mojeek_api_key,
+                "q": query,
+                "fmt": "json",
+                "t": min(limit, 20),
+                "s": 1,
+            },
+            timeout=10,
+        )
+        data = resp.json()
 
         response = data.get("response", {})
         if response.get("status") != "OK":
@@ -1095,19 +1127,19 @@ class SearchAdapter:
         limit: int = 5,
     ) -> list[dict]:
         """Search using Tavily API — purpose-built for AI research agents."""
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                "https://api.tavily.com/search",
-                json={
-                    "api_key": settings.tavily_api_key,
-                    "query": query,
-                    "search_depth": "basic",
-                    "max_results": limit,
-                    "include_answer": False,
-                },
-                timeout=15,
-            )
-            data = resp.json()
+        client = await _get_client()
+        resp = await client.post(
+            "https://api.tavily.com/search",
+            json={
+                "api_key": settings.tavily_api_key,
+                "query": query,
+                "search_depth": "basic",
+                "max_results": limit,
+                "include_answer": False,
+            },
+            timeout=15,
+        )
+        data = resp.json()
 
         results = []
         for r in data.get("results", []):

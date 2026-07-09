@@ -21,6 +21,7 @@ from app.config import settings
 from app.database import close_db, get_db, init_db
 from app.dependencies import _get_rate_limit_config, _get_rate_limit_key, rate_limiter
 from app.memory.qdrant_client import get_qdrant_client, init_collections
+from app.middleware.audit import AuditLogMiddleware
 from app.middleware.auth import RequestLogMiddleware
 from app.tasks.hackathon_scanner import run_scheduled_hackathon_scan
 from app.tasks.memory_cleanup import cleanup_expired_memory
@@ -231,6 +232,9 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # Request logging middleware
 app.add_middleware(RequestLogMiddleware)
+
+# Audit logging middleware (logs all state-changing operations)
+app.add_middleware(AuditLogMiddleware)
 
 
 @app.middleware("http")

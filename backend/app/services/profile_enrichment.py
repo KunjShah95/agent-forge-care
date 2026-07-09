@@ -113,7 +113,30 @@ async def enrich_github_profile(
         return ProfileEnrichmentResult()
 
     memory_service = MemoryService(db)
-    raw_data = await scrape_github_profile(github_url)
+    import asyncio
+
+    # ── Fire all GitHub data scrapers in parallel ──
+    # Profile + commits + contributions + OSS are all independent API calls.
+    # Running them concurrently instead of sequentially reduces total wall time
+    # from sum(latencies) to max(latency).
+    profile_task = scrape_github_profile(github_url)
+    commits_task = scrape_github_commits(github_url)
+    contribs_task = scrape_github_contributions(github_url)
+    oss_task = scrape_github_oss_contributions(github_url)
+
+    raw_data, commit_data, contribution_data, oss_data = await asyncio.gather(
+        profile_task, commits_task, contribs_task, oss_task,
+        return_exceptions=True,
+    )
+
+    # ── Handle profile result ──
+    if isinstance(raw_data, BaseException):
+        logger.warning("GitHub scrape exception for %s: %s", github_url, raw_data)
+        await memory_service.set_memory(
+            user_id, "github_profile_raw", {"error": str(raw_data)}, weight=0.5
+        )
+        return ProfileEnrichmentResult(github_profile={"error": str(raw_data)})
+
     if "error" in raw_data:
         logger.warning("GitHub scrape failed for %s: %s", github_url, raw_data["error"])
         await memory_service.set_memory(
@@ -132,28 +155,33 @@ async def enrich_github_profile(
         user_id, "github_skills_analysis", analysis, weight=0.9
     )
 
-    # ── Fetch commit history ──
-    commit_data = await scrape_github_commits(github_url)
-    if "error" not in commit_data:
+    # ── Store commit history (if available) ──
+    if isinstance(commit_data, dict) and "error" not in commit_data:
         await memory_service.set_memory(
             user_id, "github_commit_history", commit_data, weight=0.8
         )
 
-    # ── Fetch contribution graph ──
-    contribution_data = await scrape_github_contributions(github_url)
-    if "error" not in contribution_data:
+    # ── Store contribution graph (if available) ──
+    if isinstance(contribution_data, dict) and "error" not in contribution_data:
         await memory_service.set_memory(
             user_id, "github_contributions", contribution_data, weight=0.8
         )
 
-    # ── Fetch open-source contributions ──
-    oss_data = await scrape_github_oss_contributions(github_url)
-    if "error" not in oss_data:
+    # ── Store open-source contributions (if available) ──
+    if isinstance(oss_data, dict) and "error" not in oss_data:
         await memory_service.set_memory(
             user_id, "github_oss_contributions", oss_data, weight=0.8
         )
 
     # ── Analyze commit history patterns ──
+    commit_data_ok = isinstance(commit_data, dict) and "error" not in commit_data
+    contrib_data_ok = isinstance(contribution_data, dict) and "error" not in contribution_data
+    oss_data_ok = isinstance(oss_data, dict) and "error" not in oss_data
+
+    commit_data = commit_data if commit_data_ok else None
+    contribution_data = contribution_data if contrib_data_ok else None
+    oss_data = oss_data if oss_data_ok else None
+
     commit_analysis = await analyze_commit_history(
         commit_data=commit_data,
         contribution_data=contribution_data,
@@ -256,7 +284,7 @@ async def enrich_all(
     portfolio_url: str | None = None,
     linkedin_url: str | None = None,
 ) -> dict:
-    """Run full enrichment: GitHub scraping + portfolio scraping + LinkedIn scraping + social discovery.
+    """Run full enrichment: GitHub scraping + portfolio scraping + social discovery.
 
     This is the primary entry point. Runs all sources in parallel and returns
     merged results. Stores everything in MemoryService.
@@ -286,8 +314,6 @@ async def enrich_all(
     final_social = SocialDiscoveryResult()
     final_social.linkedin_url = linkedin_url or None
 
-    linkedin_profile_data = None
-
     for result in results:
         if isinstance(result, ProfileEnrichmentResult):
             if result.github_profile:
@@ -309,14 +335,6 @@ async def enrich_all(
                 final_social.company = final_social.company or s.company
                 final_social.location = final_social.location or s.location
             all_skills.extend(result.discovered_skills)
-        elif isinstance(result, dict):
-            # LinkedIn result (raw dict)
-            linkedin_profile_data = result
-            skills = result.get("skills", [])
-            if isinstance(skills, list):
-                all_skills.extend(s for s in skills if isinstance(s, str))
-            if result.get("location"):
-                final_social.location = final_social.location or result["location"]
 
     merged.social_links = final_social
     merged.discovered_skills = list(set(all_skills))
@@ -331,11 +349,7 @@ async def enrich_all(
             weight=0.7,
         )
 
-    result_dict = merged.to_dict()
-    if linkedin_profile_data:
-        result_dict["linkedin_profile"] = linkedin_profile_data
-
-    return result_dict
+    return merged.to_dict()
 
 
 def _discover_socials_from_github(github_data: dict) -> SocialDiscoveryResult:
