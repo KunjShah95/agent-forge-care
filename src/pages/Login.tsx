@@ -176,7 +176,7 @@ export default function Login() {
             <Button
               type="submit"
               className="w-full bg-gradient-1 shadow-glow hover:shadow-glow-lg transition-all duration-300 gap-2"
-              disabled={isSubmitting || !isFirebaseConfigured}
+              disabled={isSubmitting}
             >
               {isSubmitting ? (
                 <><Loader2 className="h-4 w-4 animate-spin" /> Signing in...</>

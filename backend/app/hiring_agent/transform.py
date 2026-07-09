@@ -4,9 +4,13 @@ def transform_parsed_data(parsed_data: dict) -> dict:
     if "basics" in parsed_data and len(parsed_data) > 1:
         return {
             "basics": _transform_basics(parsed_data.get("basics", {})),
-            "work": _transform_work(parsed_data.get("work", parsed_data.get("work_experience", parsed_data.get("experience", [])))),
+            "work": _transform_work(
+                parsed_data.get("work", parsed_data.get("work_experience", parsed_data.get("experience", [])))
+            ),
             "education": _transform_education(parsed_data.get("education", [])),
-            "awards": _transform_awards(parsed_data.get("awards", parsed_data.get("achievements", parsed_data.get("honors_and_awards", [])))),
+            "awards": _transform_awards(
+                parsed_data.get("awards", parsed_data.get("achievements", parsed_data.get("honors_and_awards", [])))
+            ),
             "skills": _transform_skills(parsed_data),
             "projects": _transform_projects(parsed_data),
         }
@@ -38,7 +42,8 @@ def _transform_work(data: list) -> list:
             "summary": w.get("summary"),
             "highlights": w.get("highlights", []),
         }
-        for w in data if isinstance(w, dict)
+        for w in data
+        if isinstance(w, dict)
     ]
 
 
@@ -54,7 +59,8 @@ def _transform_education(data: list) -> list:
             "endDate": e.get("endDate"),
             "score": e.get("score"),
         }
-        for e in data if isinstance(e, dict)
+        for e in data
+        if isinstance(e, dict)
     ]
 
 
@@ -68,7 +74,8 @@ def _transform_awards(data: list) -> list:
             "awarder": a.get("awarder"),
             "summary": a.get("summary"),
         }
-        for a in data if isinstance(a, dict)
+        for a in data
+        if isinstance(a, dict)
     ]
 
 
@@ -81,7 +88,8 @@ def _transform_skills(data: dict) -> list:
                 "level": s.get("level"),
                 "keywords": s.get("keywords", []),
             }
-            for s in skills if isinstance(s, dict)
+            for s in skills
+            if isinstance(s, dict)
         ]
     return []
 
@@ -98,7 +106,8 @@ def _transform_projects(data: dict) -> list:
             "technologies": p.get("technologies", p.get("skills", [])),
             "highlights": p.get("highlights", []),
         }
-        for p in projects if isinstance(p, dict)
+        for p in projects
+        if isinstance(p, dict)
     ]
 
 

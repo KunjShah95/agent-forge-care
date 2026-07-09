@@ -1,7 +1,8 @@
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from app.agents.orchestrator.service import OrchestratorAgent, AGENT_REGISTRY
+import pytest
+
+from app.agents.orchestrator.service import AGENT_REGISTRY, OrchestratorAgent
 
 
 @pytest.fixture
@@ -46,13 +47,16 @@ async def test_unknown_agent_type_is_skipped(mock_db, mock_profile):
     mock_ms = AsyncMock()
     mock_ms.get_user_context.return_value = {}
 
-    with patch("app.agents.orchestrator.service.ProfileService", return_value=mock_ps), \
-         patch("app.agents.orchestrator.service.MemoryService", return_value=mock_ms), \
-         patch.object(OrchestratorAgent, "_persist_plan"), \
-         patch.object(OrchestratorAgent, "_persist_results"), \
-         patch("app.agents.orchestrator.service.decompose_goal_with_llm", return_value=[
-             {"agent": "nonexistent", "action": "test", "params": {}, "priority": 5}
-         ]):
+    with (
+        patch("app.agents.orchestrator.service.ProfileService", return_value=mock_ps),
+        patch("app.agents.orchestrator.service.MemoryService", return_value=mock_ms),
+        patch.object(OrchestratorAgent, "_persist_plan"),
+        patch.object(OrchestratorAgent, "_persist_results"),
+        patch(
+            "app.agents.orchestrator.service.decompose_goal_with_llm",
+            return_value=[{"agent": "nonexistent", "action": "test", "params": {}, "priority": 5}],
+        ),
+    ):
         agent = OrchestratorAgent(mock_db, "test-user")
         result = await agent.run({"goal": "test goal"})
         results = result.output.get("results", {})
@@ -69,13 +73,16 @@ async def test_resume_agent_dispatched(mock_db, mock_profile):
     mock_ms = AsyncMock()
     mock_ms.get_user_context.return_value = {"skills": ["python"]}
 
-    with patch("app.agents.orchestrator.service.ProfileService", return_value=mock_ps), \
-         patch("app.agents.orchestrator.service.MemoryService", return_value=mock_ms), \
-         patch.object(OrchestratorAgent, "_persist_plan"), \
-         patch.object(OrchestratorAgent, "_persist_results"), \
-         patch("app.agents.orchestrator.service.decompose_goal_with_llm", return_value=[
-             {"agent": "resume", "action": "tailor", "params": {"role_type": "swe"}, "priority": 1}
-         ]):
+    with (
+        patch("app.agents.orchestrator.service.ProfileService", return_value=mock_ps),
+        patch("app.agents.orchestrator.service.MemoryService", return_value=mock_ms),
+        patch.object(OrchestratorAgent, "_persist_plan"),
+        patch.object(OrchestratorAgent, "_persist_results"),
+        patch(
+            "app.agents.orchestrator.service.decompose_goal_with_llm",
+            return_value=[{"agent": "resume", "action": "tailor", "params": {"role_type": "swe"}, "priority": 1}],
+        ),
+    ):
         agent = OrchestratorAgent(mock_db, "test-user")
         result = await agent.run({"goal": "tailor resume for swe"})
         assert result.status == "completed"

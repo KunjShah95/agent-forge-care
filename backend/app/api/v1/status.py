@@ -9,15 +9,15 @@ Provides a live snapshot of:
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter
 from sqlalchemy import text
 
 from app.config import settings
 from app.database import get_db
-from app.memory.qdrant_client import get_qdrant_client
 from app.dependencies import rate_limiter
+from app.memory.qdrant_client import get_qdrant_client
 
 logger = logging.getLogger("agentforge.status")
 
@@ -85,7 +85,11 @@ AI_MODEL_PROVIDERS = [
         "name": "together",
         "display": "Together AI",
         "type": "paid",
-        "models": ["meta-llama/Meta-Llama-3.1-8B-Instruct", "deepseek-ai/DeepSeek-V3", "Qwen/Qwen2.5-72B-Instruct-Turbo"],
+        "models": [
+            "meta-llama/Meta-Llama-3.1-8B-Instruct",
+            "deepseek-ai/DeepSeek-V3",
+            "Qwen/Qwen2.5-72B-Instruct-Turbo",
+        ],
         "env_var": "TOGETHER_API_KEY",
     },
     {
@@ -265,7 +269,7 @@ def _check_envs(env_vars: list[str]) -> bool:
 @router.get("/status")
 async def system_status():
     """Report live availability of all integrated services and providers."""
-    timestamp = datetime.now(timezone.utc).isoformat()
+    timestamp = datetime.now(UTC).isoformat()
 
     # ── AI Model Providers ─────────────────────────────────
     llm_providers = []
@@ -275,13 +279,15 @@ async def system_status():
         else:
             # Ollama is always listed as available if running locally
             available = True  # Will be confirmed at runtime
-        llm_providers.append({
-            "name": p["name"],
-            "display": p["display"],
-            "type": p["type"],
-            "available": available,
-            "models": p["models"],
-        })
+        llm_providers.append(
+            {
+                "name": p["name"],
+                "display": p["display"],
+                "type": p["type"],
+                "available": available,
+                "models": p["models"],
+            }
+        )
 
     embedding_providers = []
     for p in EMBEDDING_PROVIDERS:
@@ -289,13 +295,15 @@ async def system_status():
             available = _check_env(p["env_var"])
         else:
             available = True
-        embedding_providers.append({
-            "name": p["name"],
-            "display": p["display"],
-            "type": p["type"],
-            "available": available,
-            "models": p["models"],
-        })
+        embedding_providers.append(
+            {
+                "name": p["name"],
+                "display": p["display"],
+                "type": p["type"],
+                "available": available,
+                "models": p["models"],
+            }
+        )
 
     # ── Search Sources ──────────────────────────────────────
     search_sources = []
@@ -326,12 +334,14 @@ async def system_status():
             available = _check_env(s["env_var"])
         else:
             available = False
-        other_services.append({
-            "name": s["name"],
-            "display": s["display"],
-            "type": s["type"],
-            "available": available,
-        })
+        other_services.append(
+            {
+                "name": s["name"],
+                "display": s["display"],
+                "type": s["type"],
+                "available": available,
+            }
+        )
 
     # ── Database Connections ────────────────────────────────
     databases = {}
@@ -367,13 +377,20 @@ async def system_status():
     # ── Agent System ───────────────────────────────────────
     try:
         from app.agents.graph import get_planner_graph
+
         graph = get_planner_graph()
         agent_system = {
             "status": "ready" if graph is not None else "unhealthy",
             "agent_count": 8,
             "agents": [
-                "planner", "internship", "job", "research",
-                "resume", "interview", "networking", "monitor",
+                "planner",
+                "internship",
+                "job",
+                "research",
+                "resume",
+                "interview",
+                "networking",
+                "monitor",
             ],
             "graph_compiled": graph is not None,
         }
@@ -385,7 +402,7 @@ async def system_status():
 
     # ── Overall Health ─────────────────────────────────────
     llm_available = any(p["available"] for p in llm_providers)
-    embedding_available = any(p["available"] for p in embedding_providers)
+    any(p["available"] for p in embedding_providers)
     search_available = any(s["available"] for s in search_sources)
     db_ok = databases.get("postgresql", {}).get("status") == "connected"
 

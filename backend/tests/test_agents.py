@@ -1,15 +1,15 @@
-import pytest
-import uuid
 from unittest.mock import AsyncMock, patch
 
+import pytest
+
+from app.models.user import AgentType, TaskStatus
 from tests.conftest import (
+    TEST_USER_ID,
     MockResult,
+    _uid,
     make_agent_task,
     setup_mock_execute,
-    TEST_USER_ID,
-    _uid,
 )
-from app.models.user import AgentType, TaskStatus
 
 
 @pytest.mark.asyncio
@@ -145,7 +145,7 @@ async def test_get_task_not_found(auth_client, mock_db):
 
 
 @pytest.mark.asyncio
-@patch("app.agents.graph.run_opportunity_scan", new_callable=AsyncMock)
+@patch("app.agents.orchestrator.service.run_opportunity_scan", new_callable=AsyncMock)
 async def test_monitor_run_success(mock_scan, auth_client, mock_db):
     task_id = _uid()
     mock_scan.return_value = task_id
@@ -182,12 +182,18 @@ async def test_monitor_alerts_empty(auth_client, mock_db):
 
 
 @pytest.mark.asyncio
-@patch("app.agents.assistant_agent.prepare_interview", new_callable=AsyncMock)
-async def test_interview_prep_success(mock_prep, auth_client, mock_db):
-    mock_prep.return_value = {
-        "questions": ["Tell me about yourself"],
-        "tips": ["Be specific"],
-    }
+@patch("app.agents.interview_agent.service.InterviewAgent.run", new_callable=AsyncMock)
+async def test_interview_prep_success(mock_run, auth_client, mock_db):
+    from app.agents.schemas import AgentResult, AgentStatus
+
+    mock_run.return_value = AgentResult(
+        agent_type="interview",
+        status=AgentStatus.COMPLETED,
+        output={
+            "questions": ["Tell me about yourself"],
+            "tips": ["Be specific"],
+        },
+    )
 
     response = await auth_client.post(
         "/api/v1/agents/interview-prep",
@@ -214,9 +220,15 @@ async def test_research_success(mock_research, auth_client, mock_db):
 
 
 @pytest.mark.asyncio
-@patch("app.agents.assistant_agent.generate_cover_letter", new_callable=AsyncMock)
-async def test_cover_letter_success(mock_cover, auth_client, mock_db):
-    mock_cover.return_value = {"cover_letter": "Dear Hiring Manager..."}
+@patch("app.agents.resume_agent.service.ResumeAgent.run", new_callable=AsyncMock)
+async def test_cover_letter_success(mock_run, auth_client, mock_db):
+    from app.agents.schemas import AgentResult, AgentStatus
+
+    mock_run.return_value = AgentResult(
+        agent_type="resume",
+        status=AgentStatus.COMPLETED,
+        output={"cover_letter": "Dear Hiring Manager..."},
+    )
 
     response = await auth_client.post(
         "/api/v1/agents/cover-letter",
@@ -227,9 +239,15 @@ async def test_cover_letter_success(mock_cover, auth_client, mock_db):
 
 
 @pytest.mark.asyncio
-@patch("app.agents.assistant_agent.tailor_resume", new_callable=AsyncMock)
-async def test_resume_tailor_success(mock_resume, auth_client, mock_db):
-    mock_resume.return_value = {"resume": "Tailored resume content"}
+@patch("app.agents.resume_agent.service.ResumeAgent.run", new_callable=AsyncMock)
+async def test_resume_tailor_success(mock_run, auth_client, mock_db):
+    from app.agents.schemas import AgentResult, AgentStatus
+
+    mock_run.return_value = AgentResult(
+        agent_type="resume",
+        status=AgentStatus.COMPLETED,
+        output={"resume": "Tailored resume content"},
+    )
 
     response = await auth_client.post(
         "/api/v1/agents/resume-tailor",
@@ -246,9 +264,11 @@ async def test_resume_tailor_success(mock_resume, auth_client, mock_db):
 @pytest.mark.asyncio
 @patch("app.agents.graph.run_planner_agent", new_callable=AsyncMock)
 async def test_retry_task_planner_success(mock_run, auth_client, mock_db):
-    task = make_agent_task(agent_type=AgentType.planner, status=TaskStatus.failed, input={"goal": "Find ML internships"})
+    task = make_agent_task(
+        agent_type=AgentType.planner, status=TaskStatus.failed, input={"goal": "Find ML internships"}
+    )
     setup_mock_execute(mock_db, [MockResult(scalar_value=task)])
-    
+
     response = await auth_client.post(f"/api/v1/agents/tasks/{task.id}/retry")
     assert response.status_code == 200
     assert response.json()["status"] == "success"
@@ -259,7 +279,7 @@ async def test_retry_task_planner_success(mock_run, auth_client, mock_db):
 async def test_cancel_task_success(auth_client, mock_db):
     task = make_agent_task(agent_type=AgentType.planner, status=TaskStatus.running)
     setup_mock_execute(mock_db, [MockResult(scalar_value=task)])
-    
+
     response = await auth_client.post(f"/api/v1/agents/tasks/{task.id}/cancel")
     assert response.status_code == 200
     assert response.json()["status"] == "success"
@@ -271,7 +291,7 @@ async def test_cancel_task_success(auth_client, mock_db):
 async def test_cancel_task_not_running(auth_client, mock_db):
     task = make_agent_task(agent_type=AgentType.planner, status=TaskStatus.completed)
     setup_mock_execute(mock_db, [MockResult(scalar_value=task)])
-    
+
     response = await auth_client.post(f"/api/v1/agents/tasks/{task.id}/cancel")
     assert response.status_code == 200
     assert response.json()["status"] == "ignored"
@@ -281,4 +301,3 @@ async def test_cancel_task_not_running(auth_client, mock_db):
 async def test_clear_tasks_success(auth_client, mock_db):
     response = await auth_client.delete("/api/v1/agents/tasks/clear")
     assert response.status_code == 204
-

@@ -1,14 +1,12 @@
-import pytest
-import uuid
-from decimal import Decimal
 from unittest.mock import AsyncMock
+
+import pytest
 
 from tests.conftest import (
     MockResult,
+    _uid,
     make_memory_entry,
     setup_mock_execute,
-    TEST_USER_ID,
-    _uid,
 )
 
 

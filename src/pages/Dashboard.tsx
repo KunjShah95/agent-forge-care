@@ -1,44 +1,69 @@
 import { useMemo } from "react";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
-import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import {
-  ArrowRight, Briefcase, Target, TrendingUp, Calendar, Brain,
-  Sparkles, Activity, Layers3, Radar, ClipboardList, MapPin,
-  Clock, Zap, ChevronRight,
+  ArrowRight, Briefcase, Target, TrendingUp, Calendar,
+  Brain, Activity, Radar, Clock, Zap, ChevronRight, Sparkles,
 } from "lucide-react";
 import {
-  Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
-  Area, AreaChart, CartesianGrid,
+  Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid,
 } from "recharts";
+import {
+  useAuth, useProfile, useRunPlanner, useMatches, useAgentTasks,
+  useAnalyticsSummary, useAnalyticsActivity, useAnalyticsFunnel, useOpportunities,
+} from "@/api/hooks";
+import { StatSkeleton } from "@/components/ui/skeleton";
 
-import { useAuth, useProfile, useRunPlanner, useMatches, useAgentTasks, useAnalyticsSummary, useAnalyticsActivity, useAnalyticsFunnel, useOpportunities } from "@/api/hooks";
-import { StatSkeleton, CardSkeleton, ListSkeleton } from "@/components/ui/skeleton";
+const BORDER = "rgba(255,255,255,0.08)";
+const CARD = "rgba(255,255,255,0.03)";
+const MUTED = "hsl(240, 4%, 60%)";
+
+function Cell({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div
+      className={className}
+      style={{ background: CARD, border: `1px solid ${BORDER}` }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="text-[10px] tracking-widest uppercase mb-4" style={{ color: "rgba(255,255,255,0.3)" }}>
+      {children}
+    </p>
+  );
+}
+
+const STATUS_COLOR: Record<string, string> = {
+  running: "hsl(200, 70%, 55%)",
+  complete: "hsl(152, 60%, 48%)",
+  queued:   "rgba(255,255,255,0.25)",
+};
 
 export default function Dashboard() {
-  const { data: auth } = useAuth();
-  const { data: profile } = useProfile();
-  const runPlanner = useRunPlanner();
-  const { data: matchesData, isLoading: matchesLoading, isError: matchesError } = useMatches();
-  const { data: tasksData, isLoading: tasksLoading, isError: tasksError } = useAgentTasks();
-  const { data: analytics, isLoading: analyticsLoading, isError: analyticsError } = useAnalyticsSummary();
-  const { data: activityData, isLoading: activityLoading, isError: activityError } = useAnalyticsActivity();
-  const { data: funnelData, isLoading: funnelLoading, isError: funnelError } = useAnalyticsFunnel();
-  const { data: oppsData, isLoading: oppsLoading, isError: oppsError } = useOpportunities();
+  const { data: auth }      = useAuth();
+  const { data: profile }   = useProfile();
+  const runPlanner          = useRunPlanner();
+  const { data: matchesData,  isLoading: matchesLoading  } = useMatches();
+  const { data: tasksData,    isLoading: tasksLoading    } = useAgentTasks();
+  const { data: analytics,    isLoading: analyticsLoading} = useAnalyticsSummary();
+  const { data: activityData, isLoading: activityLoading } = useAnalyticsActivity();
+  const { data: funnelData                                } = useAnalyticsFunnel();
+  const { data: oppsData,     isLoading: oppsLoading     } = useOpportunities();
 
   const topMatches = useMemo(() => {
     if (!matchesData?.items) return [];
-    return matchesData.items.slice(0, 4).map((m) => ({
+    return matchesData.items.slice(0, 6).map((m) => ({
       id: m.id,
       title: m.title,
       company: m.company,
       location: m.location || "Remote",
       salary: m.salary_min && m.salary_max
         ? `$${(m.salary_min / 1000).toFixed(0)}k–$${(m.salary_max / 1000).toFixed(0)}k`
-        : "",
-      matchScore: m.match_score,
-      logo: null,
+        : null,
+      score: m.match_score,
     }));
   }, [matchesData]);
 
@@ -47,432 +72,412 @@ export default function Dashboard() {
     return oppsData.items
       .filter((o) => o.deadline)
       .sort((a, b) => new Date(a.deadline!).getTime() - new Date(b.deadline!).getTime())
-      .slice(0, 5)
+      .slice(0, 6)
       .map((o) => {
         const d = new Date(o.deadline!);
-        const month = d.toLocaleString("en-US", { month: "short" });
-        const day = d.getDate();
-        const isUrgent = d.getTime() - Date.now() < 3 * 24 * 60 * 60 * 1000;
-        return { id: o.id, title: o.title, company: o.company, date: `${month} ${day}`, urgent: isUrgent };
+        const urgent = d.getTime() - Date.now() < 3 * 24 * 60 * 60 * 1000;
+        return {
+          id: o.id,
+          title: o.title,
+          company: o.company,
+          date: d.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+          urgent,
+        };
       });
   }, [oppsData]);
 
-  const pipeline = useMemo(() => {
-    if (funnelData) return funnelData.map((f) => ({ stage: f.name, count: f.value }));
-    return [];
-  }, [funnelData]);
-
-  const activity = useMemo(() => {
-    if (activityData) return activityData;
-    return [];
-  }, [activityData]);
+  const pipeline = useMemo(
+    () => (funnelData ?? []).map((f) => ({ stage: f.name, count: f.value })),
+    [funnelData]
+  );
 
   const agentTasks = useMemo(() => {
     if (!tasksData?.items) return [];
-    return tasksData.items.slice(0, 7).map((t) => ({
+    return tasksData.items.slice(0, 8).map((t) => ({
       id: t.id,
-      agent: t.agent_type,
-      action: t.input?.goal ? `Goal: ${String(t.input.goal)}` : t.output?.message ? String(t.output.message) : t.status,
-      timestamp: t.created_at ? new Date(t.created_at).toLocaleString() : "",
-      status: t.status === "running" ? "running" as const
-        : t.status === "completed" ? "complete" as const
-        : "queued" as const,
+      agent: t.agent_type.replace(/_/g, " "),
+      action: t.input?.goal
+        ? String(t.input.goal)
+        : t.output?.message
+        ? String(t.output.message)
+        : t.status,
+      status: t.status === "running" ? "running" : t.status === "completed" ? "complete" : "queued",
+      time: t.created_at ? new Date(t.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "",
     }));
   }, [tasksData]);
 
   const stats = useMemo(() => {
     if (!analytics) return null;
     return [
-      { label: "Active Matches", value: String(analytics.active_matches), change: "Recent matches", icon: Target, accent: "from-violet-500 to-purple-600" },
-      { label: "Applications", value: String(analytics.applications), change: "Total sent", icon: Briefcase, accent: "from-cyan-500 to-blue-600" },
-      { label: "Interview Rate", value: `${analytics.interview_rate}%`, change: "Conversion rate", icon: TrendingUp, accent: "from-emerald-500 to-green-600" },
-      { label: "Deadlines", value: String(analytics.deadlines), change: "Upcoming", icon: Calendar, accent: "from-amber-500 to-orange-600" },
+      { label: "Active matches",    value: analytics.active_matches, icon: Target },
+      { label: "Applications sent", value: analytics.applications,   icon: Briefcase },
+      { label: "Interview rate",    value: `${analytics.interview_rate}%`, icon: TrendingUp },
+      { label: "Deadlines",         value: analytics.deadlines,       icon: Calendar },
     ];
   }, [analytics]);
 
-  const errors = [matchesError && "matches", tasksError && "tasks", analyticsError && "analytics", funnelError && "pipeline", activityError && "activity", oppsError && "opportunities"].filter(Boolean);
-
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  const name = profile?.full_name || auth?.full_name || null;
+
+  const pipelineMax = pipeline.length ? Math.max(...pipeline.map((p) => p.count)) : 1;
 
   return (
-    <div className="space-y-6 max-w-[1400px] animate-fade-in">
-      {errors.length > 0 && (
-        <div className="flex items-center gap-3 p-4 rounded-xl bg-destructive/10 border border-destructive/20 text-sm text-destructive">
-          <span className="h-2 w-2 rounded-full bg-destructive flex-shrink-0" />
-          <span>Some data failed to load: {errors.join(", ")}. Refresh the page or check your connection.</span>
-        </div>
-      )}
+    <div className="p-6 space-y-6 max-w-[1440px]">
 
-      {/* ── Welcome Banner ── */}
-      <div className="bento-card p-6 md:p-8 overflow-hidden relative">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.07] via-transparent to-accent/[0.05] pointer-events-none" />
-        <div className="absolute top-0 left-1/4 w-64 h-64 rounded-full bg-gradient-1 opacity-[0.03] blur-3xl" />
-        <div className="relative flex flex-col lg:flex-row lg:items-end justify-between gap-6">
-          <div>
-            <Badge className="mb-3 bg-gradient-1 text-primary-foreground border-none">
-              <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse-glow mr-1.5" />
-              Career OS active
-            </Badge>
-            <h1 className="font-display text-3xl md:text-4xl font-bold tracking-tight">
-              {greeting}, {profile?.full_name || auth?.full_name || "there"} <span className="inline-block animate-float" style={{ animationDuration: "2s" }}>👋</span>
-            </h1>
-            <p className="text-muted-foreground mt-2 max-w-2xl">
-              The planner has already scanned the market, scored fresh matches, and queued actions for today. Your career OS is working while you focus on what matters.
-            </p>
-          </div>
-          <Button
-            className="bg-gradient-1 shadow-glow hover:shadow-glow-lg transition-all duration-300 gap-2 shrink-0 group"
-            onClick={() => runPlanner.mutate("Plan my job search strategy for this week")}
-            disabled={runPlanner.isPending}
+      {/* ── Header row ── */}
+      <div className="flex items-end justify-between gap-4">
+        <div>
+          <h1
+            className="text-3xl font-normal text-white"
+            style={{ fontFamily: "'Instrument Serif', serif", letterSpacing: "-0.03em" }}
           >
-            <Sparkles className="h-4 w-4 group-hover:rotate-12 transition-transform" />
-            {runPlanner.isPending ? "Running…" : "Run Planner Agent"}
-          </Button>
+            {greeting}{name ? `, ${name}` : ""}.
+          </h1>
+          <p className="text-sm mt-1" style={{ color: MUTED }}>
+            Your agents are running. Here's where things stand.
+          </p>
         </div>
-
-        {/* Quick stats row */}
-        <div className="relative mt-6 grid sm:grid-cols-3 gap-3">
-          {[
-            { icon: Target, label: "Match score", value: analytics ? `${analytics.interview_rate}%` : "—", color: "from-violet-500/20 to-purple-500/20" },
-            { icon: MapPin, label: "Targets", value: profile?.target_locations?.length ? profile.target_locations.join(" • ") : "—", color: "from-cyan-500/20 to-blue-500/20" },
-            { icon: ClipboardList, label: "Auto actions", value: tasksData?.items?.length ? `${tasksData.items.length} queued` : "—", color: "from-emerald-500/20 to-green-500/20" },
-          ].map((item) => (
-            <div key={item.label} className="glass-card rounded-xl p-4 bg-gradient-to-br from-background/80 to-muted/50">
-              <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
-                <span>{item.label}</span>
-                <item.icon className="h-4 w-4 text-primary" />
-              </div>
-              <div className="mt-1 font-display text-xl font-bold tracking-tight">{item.value}</div>
-            </div>
-          ))}
-        </div>
+        <button
+          className="flex items-center gap-2 px-4 py-2 rounded text-sm transition-colors"
+          style={{
+            background: "rgba(255,255,255,0.07)",
+            border: `1px solid ${BORDER}`,
+            color: runPlanner.isPending ? MUTED : "white",
+          }}
+          onClick={() => runPlanner.mutate("Plan my job search strategy for this week")}
+          disabled={runPlanner.isPending}
+        >
+          <Sparkles className="h-3.5 w-3.5" />
+          {runPlanner.isPending ? "Running…" : "Run Planner"}
+        </button>
       </div>
 
-      {/* ── Stats Grid ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats ? stats.map((s, i) => (
-          <div
-            key={s.label}
-            className="bento-card p-5 animate-fade-in-up group"
-            style={{ animationDelay: `${i * 0.08}s` }}
-          >
-            <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-transparent via-transparent to-primary/[0.02] opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-            <div className="relative">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground tracking-wide">{s.label}</span>
-                <div className={`h-8 w-8 rounded-lg bg-gradient-to-br ${s.accent} bg-opacity-20 flex items-center justify-center`}>
-                  <s.icon className="h-4 w-4 text-white" />
-                </div>
-              </div>
-              <div className="text-3xl font-display font-bold mt-3 tracking-tight">{s.value}</div>
-              <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
-                <span className="h-1 w-1 rounded-full bg-primary/40" />
-                {s.change}
-              </div>
-            </div>
-          </div>
-        )) : (
-          Array.from({ length: 4 }).map((_, i) => <StatSkeleton key={i} />)
-        )}
-      </div>
-
-      {/* ── Main Content Grid ── */}
-      <div className="grid lg:grid-cols-3 gap-6">
-        {/* Planner reasoning */}
-        <div className="bento-card p-6 lg:col-span-2">
-          <div className="flex items-center justify-between mb-5">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-xl bg-gradient-1 flex items-center justify-center shadow-glow">
-                <Brain className="h-5 w-5 text-primary-foreground" />
-              </div>
-              <div>
-                <h2 className="font-display font-semibold">Planner Agent — Today's Reasoning</h2>
-                <p className="text-xs text-muted-foreground">{agentTasks.length > 0 ? "Latest agent activity" : "Run the planner to get started"}</p>
-              </div>
-            </div>
-            {agentTasks.length > 0 && (
-              <Badge className="bg-gradient-1 text-primary-foreground border-none gap-1">
-                <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse-glow" />
-                Active
-              </Badge>
-            )}
-          </div>
-          {agentTasks.length > 0 ? (
-            <div className="space-y-3">
-              {agentTasks.slice(0, 3).map((t, i) => (
-                <div key={t.id} className="relative p-4 rounded-xl bg-gradient-to-r from-primary/[0.04] to-transparent border-l-2 border-primary/40 animate-fade-in-up" style={{ animationDelay: `${i * 0.08}s` }}>
-                  <div className="flex items-start gap-3">
-                    <Brain className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-                    <div>
-                      <span className="font-medium text-sm capitalize">{t.agent.replace(/_/g, " ")}</span>
-                      <p className="text-sm text-muted-foreground mt-0.5">{t.action}</p>
-                      {t.timestamp && <span className="text-xs text-muted-foreground/60 mt-1 block">{t.timestamp}</span>}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="py-12 text-center">
-              <Brain className="h-10 w-10 mx-auto text-muted-foreground/30 mb-3" />
-              <p className="text-sm text-muted-foreground">No planner reasoning yet. Click "Run Planner Agent" to generate a strategy.</p>
-            </div>
-          )}
-        </div>
-
-        {/* Application Pipeline */}
-        <div className="bento-card p-6">
-          <div className="flex items-center justify-between mb-5">
-            <h2 className="font-display font-semibold">Application Pipeline</h2>
-            <Radar className="h-4 w-4 text-muted-foreground" />
-          </div>
-          {funnelLoading ? (
-            <div className="space-y-3 py-8">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="h-4 bg-muted/40 rounded animate-pulse" style={{ width: `${60 + Math.random() * 40}%` }} />
-              ))}
-            </div>
-          ) : pipeline.length > 0 ? (
-            <div>
-              <ResponsiveContainer width="100%" height={180}>
-                <BarChart data={pipeline}>
-                  <defs>
-                    <linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.8} />
-                      <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
-                    </linearGradient>
-                  </defs>
-                  <Bar dataKey="count" fill="url(#barGrad)" radius={[8, 8, 0, 0]} />
-                  <XAxis dataKey="stage" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
-                  <Tooltip
-                    contentStyle={{
-                      background: "hsl(var(--popover))",
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: 12,
-                      fontSize: 12,
-                      boxShadow: "var(--shadow-elegant)",
-                    }}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-              <div className="mt-4 space-y-2">
-                {pipeline.map((p) => (
-                  <div key={p.stage} className="flex items-center gap-3 text-xs">
-                    <span className="w-16 text-muted-foreground">{p.stage}</span>
-                    <div className="flex-1 h-2 rounded-full bg-muted/30 overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-gradient-1 opacity-80 transition-all"
-                        style={{ width: `${(p.count / Math.max(...pipeline.map((x) => x.count))) * 100}%` }}
-                      />
-                    </div>
-                    <span className="font-medium w-6 text-right">{p.count}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div className="py-12 text-center">
-              <Radar className="h-10 w-10 mx-auto text-muted-foreground/30 mb-3" />
-              <p className="text-sm text-muted-foreground">No pipeline data yet</p>
-            </div>
-          )}
-          <Button variant="ghost" size="sm" className="w-full mt-4 gap-1 text-primary" asChild>
-            <Link to="/app/applications">
-              View board <ChevronRight className="h-3 w-3" />
-            </Link>
-          </Button>
-        </div>
-      </div>
-
-      {/* ── Matches & Deadlines ── */}
-      <div className="grid lg:grid-cols-3 gap-6">
-        {/* Top Matches */}
-        <div className="bento-card p-6 lg:col-span-2">
-          <div className="flex items-center justify-between mb-5">
-            <h2 className="font-display font-semibold">Top Matches for You</h2>
-            <Button variant="ghost" size="sm" className="gap-1 text-primary" asChild>
-              <Link to="/app/opportunities">
-                See all <ChevronRight className="h-3 w-3" />
-              </Link>
-            </Button>
-          </div>
-          {matchesLoading ? (
-            <div className="space-y-3">
-              {Array.from({ length: 4 }).map((_, i) => <CardSkeleton key={i} />)}
-            </div>
-          ) : topMatches.length > 0 ? (
-            <div className="space-y-2">
-              {topMatches.map((o, i) => (
-                <div
-                  key={o.id}
-                  className="flex items-center gap-4 p-4 rounded-xl bg-gradient-to-r from-muted/30 to-transparent hover:from-primary/[0.04] transition-all duration-200 cursor-pointer group"
+      {/* ── Stats ── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-px" style={{ border: `1px solid ${BORDER}` }}>
+        {analyticsLoading || !stats
+          ? Array.from({ length: 4 }).map((_, i) => <StatSkeleton key={i} />)
+          : stats.map((s) => (
+              <div
+                key={s.label}
+                className="px-6 py-5 flex flex-col gap-1"
+                style={{ background: CARD, borderRight: `1px solid ${BORDER}` }}
+              >
+                <p className="text-[10px] tracking-widest uppercase" style={{ color: MUTED }}>
+                  {s.label}
+                </p>
+                <p
+                  className="text-4xl font-normal text-white mt-1"
+                  style={{ fontFamily: "'Instrument Serif', serif" }}
                 >
-                  <div className="h-12 w-12 rounded-xl bg-gradient-1/10 border border-primary/20 flex items-center justify-center font-bold text-primary text-lg group-hover:scale-110 transition-transform duration-300">
-                    {o.company.charAt(0)}
+                  {s.value}
+                </p>
+              </div>
+            ))}
+      </div>
+
+      {/* ── Main grid ── */}
+      <div className="grid lg:grid-cols-3 gap-6">
+
+        {/* Top matches — spans 2 cols */}
+        <Cell className="rounded-lg p-6 lg:col-span-2">
+          <div className="flex items-center justify-between mb-4">
+            <SectionLabel>Top matches</SectionLabel>
+            <Link
+              to="/app/opportunities"
+              className="text-xs flex items-center gap-1 transition-colors hover:text-white"
+              style={{ color: MUTED }}
+            >
+              See all <ChevronRight className="h-3 w-3" />
+            </Link>
+          </div>
+
+          {matchesLoading ? (
+            <p className="text-sm py-8 text-center" style={{ color: MUTED }}>Loading…</p>
+          ) : topMatches.length > 0 ? (
+            <div>
+              {topMatches.map((m, i) => (
+                <div
+                  key={m.id}
+                  className="flex items-center gap-4 py-3 transition-colors hover:bg-white/[0.03] -mx-2 px-2 rounded"
+                  style={{ borderBottom: i < topMatches.length - 1 ? `1px solid ${BORDER}` : "none" }}
+                >
+                  <div
+                    className="h-8 w-8 rounded flex items-center justify-center text-xs font-medium flex-shrink-0"
+                    style={{ background: "rgba(255,255,255,0.07)", color: "white" }}
+                  >
+                    {m.company.charAt(0)}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="font-medium truncate group-hover:text-primary transition-colors">{o.title}</div>
-                    <div className="text-xs text-muted-foreground">{o.company} · {o.location} · {o.salary}</div>
+                    <p className="text-sm text-white font-medium truncate">{m.title}</p>
+                    <p className="text-xs truncate mt-0.5" style={{ color: MUTED }}>
+                      {m.company} · {m.location}
+                      {m.salary ? ` · ${m.salary}` : ""}
+                    </p>
                   </div>
-                  <div className="text-right hidden sm:block">
-                    <div className="text-lg font-display font-bold gradient-text-1">{o.matchScore}%</div>
-                    <div className="text-[10px] text-muted-foreground">match</div>
-                  </div>
-                  <Progress value={o.matchScore} className="w-20 h-1.5 hidden md:block" />
+                  <p
+                    className="text-xl font-normal flex-shrink-0"
+                    style={{ fontFamily: "'Instrument Serif', serif", color: "white" }}
+                  >
+                    {m.score}%
+                  </p>
                 </div>
               ))}
             </div>
           ) : (
             <div className="py-12 text-center">
-              <Target className="h-10 w-10 mx-auto text-muted-foreground/30 mb-3" />
-              <p className="text-sm text-muted-foreground">No matches yet. Run the planner to find opportunities.</p>
+              <Target className="h-8 w-8 mx-auto mb-3" style={{ color: MUTED, opacity: 0.4 }} />
+              <p className="text-sm" style={{ color: MUTED }}>
+                No matches yet — run the planner to start.
+              </p>
             </div>
           )}
-        </div>
+        </Cell>
 
         {/* Deadlines */}
-        <div className="bento-card p-6">
-          <div className="flex items-center gap-2 mb-5">
-            <Calendar className="h-5 w-5 text-primary" />
-            <h2 className="font-display font-semibold">Upcoming Deadlines</h2>
-          </div>
+        <Cell className="rounded-lg p-6">
+          <SectionLabel>Upcoming deadlines</SectionLabel>
           {oppsLoading ? (
-            <ListSkeleton count={5} />
+            <p className="text-sm py-8 text-center" style={{ color: MUTED }}>Loading…</p>
           ) : deadlines.length > 0 ? (
-            <div className="space-y-3">
+            <div className="space-y-1">
               {deadlines.map((d) => (
-                <div key={d.id} className="flex items-center gap-3 p-3 rounded-xl hover:bg-muted/30 transition-all duration-200 group">
-                  <div className={`h-12 w-12 rounded-xl flex flex-col items-center justify-center text-[10px] font-medium ${
-                    d.urgent
-                      ? "bg-gradient-to-br from-red-500/20 to-orange-500/20 text-red-400 border border-red-500/20"
-                      : "bg-gradient-to-br from-primary/10 to-accent/10 text-primary border border-primary/20"
-                  }`}>
-                    {d.date.split(" ")[0]}
-                    <span className="font-bold text-sm leading-none mt-0.5">{d.date.split(" ")[1]}</span>
-                  </div>
+                <div
+                  key={d.id}
+                  className="flex items-center gap-3 py-2.5 -mx-1 px-1 rounded transition-colors hover:bg-white/[0.03]"
+                >
+                  <p
+                    className="text-xs font-mono w-14 flex-shrink-0"
+                    style={{ color: d.urgent ? "hsl(0, 70%, 65%)" : MUTED }}
+                  >
+                    {d.date}
+                  </p>
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium truncate group-hover:text-primary transition-colors">{d.title}</div>
-                    <div className="text-xs text-muted-foreground">{d.company}</div>
+                    <p className="text-sm text-white truncate">{d.title}</p>
+                    <p className="text-xs truncate" style={{ color: MUTED }}>{d.company}</p>
                   </div>
-                  <div className={`h-2 w-2 rounded-full ${d.urgent ? "bg-red-400 animate-pulse-glow" : "bg-primary/30"}`} />
+                  {d.urgent && (
+                    <div className="h-1.5 w-1.5 rounded-full flex-shrink-0 bg-red-400" />
+                  )}
                 </div>
               ))}
             </div>
           ) : (
             <div className="py-12 text-center">
-              <Calendar className="h-10 w-10 mx-auto text-muted-foreground/30 mb-3" />
-              <p className="text-sm text-muted-foreground">No upcoming deadlines</p>
+              <Calendar className="h-8 w-8 mx-auto mb-3" style={{ color: MUTED, opacity: 0.4 }} />
+              <p className="text-sm" style={{ color: MUTED }}>No upcoming deadlines</p>
             </div>
           )}
-          <div className="mt-4 pt-4 border-t border-border/40">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Clock className="h-3.5 w-3.5" />
-              Deadlines are synced from your saved opportunities
-            </div>
+          <div className="mt-4 pt-4 flex items-center gap-1.5 text-xs" style={{ borderTop: `1px solid ${BORDER}`, color: MUTED }}>
+            <Clock className="h-3 w-3" />
+            Synced from saved opportunities
           </div>
-        </div>
+        </Cell>
       </div>
 
-      {/* ── Activity & Agent Feed ── */}
+      {/* ── Second row ── */}
       <div className="grid lg:grid-cols-3 gap-6">
-        {/* Weekly Activity */}
-        <div className="bento-card p-6 lg:col-span-2">
-          <div className="flex items-center justify-between mb-5">
-            <div className="flex items-center gap-2">
-              <Activity className="h-5 w-5 text-primary" />
-              <h2 className="font-display font-semibold">Weekly Activity</h2>
+
+        {/* Weekly activity chart — 2 cols */}
+        <Cell className="rounded-lg p-6 lg:col-span-2">
+          <div className="flex items-center justify-between mb-4">
+            <SectionLabel>Weekly activity</SectionLabel>
+            <div className="flex items-center gap-4 text-[10px]" style={{ color: MUTED }}>
+              <span className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full" style={{ background: "hsl(200,70%,55%)" }} />
+                Applications
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full" style={{ background: "rgba(255,255,255,0.3)" }} />
+                Interviews
+              </span>
             </div>
-            <Badge variant="outline" className="text-[10px]">
-              <TrendingUp className="h-3 w-3 mr-1" />
-              {activity.length > 0 ? `${activity.reduce((s: number, d: Record<string, unknown>) => s + Number(d.applications || 0), 0)} actions` : "No data"}
-            </Badge>
           </div>
+
           {activityLoading ? (
-            <div className="h-[220px] flex items-center justify-center text-sm text-muted-foreground">
-              <div className="flex items-center gap-2">
-                <div className="h-4 w-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-                Loading activity...
-              </div>
+            <div className="h-48 flex items-center justify-center text-sm" style={{ color: MUTED }}>
+              Loading…
             </div>
-          ) : activity.length > 0 ? (
-            <ResponsiveContainer width="100%" height={220}>
-              <AreaChart data={activity}>
+          ) : activityData && activityData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={200}>
+              <AreaChart data={activityData} margin={{ top: 4, right: 0, left: -20, bottom: 0 }}>
                 <defs>
-                  <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.5} />
-                    <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                  <linearGradient id="gA" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="hsl(200,70%,55%)" stopOpacity={0.3} />
+                    <stop offset="100%" stopColor="hsl(200,70%,55%)" stopOpacity={0} />
                   </linearGradient>
-                  <linearGradient id="g2" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="hsl(var(--accent))" stopOpacity={0.5} />
-                    <stop offset="100%" stopColor="hsl(var(--accent))" stopOpacity={0} />
+                  <linearGradient id="gB" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="rgba(255,255,255,0.4)" stopOpacity={0.2} />
+                    <stop offset="100%" stopColor="rgba(255,255,255,0.4)" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.3} />
-                <XAxis dataKey="day" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
+                <XAxis dataKey="day" tick={{ fontSize: 10, fill: MUTED }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 10, fill: MUTED }} axisLine={false} tickLine={false} />
                 <Tooltip
                   contentStyle={{
-                    background: "hsl(var(--popover))",
-                    border: "1px solid hsl(var(--border))",
-                    borderRadius: 12,
+                    background: "hsl(210,22%,8%)",
+                    border: `1px solid ${BORDER}`,
+                    borderRadius: 6,
                     fontSize: 12,
-                    boxShadow: "var(--shadow-elegant)",
+                    color: "white",
                   }}
                 />
-                <Area type="monotone" dataKey="applications" stroke="hsl(var(--primary))" fill="url(#g1)" strokeWidth={2.5} />
-                <Area type="monotone" dataKey="interviews" stroke="hsl(var(--accent))" fill="url(#g2)" strokeWidth={2.5} />
+                <Area type="monotone" dataKey="applications" stroke="hsl(200,70%,55%)" fill="url(#gA)" strokeWidth={1.5} />
+                <Area type="monotone" dataKey="interviews"   stroke="rgba(255,255,255,0.35)" fill="url(#gB)" strokeWidth={1.5} />
               </AreaChart>
             </ResponsiveContainer>
           ) : (
-            <div className="h-[220px] flex items-center justify-center">
+            <div className="h-48 flex items-center justify-center">
               <div className="text-center">
-                <Activity className="h-8 w-8 mx-auto text-muted-foreground/30 mb-2" />
-                <p className="text-sm text-muted-foreground">No activity data yet</p>
+                <Activity className="h-8 w-8 mx-auto mb-2" style={{ color: MUTED, opacity: 0.4 }} />
+                <p className="text-sm" style={{ color: MUTED }}>No activity yet</p>
               </div>
             </div>
           )}
-        </div>
+        </Cell>
 
-        {/* Agent Activity Feed */}
-        <div className="bento-card p-6">
-          <div className="flex items-center gap-2 mb-5">
-            <Zap className="h-5 w-5 text-primary" />
-            <h2 className="font-display font-semibold">Agent Activity</h2>
-          </div>
+        {/* Agent activity feed */}
+        <Cell className="rounded-lg p-6">
+          <SectionLabel>Agent activity</SectionLabel>
+
           {tasksLoading ? (
-            <ListSkeleton count={6} />
+            <p className="text-sm py-8 text-center" style={{ color: MUTED }}>Loading…</p>
           ) : agentTasks.length > 0 ? (
-            <div className="space-y-3 max-h-[260px] overflow-y-auto scrollbar-thin pr-1">
+            <div className="space-y-3 max-h-56 overflow-y-auto pr-1" style={{ scrollbarWidth: "none" }}>
               {agentTasks.map((t) => (
-                <div key={t.id} className="flex gap-3 p-2.5 rounded-lg hover:bg-muted/20 transition-colors">
-                  <div className={`h-2.5 w-2.5 rounded-full mt-1.5 flex-shrink-0 ${
-                    t.status === "running" ? "bg-primary animate-pulse-glow" :
-                    t.status === "complete" ? "bg-success" : "bg-muted-foreground/40"
-                  }`} />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs font-medium capitalize">{t.agent.replace(/_/g, " ")}</div>
-                    <div className="text-[11px] text-muted-foreground line-clamp-1">{t.action}</div>
-                    <div className="text-[10px] text-muted-foreground/50 mt-0.5">{t.timestamp}</div>
+                <div key={t.id} className="flex gap-2.5 items-start">
+                  <div
+                    className="h-1.5 w-1.5 rounded-full flex-shrink-0 mt-1.5"
+                    style={{ background: STATUS_COLOR[t.status] ?? MUTED }}
+                  />
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium text-white capitalize">{t.agent}</p>
+                    <p className="text-[11px] leading-relaxed line-clamp-2 mt-0.5" style={{ color: MUTED }}>
+                      {t.action}
+                    </p>
+                    {t.time && (
+                      <p className="text-[10px] mt-0.5 font-mono" style={{ color: "rgba(255,255,255,0.2)" }}>
+                        {t.time}
+                      </p>
+                    )}
                   </div>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="py-12 text-center">
-              <Zap className="h-8 w-8 mx-auto text-muted-foreground/30 mb-2" />
-              <p className="text-sm text-muted-foreground">No agent activity yet</p>
+            <div className="py-10 text-center">
+              <Zap className="h-8 w-8 mx-auto mb-2" style={{ color: MUTED, opacity: 0.4 }} />
+              <p className="text-sm" style={{ color: MUTED }}>No agent activity yet</p>
             </div>
           )}
+
           {agentTasks.length > 0 && (
-            <Button variant="ghost" size="sm" className="w-full mt-4 text-xs text-muted-foreground" asChild>
-              <Link to="/app/tasks">
-                View all tasks <ChevronRight className="h-3 w-3" />
-              </Link>
-            </Button>
+            <Link
+              to="/app/tasks"
+              className="flex items-center gap-1 text-xs mt-4 pt-4 transition-colors hover:text-white"
+              style={{ borderTop: `1px solid ${BORDER}`, color: MUTED }}
+            >
+              All tasks <ChevronRight className="h-3 w-3" />
+            </Link>
+          )}
+        </Cell>
+      </div>
+
+      {/* ── Pipeline bar ── */}
+      {pipeline.length > 0 && (
+        <Cell className="rounded-lg p-6">
+          <div className="flex items-center justify-between mb-4">
+            <SectionLabel>Application pipeline</SectionLabel>
+            <Link
+              to="/app/applications"
+              className="text-xs flex items-center gap-1 transition-colors hover:text-white"
+              style={{ color: MUTED }}
+            >
+              View board <ChevronRight className="h-3 w-3" />
+            </Link>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+            {pipeline.map((p) => (
+              <div key={p.stage}>
+                <div className="flex items-end justify-between mb-2">
+                  <p className="text-[10px] uppercase tracking-widest" style={{ color: MUTED }}>
+                    {p.stage}
+                  </p>
+                  <p
+                    className="text-lg font-normal text-white"
+                    style={{ fontFamily: "'Instrument Serif', serif" }}
+                  >
+                    {p.count}
+                  </p>
+                </div>
+                <div className="h-1 rounded-full" style={{ background: "rgba(255,255,255,0.08)" }}>
+                  <div
+                    className="h-full rounded-full transition-all duration-500"
+                    style={{
+                      width: `${(p.count / pipelineMax) * 100}%`,
+                      background: "rgba(255,255,255,0.4)",
+                    }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </Cell>
+      )}
+
+      {/* ── Planner reasoning ── */}
+      <Cell className="rounded-lg p-6">
+        <div className="flex items-center justify-between mb-4">
+          <SectionLabel>Planner — today's reasoning</SectionLabel>
+          {agentTasks.some((t) => t.status === "running") && (
+            <span className="text-[10px] tracking-widest uppercase" style={{ color: "hsl(200,70%,55%)" }}>
+              Active
+            </span>
           )}
         </div>
-      </div>
+
+        {agentTasks.filter((t) => t.agent.includes("planner") || t.agent.includes("research")).slice(0, 3).length > 0 ? (
+          <div className="space-y-3">
+            {agentTasks
+              .filter((t) => t.agent.includes("planner") || t.agent.includes("research"))
+              .slice(0, 3)
+              .map((t) => (
+                <div
+                  key={t.id}
+                  className="flex gap-3 p-3 rounded"
+                  style={{ background: "rgba(255,255,255,0.03)", borderLeft: `2px solid rgba(255,255,255,0.15)` }}
+                >
+                  <Brain className="h-4 w-4 flex-shrink-0 mt-0.5" style={{ color: MUTED }} />
+                  <div>
+                    <p className="text-sm text-white capitalize">{t.agent}</p>
+                    <p className="text-xs mt-0.5 leading-relaxed" style={{ color: MUTED }}>{t.action}</p>
+                  </div>
+                </div>
+              ))}
+          </div>
+        ) : (
+          <div className="py-8 text-center">
+            <Brain className="h-8 w-8 mx-auto mb-3" style={{ color: MUTED, opacity: 0.4 }} />
+            <p className="text-sm mb-4" style={{ color: MUTED }}>
+              No reasoning yet. Run the planner to generate a strategy.
+            </p>
+            <button
+              className="flex items-center gap-2 px-4 py-2 rounded text-sm mx-auto transition-colors"
+              style={{
+                background: "rgba(255,255,255,0.07)",
+                border: `1px solid ${BORDER}`,
+                color: "white",
+              }}
+              onClick={() => runPlanner.mutate("Plan my job search strategy for this week")}
+              disabled={runPlanner.isPending}
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              {runPlanner.isPending ? "Running…" : "Run Planner Agent"}
+            </button>
+          </div>
+        )}
+      </Cell>
     </div>
   );
 }

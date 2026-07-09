@@ -8,7 +8,7 @@ import { Progress } from "@/components/ui/progress";
 import { Sparkles, ArrowRight, ArrowLeft, X } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { useUpdateProfile, useUploadResume, useAgentTasks } from "@/api/hooks";
+import { useUpdateProfile, useUploadResume, useAgentTasks, useEnrichProfile } from "@/api/hooks";
 
 const steps = ["Welcome", "About You", "Skills", "Preferences", "Goals", "Launch"];
 
@@ -26,9 +26,19 @@ export default function Onboarding() {
   const [companySizes, setCompanySizes] = useState("");
   const [portfolio, setPortfolio] = useState("");
   const [github, setGithub] = useState("");
+  const [linkedin, setLinkedin] = useState("");
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const uploadResume = useUploadResume();
   const { data: tasksData } = useAgentTasks();
+  const enrichProfile = useEnrichProfile();
+  const [enrichProgress, setEnrichProgress] = useState<string>("");
+  const [enrichResult, setEnrichResult] = useState<{
+    social_links?: Record<string, string | null>;
+    discovered_skills?: string[];
+    github_analysis?: Record<string, unknown>;
+    portfolio_data?: Record<string, unknown>;
+  } | null>(null);
+  const [enrichError, setEnrichError] = useState<string | null>(null);
 
   const runningTasks = tasksData?.items?.filter((t) => t.status === "running" || t.status === "queued") || [];
   const [careerGoal, setCareerGoal] = useState("");
@@ -36,6 +46,40 @@ export default function Onboarding() {
   const updateProfile = useUpdateProfile();
 
   const handleComplete = () => {
+    // Step 1: Run enrichment (scrape GitHub/portfolio/LinkedIn)
+    if (github || portfolio || linkedin) {
+      setEnrichProgress("Scanning your GitHub, portfolio, and social profiles...");
+      enrichProfile.mutate(
+        {
+          github_url: github || undefined,
+          portfolio_url: portfolio || undefined,
+          linkedin_url: linkedin || undefined,
+        },
+        {
+          onSuccess: (result) => {
+            setEnrichProgress("Profiles scanned! Preparing your dashboard...");
+            setEnrichResult(result);
+
+            // Merge discovered skills with user-added skills
+            const discovered = result.discovered_skills || [];
+            const mergedSkills = [...new Set([...skills, ...discovered])];
+
+            finishOnboarding(mergedSkills);
+          },
+          onError: (err: Error) => {
+            setEnrichError(err.message || "Profile enrichment failed. You can retry later.");
+            setEnrichProgress("");
+            // Still finish onboarding even if enrichment fails
+            finishOnboarding(skills);
+          },
+        }
+      );
+    } else {
+      finishOnboarding(skills);
+    }
+  };
+
+  const finishOnboarding = (finalSkills: string[]) => {
     const finish = (resumeUploaded = false) => {
       const parseSalary = (s: string) => {
         const clean = s.replace(/[$,\s]/g, "").toLowerCase();
@@ -60,6 +104,7 @@ export default function Onboarding() {
           bio: bio || undefined,
           portfolio_url: portfolio || undefined,
           github_url: github || undefined,
+          linkedin_url: linkedin || undefined,
           salary_min: parsed?.min,
           salary_max: parsed?.max,
           target_locations: locations ? locations.split(",").map((s) => s.trim()).filter(Boolean) : [],
@@ -67,10 +112,13 @@ export default function Onboarding() {
           company_sizes: companySizes ? companySizes.split(",").map((s) => s.trim()).filter(Boolean) : [],
           career_goal: careerGoal || undefined,
           is_onboarded: true,
-          skills: skills.map((s) => ({ name: s, proficiency: "intermediate" })),
+          skills: finalSkills.map((s) => ({ name: s, proficiency: "intermediate" })),
         },
         {
-          onSuccess: () => navigate("/app"),
+          onSuccess: () => {
+            toast.success("Profile saved!");
+            navigate("/app");
+          },
           onError: () => toast.error("Failed to save profile. Please try again."),
         },
       );
@@ -171,8 +219,9 @@ export default function Onboarding() {
                 <div><Label>Role types</Label><Input value={roleTypes} onChange={(e) => setRoleTypes(e.target.value)} className="mt-1.5" /></div>
                 <div><Label>Company size</Label><Input value={companySizes} onChange={(e) => setCompanySizes(e.target.value)} className="mt-1.5" /></div>
               </div>
-              <div><Label>Portfolio link</Label><Input value={portfolio} onChange={(e) => setPortfolio(e.target.value)} className="mt-1.5" /></div>
-              <div><Label>GitHub profile or repo</Label><Input value={github} onChange={(e) => setGithub(e.target.value)} className="mt-1.5" /></div>
+              <div><Label>Portfolio link</Label><Input value={portfolio} onChange={(e) => setPortfolio(e.target.value)} className="mt-1.5" placeholder="https://your-portfolio.com" /></div>
+              <div><Label>GitHub profile</Label><Input value={github} onChange={(e) => setGithub(e.target.value)} className="mt-1.5" placeholder="https://github.com/your-username" /></div>
+              <div><Label>LinkedIn profile</Label><Input value={linkedin} onChange={(e) => setLinkedin(e.target.value)} className="mt-1.5" placeholder="https://linkedin.com/in/your-profile" /></div>
               <div>
                 <Label>Upload resume (PDF)</Label>
                 <input
@@ -199,19 +248,101 @@ export default function Onboarding() {
           )}
 
           {step === 5 && (
-            <div className="text-center py-8 animate-fade-in">
+            <div className="text-center py-4 animate-fade-in">
               <div className="h-16 w-16 rounded-2xl bg-gradient-1 mx-auto flex items-center justify-center shadow-glow animate-pulse-glow">
                 <Sparkles className="h-8 w-8 text-primary-foreground" />
               </div>
               <h2 className="font-display text-3xl font-bold mt-6">You're ready{fullName ? `, ${fullName}` : ""}.</h2>
               <p className="mt-3 text-muted-foreground">Your agents are spinning up now.</p>
-              <div className="mt-4">
-                {runningTasks.length > 0 ? (
-                  <div className="text-sm">Agent tasks running: {runningTasks.length}</div>
-                ) : (
-                  <div className="text-sm text-muted-foreground">No active agent tasks yet — indexing may be in progress.</div>
-                )}
-              </div>
+
+              {/* Enrichment progress */}
+              {(github || portfolio || linkedin) && !enrichResult && !enrichError && (
+                <div className="mt-4 space-y-2">
+                  <p className="text-sm text-muted-foreground animate-pulse">
+                    {enrichProgress || "Scanning your profiles for skills and opportunities..."}
+                  </p>
+                  <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                    <div className="h-full rounded-full bg-gradient-1 animate-progress" style={{ width: "60%" }} />
+                  </div>
+                </div>
+              )}
+
+              {enrichError && (
+                <div className="mt-4 px-4 py-3 rounded-lg bg-destructive/10 border border-destructive/20 text-sm text-destructive">
+                  {enrichError}
+                </div>
+              )}
+
+              {enrichResult && (
+                <div className="mt-4 space-y-3 text-left">
+                  {/* Discovered social links */}
+                  {enrichResult.social_links && Object.values(enrichResult.social_links).some(Boolean) && (
+                    <div className="rounded-lg bg-primary/[0.03] border border-primary/10 p-3">
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Discovered Links</p>
+                      <div className="space-y-1">
+                        {enrichResult.social_links.blog_url && (
+                          <p className="text-xs text-primary truncate">📝 Blog: {enrichResult.social_links.blog_url}</p>
+                        )}
+                        {enrichResult.social_links.twitter_handle && (
+                          <p className="text-xs text-primary">🐦 Twitter: @{enrichResult.social_links.twitter_handle}</p>
+                        )}
+                        {enrichResult.social_links.portfolio_url && (
+                          <p className="text-xs text-primary truncate">🌐 Portfolio: {enrichResult.social_links.portfolio_url}</p>
+                        )}
+                        {enrichResult.social_links.linkedin_url && (
+                          <p className="text-xs text-primary truncate">💼 LinkedIn: {enrichResult.social_links.linkedin_url}</p>
+                        )}
+                        {enrichResult.social_links.location && (
+                          <p className="text-xs text-muted-foreground">📍 Location: {enrichResult.social_links.location}</p>
+                        )}
+                        {enrichResult.social_links.company && (
+                          <p className="text-xs text-muted-foreground">🏢 Company: {enrichResult.social_links.company}</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Discovered skills */}
+                  {enrichResult.discovered_skills && enrichResult.discovered_skills.length > 0 && (
+                    <div className="rounded-lg bg-primary/[0.03] border border-primary/10 p-3">
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Skills Detected</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {enrichResult.discovered_skills.slice(0, 12).map((s) => (
+                          <span key={s} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
+                            {s}
+                          </span>
+                        ))}
+                        {enrichResult.discovered_skills.length > 12 && (
+                          <span className="text-xs text-muted-foreground">+{enrichResult.discovered_skills.length - 12} more</span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* GitHub analysis summary */}
+                  {enrichResult.github_analysis?.summary && (
+                    <div className="rounded-lg bg-primary/[0.03] border border-primary/10 p-3">
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">GitHub Summary</p>
+                      <p className="text-xs text-muted-foreground">{enrichResult.github_analysis.summary as string}</p>
+                    </div>
+                  )}
+
+                  {/* Agent tasks status */}
+                  <div className="mt-4">
+                    {runningTasks.length > 0 ? (
+                      <div className="text-sm text-muted-foreground">🤖 Agent tasks running: {runningTasks.length}</div>
+                    ) : (
+                      <div className="text-sm text-muted-foreground">🤖 Agents ready and waiting for your command.</div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {!github && !portfolio && !linkedin && (
+                <div className="mt-4 text-sm text-muted-foreground">
+                  You can always connect your GitHub, portfolio, and LinkedIn later in Settings.
+                </div>
+              )}
             </div>
           )}
 

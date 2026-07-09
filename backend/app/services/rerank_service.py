@@ -38,6 +38,7 @@ class RerankService:
         if self.api_key:
             try:
                 import cohere
+
                 self.client = cohere.Client(api_key=self.api_key)
             except Exception as e:
                 logger.warning("Failed to init Cohere client: %s", e)

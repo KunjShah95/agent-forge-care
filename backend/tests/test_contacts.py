@@ -1,15 +1,13 @@
-import pytest
-import uuid
 from unittest.mock import AsyncMock
+
+import pytest
 
 from tests.conftest import (
     MockResult,
+    _uid,
     make_contact,
     setup_mock_execute,
-    TEST_USER_ID,
-    _uid,
 )
-from app.models.user import ContactStatus
 
 
 @pytest.mark.asyncio

@@ -1,14 +1,12 @@
-import pytest
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
 from tests.conftest import (
     MockResult,
-    make_profile,
-    make_contact,
-    make_opportunity,
-    make_application,
-    make_memory_entry,
-    setup_mock_execute,
     _uid,
+    make_contact,
+    setup_mock_execute,
 )
 
 
@@ -39,9 +37,7 @@ async def test_get_skills_db_error(auth_client, mock_db):
 @pytest.mark.asyncio
 async def test_add_skill_db_error(auth_client, mock_db):
     mock_db.execute = AsyncMock(side_effect=Exception("DB connection failed"))
-    response = await auth_client.post(
-        "/api/v1/profile/skills", json={"name": "Python"}
-    )
+    response = await auth_client.post("/api/v1/profile/skills", json={"name": "Python"})
     assert response.status_code == 500
     assert "Failed to add skill" in response.json()["detail"]
 
@@ -60,9 +56,7 @@ async def test_create_application_db_error(auth_client, mock_db):
 @pytest.mark.asyncio
 async def test_update_application_db_error(auth_client, mock_db):
     mock_db.execute = AsyncMock(side_effect=Exception("DB connection failed"))
-    response = await auth_client.patch(
-        f"/api/v1/applications/{_uid()}", json={"notes": "test"}
-    )
+    response = await auth_client.patch(f"/api/v1/applications/{_uid()}", json={"notes": "test"})
     assert response.status_code == 500
     assert "Failed to update application" in response.json()["detail"]
 
@@ -78,9 +72,7 @@ async def test_delete_application_db_error(auth_client, mock_db):
 @pytest.mark.asyncio
 async def test_create_contact_db_error(auth_client, mock_db):
     mock_db.add = MagicMock(side_effect=Exception("DB connection failed"))
-    response = await auth_client.post(
-        "/api/v1/contacts", json={"name": "Test User"}
-    )
+    response = await auth_client.post("/api/v1/contacts", json={"name": "Test User"})
     assert response.status_code == 500
     assert "Failed to create contact" in response.json()["detail"]
 
@@ -88,9 +80,7 @@ async def test_create_contact_db_error(auth_client, mock_db):
 @pytest.mark.asyncio
 async def test_update_contact_db_error(auth_client, mock_db):
     mock_db.execute = AsyncMock(side_effect=Exception("DB connection failed"))
-    response = await auth_client.patch(
-        f"/api/v1/contacts/{_uid()}", json={"name": "Updated"}
-    )
+    response = await auth_client.patch(f"/api/v1/contacts/{_uid()}", json={"name": "Updated"})
     assert response.status_code == 500
     assert "Failed to update contact" in response.json()["detail"]
 
@@ -129,9 +119,7 @@ async def test_mark_all_notifications_read_db_error(auth_client, mock_db):
 
 @pytest.mark.asyncio
 async def test_create_contact_invalid_name(auth_client, mock_db):
-    response = await auth_client.post(
-        "/api/v1/contacts", json={"name": ""}
-    )
+    response = await auth_client.post("/api/v1/contacts", json={"name": ""})
     assert response.status_code == 422
 
 
@@ -155,9 +143,7 @@ async def test_remove_skill_not_found_profile(auth_client, mock_db):
 async def test_update_contact_not_owned(auth_client, mock_db):
     contact = make_contact(user_id=_uid())
     setup_mock_execute(mock_db, [MockResult(scalar_value=contact)])
-    response = await auth_client.patch(
-        f"/api/v1/contacts/{contact.id}", json={"name": "Hacker"}
-    )
+    response = await auth_client.patch(f"/api/v1/contacts/{contact.id}", json={"name": "Hacker"})
     # Contact exists but is owned by different user; ownership enforced by query filter
     assert response.status_code == 200
 
@@ -190,9 +176,7 @@ async def test_create_alert_config_db_error(auth_client, mock_db):
 @pytest.mark.asyncio
 async def test_update_alert_config_db_error(auth_client, mock_db):
     mock_db.execute = AsyncMock(side_effect=Exception("DB connection failed"))
-    response = await auth_client.patch(
-        f"/api/v1/monitor/alerts/{_uid()}", json={"name": "Updated"}
-    )
+    response = await auth_client.patch(f"/api/v1/monitor/alerts/{_uid()}", json={"name": "Updated"})
     assert response.status_code == 500
 
 
@@ -213,9 +197,7 @@ async def test_get_monitor_settings_db_error(auth_client, mock_db):
 @pytest.mark.asyncio
 async def test_update_monitor_settings_db_error(auth_client, mock_db):
     mock_db.execute = AsyncMock(side_effect=Exception("DB connection failed"))
-    response = await auth_client.patch(
-        "/api/v1/monitor/settings", json={"frequency": "weekly"}
-    )
+    response = await auth_client.patch("/api/v1/monitor/settings", json={"frequency": "weekly"})
     assert response.status_code == 500
 
 
@@ -230,18 +212,14 @@ async def test_list_memory_db_error(auth_client, mock_db):
 @pytest.mark.asyncio
 async def test_create_memory_db_error(auth_client, mock_db):
     mock_db.add = MagicMock(side_effect=Exception("DB connection failed"))
-    response = await auth_client.post(
-        "/api/v1/memory", json={"key": "test", "value": {"data": "test"}}
-    )
+    response = await auth_client.post("/api/v1/memory", json={"key": "test", "value": {"data": "test"}})
     assert response.status_code == 500
 
 
 @pytest.mark.asyncio
 async def test_update_memory_db_error(auth_client, mock_db):
     mock_db.execute = AsyncMock(side_effect=Exception("DB connection failed"))
-    response = await auth_client.patch(
-        f"/api/v1/memory/{_uid()}", json={"key": "updated"}
-    )
+    response = await auth_client.patch(f"/api/v1/memory/{_uid()}", json={"key": "updated"})
     assert response.status_code == 500
 
 

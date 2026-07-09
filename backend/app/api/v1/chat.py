@@ -5,13 +5,13 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_db, async_session_factory
+from app.agents.orchestrator.service import OrchestratorAgent
+from app.agents.planner import decompose_goal_with_llm
+from app.database import async_session_factory, get_db
 from app.dependencies import get_optional_user
 from app.models.user import User
-from app.agents.planner import decompose_goal_with_llm
-from app.agents.orchestrator.service import OrchestratorAgent
-from app.services.profile_service import ProfileService
 from app.services.memory_service import MemoryService
+from app.services.profile_service import ProfileService
 
 logger = logging.getLogger("agentforge.api.chat")
 router = APIRouter()
@@ -41,7 +41,8 @@ async def chat_stream(
             iter([_sse_text("No message provided."), _sse_done()]),
             media_type="text/event-stream",
             headers={
-                "Cache-Control": "no-cache", "Connection": "keep-alive",
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
             },
         )
 
@@ -53,7 +54,8 @@ async def chat_stream(
             iter([_sse_text("Please enter a goal to get started."), _sse_done()]),
             media_type="text/event-stream",
             headers={
-                "Cache-Control": "no-cache", "Connection": "keep-alive",
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
             },
         )
 
@@ -87,9 +89,9 @@ async def chat_stream(
             if not subtasks:
                 yield _sse_text(
                     "I couldn't identify specific tasks from that goal. Try something like:\n\n"
-                    "- *\"Find AI internships in Ahmedabad\"*\n"
-                    "- *\"Prepare my resume for Stripe\"*\n"
-                    "- *\"Research Anthropic interviews\"*\n"
+                    '- *"Find AI internships in Ahmedabad"*\n'
+                    '- *"Prepare my resume for Stripe"*\n'
+                    '- *"Research Anthropic interviews"*\n'
                 )
                 yield _sse_done()
                 return
@@ -112,11 +114,13 @@ async def chat_stream(
                     results[agent_key] = agent_res
                     msg = agent_res.get("message", "Done.")
                     yield _sse_text(f"**{agent_key.title()}:** {msg}\n\n")
-                    yield _sse_data({
-                        "type": "task_complete",
-                        "agent": agent_key,
-                        "result_summary": msg,
-                    })
+                    yield _sse_data(
+                        {
+                            "type": "task_complete",
+                            "agent": agent_key,
+                            "result_summary": msg,
+                        }
+                    )
                 detail = result.output.get("detail", {})
                 for agent_key, agent_detail in detail.items():
                     if isinstance(agent_detail, dict):
@@ -133,10 +137,14 @@ async def chat_stream(
                         if agent_detail.get("cover_letter"):
                             cl = agent_detail["cover_letter"]
                             yield _sse_text(f"\n**Cover letter generated**\n\n> {cl[:200]}...\n\n")
-                            yield _sse_data({
-                                "type": "long_output", "agent": agent_key,
-                                "key": "cover_letter", "preview": cl[:200],
-                            })
+                            yield _sse_data(
+                                {
+                                    "type": "long_output",
+                                    "agent": agent_key,
+                                    "key": "cover_letter",
+                                    "preview": cl[:200],
+                                }
+                            )
                         if agent_detail.get("summary"):
                             yield _sse_text(f"\n{agent_detail['summary']}\n\n")
 
@@ -155,24 +163,28 @@ async def chat_stream(
                     bar_empty = 10 - bar_filled
                     bar = "🟢" * bar_filled + "⚪" * bar_empty
                     feedback = scores.get("feedback", "")
-                    yield _sse_text(
-                        f"**{agent_key.title()}** — {bar} `{total}/{max_score}`  _{feedback}_\n\n"
+                    yield _sse_text(f"**{agent_key.title()}** — {bar} `{total}/{max_score}`  _{feedback}_\n\n")
+                    yield _sse_data(
+                        {
+                            "type": "quality_score",
+                            "agent": agent_key,
+                            "scores": {k: v for k, v in scores.items() if k not in ("total", "feedback")},
+                            "total": total,
+                            "max": max_score,
+                            "feedback": feedback,
+                        }
                     )
-                    yield _sse_data({
-                        "type": "quality_score",
-                        "agent": agent_key,
-                        "scores": {k: v for k, v in scores.items() if k not in ("total", "feedback")},
-                        "total": total,
-                        "max": max_score,
-                        "feedback": feedback,
-                    })
 
             yield _sse_text("\n---\n\n**All tasks complete!**\n")
-            yield _sse_data({
-                "type": "plan_complete",
-                "results": {k: v.get("message", "Done.") if isinstance(v, dict) else "Done." for k, v in results.items()},
-                "reflection_scores": reflection_scores,
-            })
+            yield _sse_data(
+                {
+                    "type": "plan_complete",
+                    "results": {
+                        k: v.get("message", "Done.") if isinstance(v, dict) else "Done." for k, v in results.items()
+                    },
+                    "reflection_scores": reflection_scores,
+                }
+            )
 
         except Exception as e:
             logger.error("Chat stream error: %s", e, exc_info=True)
@@ -186,7 +198,8 @@ async def chat_stream(
         event_generator(),
         media_type="text/event-stream",
         headers={
-            "Cache-Control": "no-cache", "Connection": "keep-alive",
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
             "Access-Control-Allow-Origin": "*",
         },
     )

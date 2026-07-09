@@ -1,45 +1,44 @@
 import os
-import uuid
 import time
+import uuid
+from datetime import UTC, date, datetime
+from decimal import Decimal
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 import pytest_asyncio
-from datetime import datetime, timezone, date
-from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock, patch
 
 os.environ.setdefault("DEBUG", "true")
 os.environ.setdefault("JWT_SECRET", "test-secret-key-for-testing-only")
 os.environ.setdefault("FIREBASE_PROJECT_ID", "test-firebase-project")
 
-from httpx import AsyncClient, ASGITransport
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from httpx import ASGITransport, AsyncClient
+from jose import jws
+from sqlalchemy import ARRAY as SA_ARRAY
+from sqlalchemy import Boolean, DateTime, Integer
 
-from app.main import app
+from app.config import settings
 from app.database import get_db
 from app.dependencies import get_current_user
+from app.main import app
 from app.models.user import (
-    User,
-    Profile,
-    ProfileSkill,
-    Skill,
-    Opportunity,
+    AgentTask,
+    AgentType,
+    AlertConfig,
     Application,
     ApplicationStage,
     Contact,
     ContactStatus,
-    AgentTask,
-    AgentType,
-    TaskStatus,
-    MemoryEntry,
-    AlertConfig,
     MatchScore,
-    PlannerGoal,
+    MemoryEntry,
+    Opportunity,
+    Profile,
+    TaskStatus,
+    User,
 )
-from sqlalchemy import DateTime, ARRAY as SA_ARRAY, Boolean, Integer
-from jose import jws
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.hazmat.backends import default_backend
-from app.config import settings
 
 TEST_USER_ID = str(uuid.uuid4())
 TEST_USER_EMAIL = "test@example.com"
@@ -110,8 +109,8 @@ def make_user(**overrides) -> User:
         firebase_uid=TEST_FIREBASE_UID,
         full_name=TEST_USER_NAME,
         avatar_url=None,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     defaults.update(overrides)
     return User(**defaults)
@@ -134,8 +133,8 @@ def make_profile(user_id=None, **overrides) -> Profile:
         company_sizes=["Startup", "Enterprise"],
         career_goal="ML Engineer",
         is_onboarded=True,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     defaults.update(overrides)
     return Profile(**defaults)
@@ -163,8 +162,8 @@ def make_opportunity(user_id=None, **overrides) -> Opportunity:
         source="test",
         source_url=None,
         is_active=True,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     defaults.update(overrides)
     return Opportunity(**defaults)
@@ -182,8 +181,8 @@ def make_application(user_id=None, opp_id=None, **overrides) -> Application:
         notes="Test notes",
         resume_version=None,
         cover_letter=None,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     defaults.update(overrides)
     return Application(**defaults)
@@ -202,8 +201,8 @@ def make_contact(user_id=None, **overrides) -> Contact:
         status=ContactStatus.new,
         last_contact=None,
         notes="Test contact notes",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     defaults.update(overrides)
     return Contact(**defaults)
@@ -221,7 +220,7 @@ def make_agent_task(user_id=None, **overrides) -> AgentTask:
         error=None,
         started_at=None,
         completed_at=None,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     defaults.update(overrides)
     return AgentTask(**defaults)
@@ -234,8 +233,8 @@ def make_memory_entry(user_id=None, **overrides) -> MemoryEntry:
         key="test_key",
         value={"data": "test_value"},
         weight=Decimal("1.00"),
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     defaults.update(overrides)
     return MemoryEntry(**defaults)
@@ -253,8 +252,8 @@ def make_alert_config(user_id=None, **overrides) -> AlertConfig:
         frequency="daily",
         is_active=True,
         email_notify=False,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     defaults.update(overrides)
     return AlertConfig(**defaults)
@@ -271,7 +270,7 @@ def make_match_score(user_id=None, opp_id=None, **overrides) -> MatchScore:
         experience_score=Decimal("85.00"),
         company_score=Decimal("87.00"),
         reasons=["Strong skill match", "Good location"],
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     defaults.update(overrides)
     return MatchScore(**defaults)
@@ -318,7 +317,7 @@ def _apply_orm_defaults(obj):
             elif isinstance(col.type, SA_ARRAY):
                 val = []
             elif isinstance(col.type, DateTime):
-                val = datetime.now(timezone.utc)
+                val = datetime.now(UTC)
             elif isinstance(col.type, Boolean):
                 val = False
             elif isinstance(col.type, Integer):
@@ -359,9 +358,7 @@ def auth_headers(test_user):
 
 @pytest.fixture
 def other_user_auth():
-    token = create_firebase_token(
-        uid=OTHER_FIREBASE_UID, email="other@example.com", name="Other User"
-    )
+    token = create_firebase_token(uid=OTHER_FIREBASE_UID, email="other@example.com", name="Other User")
     return {"Authorization": f"Bearer {token}"}
 
 

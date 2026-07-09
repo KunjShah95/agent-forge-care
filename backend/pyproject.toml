@@ -1,0 +1,14 @@
+[tool.ruff]
+target-version = "py313"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E", "N"]
+"app/hiring_agent/pymupdf_rag.py" = ["N", "E741", "E722", "E731"]
+
+[tool.ruff.format]
+quote-style = "double"

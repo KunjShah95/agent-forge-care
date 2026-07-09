@@ -3,7 +3,7 @@
 import logging
 
 from app.agents.base import BaseAgent
-from app.agents.resume_agent.handlers import tailor_resume, generate_cover_letter
+from app.agents.resume_agent.handlers import generate_cover_letter, tailor_resume
 
 logger = logging.getLogger("agentforge.agents.resume")
 

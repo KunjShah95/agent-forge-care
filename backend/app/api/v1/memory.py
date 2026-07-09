@@ -1,12 +1,13 @@
 import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc, func
 
 from app.database import get_db
 from app.dependencies import get_current_user
-from app.models.user import User, MemoryEntry
-from app.schemas.user import MemoryCreate, MemoryUpdate, MemoryOut, MemoryList
+from app.models.user import MemoryEntry, User
+from app.schemas.user import MemoryCreate, MemoryList, MemoryOut, MemoryUpdate
 
 logger = logging.getLogger("agentforge.memory")
 
@@ -23,9 +24,7 @@ async def list_memory(
     """List all memory entries for the current user."""
     try:
         count_result = await db.execute(
-            select(func.count())
-            .select_from(MemoryEntry)
-            .where(MemoryEntry.user_id == user.id)
+            select(func.count()).select_from(MemoryEntry).where(MemoryEntry.user_id == user.id)
         )
         total = count_result.scalar()
 
@@ -79,9 +78,7 @@ async def update_memory(
 ):
     """Update a memory entry."""
     try:
-        result = await db.execute(
-            select(MemoryEntry).where(MemoryEntry.id == id, MemoryEntry.user_id == user.id)
-        )
+        result = await db.execute(select(MemoryEntry).where(MemoryEntry.id == id, MemoryEntry.user_id == user.id))
         entry = result.scalar_one_or_none()
         if not entry:
             raise HTTPException(status_code=404, detail="Memory entry not found")
@@ -105,9 +102,7 @@ async def delete_memory(
 ):
     """Delete a memory entry."""
     try:
-        result = await db.execute(
-            select(MemoryEntry).where(MemoryEntry.id == id, MemoryEntry.user_id == user.id)
-        )
+        result = await db.execute(select(MemoryEntry).where(MemoryEntry.id == id, MemoryEntry.user_id == user.id))
         entry = result.scalar_one_or_none()
         if not entry:
             raise HTTPException(status_code=404, detail="Memory entry not found")

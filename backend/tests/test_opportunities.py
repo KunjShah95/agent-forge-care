@@ -1,17 +1,15 @@
-import pytest
 import uuid
 from unittest.mock import AsyncMock, patch
 
+import pytest
+
 from tests.conftest import (
     MockResult,
-    make_opportunity,
-    make_match_score,
-    setup_mock_execute,
-    TEST_USER_ID,
-    OTHER_USER_ID,
     _uid,
+    make_match_score,
+    make_opportunity,
+    setup_mock_execute,
 )
-from app.models.user import Opportunity
 
 
 @pytest.mark.asyncio
@@ -55,9 +53,7 @@ async def test_list_opportunities_with_filters(auth_client, mock_db):
 
     mock_db.execute = AsyncMock(side_effect=[count_result, opp_result, ms_result])
 
-    response = await auth_client.get(
-        "/api/v1/opportunities?type=Internship&remote=true&search=ML"
-    )
+    response = await auth_client.get("/api/v1/opportunities?type=Internship&remote=true&search=ML")
     assert response.status_code == 200
 
 
@@ -160,7 +156,7 @@ async def test_matched_opportunities_empty(auth_client, mock_db):
 
 
 @pytest.mark.asyncio
-@patch("app.agents.graph.run_opportunity_scan", new_callable=AsyncMock)
+@patch("app.agents.orchestrator.service.run_opportunity_scan", new_callable=AsyncMock)
 async def test_refresh_opportunities(mock_scan, auth_client, mock_db):
     mock_scan.return_value = str(uuid.uuid4())
 

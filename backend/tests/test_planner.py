@@ -3,10 +3,8 @@ Tests for the AgentForge planner and dispatcher system.
 Uses mock database sessions and sample data.
 """
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-
 from app.agents.planner import _keyword_decompose, format_planner_response
+
 decompose_goal = _keyword_decompose
 from app.models.user import AgentType
 
@@ -82,7 +80,7 @@ class TestPlannerDecomposition:
         """A vague goal should default to the monitor agent."""
         profile = self.setup_profile()
         tasks = decompose_goal("Help me find something good", profile, {})
-        agents = [t["agent"] for t in tasks]
+        [t["agent"] for t in tasks]
         assert len(tasks) > 0
 
     def test_tasks_have_priorities(self):
@@ -98,16 +96,22 @@ class TestPlannerResponse:
     """Test that the planner response formatting works correctly."""
 
     def test_format_with_results(self):
-        result = format_planner_response("Find internships", {
-            "internship": {"items": [{"id": "1"}], "message": "Found 1 match"},
-        })
+        result = format_planner_response(
+            "Find internships",
+            {
+                "internship": {"items": [{"id": "1"}], "message": "Found 1 match"},
+            },
+        )
         assert "Internship" in result
         assert "1 match" in result
 
     def test_format_with_errors(self):
-        result = format_planner_response("Find internships", {
-            "internship": {"error": "API timeout"},
-        })
+        result = format_planner_response(
+            "Find internships",
+            {
+                "internship": {"error": "API timeout"},
+            },
+        )
         assert "Internship" in result
         assert "error" in result.lower() or "⚠" in result
 
@@ -122,6 +126,7 @@ class TestAgentHelpers:
     def test_demo_internships_returns_data(self):
         """The demo internship data should return valid opportunities."""
         from app.utils.demo_data import generate_demo_opportunities
+
         results = generate_demo_opportunities(AgentType.internship, "test", "Remote")
         assert len(results) > 0
         assert all("title" in r and "company" in r for r in results)
@@ -129,6 +134,7 @@ class TestAgentHelpers:
     def test_demo_jobs_returns_data(self):
         """The demo job data should return valid opportunities."""
         from app.utils.demo_data import generate_demo_opportunities
+
         results = generate_demo_opportunities(AgentType.job, "test", "Remote")
         assert len(results) > 0
         assert any("salary_min" in r for r in results)
@@ -136,6 +142,7 @@ class TestAgentHelpers:
     def test_research_agent_builds_company_info(self):
         """Research agent should produce structured company info."""
         from app.agents.research_agent import _research_company
+
         result = _research_company("TestCorp")
         assert "name" in result
         assert "summary" in result
@@ -145,6 +152,7 @@ class TestAgentHelpers:
     def test_research_agent_interview_insights(self):
         """Research agent should produce interview insights."""
         from app.agents.research_agent import _interview_insights
+
         result = _interview_insights("ML Engineer", ["Python", "PyTorch"])
         assert "questions" in result or "common_questions" in result
         assert "tips" in result
@@ -153,6 +161,7 @@ class TestAgentHelpers:
     def test_research_agent_market_intelligence(self):
         """Research agent should produce market intelligence."""
         from app.agents.research_agent import _market_intelligence
+
         result = _market_intelligence(["Python", "React"])
         assert "outlook" in result
         assert len(result.get("trending_roles", [])) > 0
@@ -160,6 +169,7 @@ class TestAgentHelpers:
     def test_research_agent_skill_insights(self):
         """Research agent should produce skill analysis."""
         from app.agents.research_agent import _skill_insights
+
         result = _skill_insights(["Python", "TypeScript"])
         assert "insight" in result
         assert "recommended_skills" in result
@@ -167,6 +177,7 @@ class TestAgentHelpers:
     def test_demo_data_utility(self):
         """The shared demo data utility should work."""
         from app.utils.demo_data import generate_demo_opportunities
+
         results = generate_demo_opportunities(AgentType.internship, "ML", "Remote")
         assert len(results) > 0
         assert all("title" in r and "company" in r for r in results)
@@ -174,6 +185,7 @@ class TestAgentHelpers:
     def test_internship_agent_fallback_method(self):
         """The shared demo data utility should return valid internship data."""
         from app.utils.demo_data import generate_demo_opportunities
+
         results = generate_demo_opportunities(AgentType.internship, "ML internship", "San Francisco")
         assert len(results) >= 1
         assert all("title" in r for r in results)

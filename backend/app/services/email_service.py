@@ -1,7 +1,9 @@
 import logging
+
 from app.config import settings
 
 logger = logging.getLogger("agentforge.email")
+
 
 async def send_email(to_email: str, subject: str, body: str) -> bool:
     """Send an email via SendGrid. Returns True on success, False on failure."""
@@ -10,7 +12,8 @@ async def send_email(to_email: str, subject: str, body: str) -> bool:
         return False
     try:
         import sendgrid
-        from sendgrid.helpers.mail import Mail, Email, To, Content
+        from sendgrid.helpers.mail import Content, Email, Mail, To
+
         sg = sendgrid.SendGridAPIClient(api_key=settings.sendgrid_api_key)
         mail = Mail(
             from_email=Email(settings.from_email),

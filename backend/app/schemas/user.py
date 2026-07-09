@@ -1,8 +1,8 @@
 from datetime import date, datetime
-from typing import Optional, Any
+from typing import Any
 from uuid import UUID
-from pydantic import BaseModel, EmailStr
 
+from pydantic import BaseModel, EmailStr
 
 # ─── Users ──────────────────────────────────────────────────
 
@@ -12,15 +12,15 @@ class UserOut(BaseModel):
     email: str
     email_verified: bool = False
     full_name: str
-    avatar_url: Optional[str] = None
+    avatar_url: str | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
 
 
 class UserUpdate(BaseModel):
-    full_name: Optional[str] = None
-    avatar_url: Optional[str] = None
+    full_name: str | None = None
+    avatar_url: str | None = None
 
 
 # ─── Skills ─────────────────────────────────────────────────
@@ -49,40 +49,40 @@ class ProfileSkillOut(BaseModel):
 
 
 class ProfileUpdate(BaseModel):
-    full_name: Optional[str] = None
-    school: Optional[str] = None
-    graduation_date: Optional[date] = None
-    bio: Optional[str] = None
-    portfolio_url: Optional[str] = None
-    linkedin_url: Optional[str] = None
-    github_url: Optional[str] = None
-    target_locations: Optional[list[str]] = None
-    salary_min: Optional[int] = None
-    salary_max: Optional[int] = None
-    role_types: Optional[list[str]] = None
-    company_sizes: Optional[list[str]] = None
-    career_goal: Optional[str] = None
-    is_onboarded: Optional[bool] = None
-    skills: Optional[list[AddSkillRequest]] = None
+    full_name: str | None = None
+    school: str | None = None
+    graduation_date: date | None = None
+    bio: str | None = None
+    portfolio_url: str | None = None
+    linkedin_url: str | None = None
+    github_url: str | None = None
+    target_locations: list[str] | None = None
+    salary_min: int | None = None
+    salary_max: int | None = None
+    role_types: list[str] | None = None
+    company_sizes: list[str] | None = None
+    career_goal: str | None = None
+    is_onboarded: bool | None = None
+    skills: list[AddSkillRequest] | None = None
 
 
 class ProfileOut(BaseModel):
     id: UUID
     user_id: UUID
-    full_name: Optional[str] = None
-    avatar_url: Optional[str] = None
-    school: Optional[str] = None
-    graduation_date: Optional[date] = None
-    bio: Optional[str] = None
-    portfolio_url: Optional[str] = None
-    linkedin_url: Optional[str] = None
-    github_url: Optional[str] = None
+    full_name: str | None = None
+    avatar_url: str | None = None
+    school: str | None = None
+    graduation_date: date | None = None
+    bio: str | None = None
+    portfolio_url: str | None = None
+    linkedin_url: str | None = None
+    github_url: str | None = None
     target_locations: list[str] = []
-    salary_min: Optional[int] = None
-    salary_max: Optional[int] = None
+    salary_min: int | None = None
+    salary_max: int | None = None
     role_types: list[str] = []
     company_sizes: list[str] = []
-    career_goal: Optional[str] = None
+    career_goal: str | None = None
     is_onboarded: bool = False
     skills: list[ProfileSkillOut] = []
 
@@ -96,26 +96,26 @@ class OpportunityOut(BaseModel):
     id: UUID
     title: str
     company: str
-    company_logo: Optional[str] = None
-    location: Optional[str] = None
-    city: Optional[str] = None
-    state: Optional[str] = None
-    country: Optional[str] = None
-    industry: Optional[str] = None
+    company_logo: str | None = None
+    location: str | None = None
+    city: str | None = None
+    state: str | None = None
+    country: str | None = None
+    industry: str | None = None
     remote: bool = False
-    work_type: Optional[str] = None
+    work_type: str | None = None
     type: str
-    salary_min: Optional[int] = None
-    salary_max: Optional[int] = None
+    salary_min: int | None = None
+    salary_max: int | None = None
     salary_currency: str = "USD"
-    posted_date: Optional[date] = None
-    deadline: Optional[date] = None
-    description: Optional[str] = None
-    apply_url: Optional[str] = None
-    company_size: Optional[str] = None
+    posted_date: date | None = None
+    deadline: date | None = None
+    description: str | None = None
+    apply_url: str | None = None
+    company_size: str | None = None
     skills_required: list[str] = []
-    source: Optional[str] = None
-    match_score: Optional[float] = None
+    source: str | None = None
+    match_score: float | None = None
     match_reasons: list[str] = []
 
     model_config = {"from_attributes": True}
@@ -141,29 +141,29 @@ class ScoredOpportunityList(BaseModel):
 
 class ApplicationCreate(BaseModel):
     opportunity_id: UUID
-    notes: Optional[str] = None
+    notes: str | None = None
 
 
 class ApplicationUpdate(BaseModel):
-    stage: Optional[str] = None
-    notes: Optional[str] = None
-    next_step: Optional[str] = None
-    next_date: Optional[date] = None
+    stage: str | None = None
+    notes: str | None = None
+    next_step: str | None = None
+    next_date: date | None = None
 
 
 class ApplicationOut(BaseModel):
     id: UUID
     opportunity_id: UUID
     stage: str
-    applied_date: Optional[date] = None
-    next_step: Optional[str] = None
-    next_date: Optional[date] = None
-    notes: Optional[str] = None
-    resume_version: Optional[str] = None
-    cover_letter: Optional[str] = None
+    applied_date: date | None = None
+    next_step: str | None = None
+    next_date: date | None = None
+    notes: str | None = None
+    resume_version: str | None = None
+    cover_letter: str | None = None
     created_at: datetime
     updated_at: datetime
-    opportunity: Optional[OpportunityOut] = None
+    opportunity: OpportunityOut | None = None
 
     model_config = {"from_attributes": True}
 
@@ -179,36 +179,36 @@ class ApplicationList(BaseModel):
 
 class ContactCreate(BaseModel):
     name: str
-    role: Optional[str] = None
-    company: Optional[str] = None
-    email: Optional[EmailStr] = None
-    linkedin_url: Optional[str] = None
-    phone: Optional[str] = None
+    role: str | None = None
+    company: str | None = None
+    email: EmailStr | None = None
+    linkedin_url: str | None = None
+    phone: str | None = None
 
 
 class ContactUpdate(BaseModel):
-    name: Optional[str] = None
-    role: Optional[str] = None
-    company: Optional[str] = None
-    email: Optional[EmailStr] = None
-    linkedin_url: Optional[str] = None
-    phone: Optional[str] = None
-    status: Optional[str] = None
-    last_contact: Optional[date] = None
-    notes: Optional[str] = None
+    name: str | None = None
+    role: str | None = None
+    company: str | None = None
+    email: EmailStr | None = None
+    linkedin_url: str | None = None
+    phone: str | None = None
+    status: str | None = None
+    last_contact: date | None = None
+    notes: str | None = None
 
 
 class ContactOut(BaseModel):
     id: UUID
     name: str
-    role: Optional[str] = None
-    company: Optional[str] = None
-    email: Optional[str] = None
-    linkedin_url: Optional[str] = None
-    phone: Optional[str] = None
+    role: str | None = None
+    company: str | None = None
+    email: str | None = None
+    linkedin_url: str | None = None
+    phone: str | None = None
     status: str
-    last_contact: Optional[date] = None
-    notes: Optional[str] = None
+    last_contact: date | None = None
+    notes: str | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -231,12 +231,12 @@ class TaskOut(BaseModel):
     id: UUID
     agent_type: str
     status: str
-    input: Optional[dict] = None
-    output: Optional[dict] = None
-    error: Optional[str] = None
+    input: dict | None = None
+    output: dict | None = None
+    error: str | None = None
     created_at: datetime
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
 
     model_config = {"from_attributes": True}
 
@@ -259,8 +259,8 @@ class MemoryCreate(BaseModel):
 
 
 class MemoryUpdate(BaseModel):
-    value: Optional[Any] = None
-    weight: Optional[float] = None
+    value: Any | None = None
+    weight: float | None = None
 
 
 class MemoryOut(BaseModel):
@@ -322,14 +322,14 @@ class AlertConfigCreate(BaseModel):
 
 
 class AlertConfigUpdate(BaseModel):
-    name: Optional[str] = None
-    keywords: Optional[list[str]] = None
-    locations: Optional[list[str]] = None
-    opportunity_types: Optional[list[str]] = None
-    min_match_score: Optional[int] = None
-    frequency: Optional[str] = None
-    is_active: Optional[bool] = None
-    email_notify: Optional[bool] = None
+    name: str | None = None
+    keywords: list[str] | None = None
+    locations: list[str] | None = None
+    opportunity_types: list[str] | None = None
+    min_match_score: int | None = None
+    frequency: str | None = None
+    is_active: bool | None = None
+    email_notify: bool | None = None
 
 
 class AlertConfigOut(BaseModel):
@@ -367,49 +367,65 @@ class ResearchRequest(BaseModel):
 
 class InternshipDiscoverRequest(BaseModel):
     query: str = "internship"
-    location: Optional[str] = None
+    location: str | None = None
     skills: list[str] = []
 
 
 class JobDiscoverRequest(BaseModel):
     query: str = "software engineer"
-    location: Optional[str] = None
+    location: str | None = None
     skills: list[str] = []
 
 
 class CoverLetterRequest(BaseModel):
     company: str
     role: str
-    application_id: Optional[str] = None
+    application_id: str | None = None
 
 
 class ResumeTailorRequest(BaseModel):
     role_type: str = "internship"
-    target_company: Optional[str] = None
+    target_company: str | None = None
     skills: list[str] = []
 
 
 class MonitorSettingsUpdate(BaseModel):
-    keywords: Optional[list[str]] = None
-    locations: Optional[list[str]] = None
-    opportunity_types: Optional[list[str]] = None
-    min_match_score: Optional[int] = None
-    max_results: Optional[int] = None
-    frequency: Optional[str] = None
-    digest: Optional[bool] = None
-    push: Optional[bool] = None
-    realtime: Optional[bool] = None
+    keywords: list[str] | None = None
+    locations: list[str] | None = None
+    opportunity_types: list[str] | None = None
+    min_match_score: int | None = None
+    max_results: int | None = None
+    frequency: str | None = None
+    digest: bool | None = None
+    push: bool | None = None
+    realtime: bool | None = None
+
+
+class EnrichRequest(BaseModel):
+    github_url: str | None = None
+    portfolio_url: str | None = None
+    linkedin_url: str | None = None
+
+
+class EnrichResult(BaseModel):
+    github_profile: dict = {}
+    github_analysis: dict = {}
+    portfolio_data: dict = {}
+    social_links: dict = {}
+    discovered_skills: list[str] = []
+    status: str = "completed"
+    message: str = ""
 
 
 class CareerGuidanceRequest(BaseModel):
     query: str
-    context: Optional[dict] = None
+    context: dict | None = None
 
 
 class NetworkingOutreachRequest(BaseModel):
     target_companies: list[str]
-    role: Optional[str] = None
-    skills: Optional[list[str]] = None
+    role: str | None = None
+    skills: list[str] | None = None
 
 
 # ─── Notifications ──────────────────────────────────────────
@@ -435,7 +451,7 @@ class ResumeOut(BaseModel):
     filename: str
     pages: int
     characters: int
-    uploaded_at: Optional[str] = None
+    uploaded_at: str | None = None
 
 
 class ResumeList(BaseModel):
@@ -451,8 +467,8 @@ class InterviewSessionOut(BaseModel):
     company: str
     type: str
     date: str
-    score: Optional[int] = None
-    duration: Optional[str] = None
+    score: int | None = None
+    duration: str | None = None
 
 
 class InterviewSessionList(BaseModel):
@@ -462,8 +478,8 @@ class InterviewSessionList(BaseModel):
 class InterviewSessionCreate(BaseModel):
     company: str
     type: str
-    score: Optional[int] = None
-    duration: Optional[str] = None
+    score: int | None = None
+    duration: str | None = None
 
 
 # ─── Interview Feedback ──────────────────────────────────
@@ -472,5 +488,101 @@ class InterviewSessionCreate(BaseModel):
 class InterviewFeedbackRequest(BaseModel):
     question: str
     answer: str
-    company: Optional[str] = None
-    role: Optional[str] = None
+    company: str | None = None
+    role: str | None = None
+
+
+# ─── DeveloperProfile Composite ─────────────────────────────
+
+
+class RepoSummary(BaseModel):
+    name: str
+    full_name: str
+    description: str | None = None
+    language: str | None = None
+    stars: int = 0
+    forks: int = 0
+    topics: list[str] = []
+    html_url: str = ""
+    homepage: str | None = None
+    updated_at: str | None = None
+
+
+class CommitFrequency(BaseModel):
+    by_day: dict[str, int] = {}
+    by_hour: dict[str, int] = {}
+    by_day_of_week: dict[str, int] = {}
+
+
+class CommitHistory(BaseModel):
+    total_commits: int = 0
+    total_unique_commits: int = 0
+    commits_by_repo: dict[str, list[str]] = {}
+    commit_languages: dict[str, int] = {}
+    commit_frequency: CommitFrequency = CommitFrequency()
+    average_commits_per_day: float = 0.0
+    recent_events: list[dict] = []
+
+
+class ContributionCalendar(BaseModel):
+    total_contributions: int = 0
+    current_streak: int = 0
+    longest_streak: int = 0
+    top_contribution_months: list[dict] = []
+    contribution_calendar: list[dict] = []
+
+
+class OSSContributions(BaseModel):
+    total_prs: int = 0
+    total_issues: int = 0
+    pull_requests: list[dict] = []
+    repos_contributed_to: list[str] = []
+    summary: str = ""
+
+
+class CommitAnalysis(BaseModel):
+    coding_frequency: str = "unknown"
+    preferred_work_days: list[str] = []
+    commit_quality: str = "unknown"
+    project_focus: str = "unknown"
+    oss_participation: str = "unknown"
+    consistency_score: int = 0
+    experience_indicators: list[str] = []
+    summary: str = ""
+
+
+class SkillAnalysis(BaseModel):
+    skills: list[str] = []
+    primary_languages: list[str] = []
+    project_highlights: list[str] = []
+    experience_level: str = "unknown"
+    interests: list[str] = []
+    professional_summary: str = ""
+
+
+class DeveloperProfile(BaseModel):
+    """Complete composite developer profile — merges all GitHub data sources."""
+    username: str
+    profile_url: str
+    avatar_url: str | None = None
+    name: str | None = None
+    bio: str | None = None
+    location: str | None = None
+    company: str | None = None
+    email: str | None = None
+    twitter_handle: str | None = None
+    blog_url: str | None = None
+    followers: int = 0
+    following: int = 0
+    public_repos: int = 0
+    total_stars: int = 0
+    languages: dict[str, int] = {}
+    repositories: list[RepoSummary] = []
+    skills: SkillAnalysis = SkillAnalysis()
+    commit_history: CommitHistory | None = None
+    contributions: ContributionCalendar | None = None
+    oss_contributions: OSSContributions | None = None
+    commit_analysis: CommitAnalysis | None = None
+    data_completeness: int = 0  # 0-100: how many data sources loaded
+    errors: list[str] = []
+

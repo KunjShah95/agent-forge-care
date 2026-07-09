@@ -1,16 +1,19 @@
 import asyncio
 import logging
-from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, Query
-from sqlalchemy.ext.asyncio import AsyncSession
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import get_current_user
-from app.models.user import User
-from app.hiring_agent.service import HiringAgentService
 from app.hiring_agent.schemas import (
-    PipelineResult, ATSScore, JDMatchResult, ExtractedResume,
+    ATSScore,
+    ExtractedResume,
+    PipelineResult,
 )
+from app.hiring_agent.service import HiringAgentService
+from app.models.user import User
 
 logger = logging.getLogger("agentforge.api.hiring_agent")
 router = APIRouter()
@@ -64,12 +67,15 @@ async def run_full_pipeline(
     try:
         result = await asyncio.wait_for(
             service.run_pipeline(
-                pdf_content=content, jd_text=jd_text, position_type=position_type,
-                github_url=github_url, portfolio_url=portfolio_url,
+                pdf_content=content,
+                jd_text=jd_text,
+                position_type=position_type,
+                github_url=github_url,
+                portfolio_url=portfolio_url,
             ),
             timeout=PDF_TIMEOUT_SECONDS,
         )
-    except asyncio.TimeoutError:
+    except TimeoutError:
         raise HTTPException(408, detail="PDF processing timed out")
     if not result:
         raise HTTPException(500, detail="Pipeline failed to extract resume data")
@@ -93,7 +99,7 @@ async def extract_resume(
             service.extract_resume(content),
             timeout=PDF_TIMEOUT_SECONDS,
         )
-    except asyncio.TimeoutError:
+    except TimeoutError:
         raise HTTPException(408, detail="PDF processing timed out")
     return resume
 
@@ -112,7 +118,7 @@ async def evaluate_text(
         if gh.get("profile"):
             repos = gh.get("repositories", [])
             top = sorted([r for r in repos if not r.get("is_fork")], key=lambda r: r.get("stars", 0), reverse=True)[:5]
-            github_text = f"\nGitHub: {gh['profile'].get('name','')} - {gh['profile'].get('followers',0)} followers"
+            github_text = f"\nGitHub: {gh['profile'].get('name', '')} - {gh['profile'].get('followers', 0)} followers"
             if top:
                 github_text += "\nTop repos:\n" + "\n".join(f"- {r['name']} (⭐{r['stars']})" for r in top)
     if data.portfolio_url:
@@ -151,7 +157,7 @@ async def ats_analysis(
             service.extract_resume(content),
             timeout=PDF_TIMEOUT_SECONDS,
         )
-    except asyncio.TimeoutError:
+    except TimeoutError:
         raise HTTPException(408, detail="PDF processing timed out")
     if not resume or not resume.raw_text:
         raise HTTPException(500, detail="Failed to extract resume text")
@@ -178,7 +184,7 @@ async def match_jd(
             service.extract_resume(content),
             timeout=PDF_TIMEOUT_SECONDS,
         )
-    except asyncio.TimeoutError:
+    except TimeoutError:
         raise HTTPException(408, detail="PDF processing timed out")
     if not resume or not resume.raw_text:
         raise HTTPException(500, detail="Failed to extract resume text")
@@ -189,7 +195,7 @@ async def match_jd(
         if gh.get("profile"):
             repos = gh.get("repositories", [])
             top = sorted([r for r in repos if not r.get("is_fork")], key=lambda r: r.get("stars", 0), reverse=True)[:5]
-            gh_text = f"\nGitHub: {gh['profile'].get('name','')} - {gh['profile'].get('followers',0)} followers"
+            gh_text = f"\nGitHub: {gh['profile'].get('name', '')} - {gh['profile'].get('followers', 0)} followers"
             if top:
                 gh_text += "\n" + "\n".join(f"- {r['name']}" for r in top)
     if portfolio_url:
@@ -210,6 +216,7 @@ async def generate_cover_letter(
     db: AsyncSession = Depends(get_db),
 ):
     import json
+
     try:
         params = json.loads(data)
         req = CoverLetterRequest(**params)
@@ -226,13 +233,18 @@ async def generate_cover_letter(
             service.extract_resume(content),
             timeout=PDF_TIMEOUT_SECONDS,
         )
-    except asyncio.TimeoutError:
+    except TimeoutError:
         raise HTTPException(408, detail="PDF processing timed out")
     if not resume or not resume.raw_text:
         raise HTTPException(500, detail="Failed to extract resume text")
     name = resume.basics.name if resume.basics else None
     letter = await service.generate_cover_letter(
-        resume.raw_text, req.jd_text, name, req.company_name, req.tone, req.length,
+        resume.raw_text,
+        req.jd_text,
+        name,
+        req.company_name,
+        req.tone,
+        req.length,
     )
     if not letter:
         raise HTTPException(500, detail="Cover letter generation failed")
@@ -301,15 +313,18 @@ async def generate_report(
     try:
         result = await asyncio.wait_for(
             service.run_pipeline(
-                pdf_content=content, position_type=position_type,
-                github_url=github_url, portfolio_url=portfolio_url,
+                pdf_content=content,
+                position_type=position_type,
+                github_url=github_url,
+                portfolio_url=portfolio_url,
             ),
             timeout=PDF_TIMEOUT_SECONDS,
         )
-    except asyncio.TimeoutError:
+    except TimeoutError:
         raise HTTPException(408, detail="PDF processing timed out")
     if not result:
         raise HTTPException(500, detail="Pipeline failed")
     html = await service.generate_report_html(result)
     from fastapi.responses import HTMLResponse
+
     return HTMLResponse(content=html, media_type="text/html")

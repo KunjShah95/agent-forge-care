@@ -1,18 +1,18 @@
 import logging
-import uuid
 from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc, func
 
 from app.database import get_db
 from app.dependencies import get_current_user
-from app.models.user import User, Application, Opportunity
+from app.models.user import Application, Opportunity, User
 from app.schemas.user import (
     ApplicationCreate,
-    ApplicationUpdate,
-    ApplicationOut,
     ApplicationList,
+    ApplicationOut,
+    ApplicationUpdate,
     OpportunityOut,
 )
 
@@ -31,9 +31,7 @@ async def list_applications(
     """List all applications for the current user."""
     try:
         count_result = await db.execute(
-            select(func.count())
-            .select_from(Application)
-            .where(Application.user_id == user.id)
+            select(func.count()).select_from(Application).where(Application.user_id == user.id)
         )
         total = count_result.scalar()
 
@@ -52,9 +50,7 @@ async def list_applications(
         for app in apps:
             app_out = ApplicationOut.model_validate(app)
             if app.opportunity_id:
-                opp_result = await db.execute(
-                    select(Opportunity).where(Opportunity.id == app.opportunity_id)
-                )
+                opp_result = await db.execute(select(Opportunity).where(Opportunity.id == app.opportunity_id))
                 opp = opp_result.scalar_one_or_none()
                 if opp:
                     app_out.opportunity = OpportunityOut.model_validate(opp)
@@ -79,9 +75,7 @@ async def create_application(
 
     try:
         # Verify opportunity exists
-        opp_result = await db.execute(
-            select(Opportunity).where(Opportunity.id == data.opportunity_id)
-        )
+        opp_result = await db.execute(select(Opportunity).where(Opportunity.id == data.opportunity_id))
         opp = opp_result.scalar_one_or_none()
         if not opp:
             raise HTTPException(status_code=404, detail="Opportunity not found")
@@ -122,9 +116,7 @@ async def update_application(
         raise HTTPException(status_code=422, detail="ID must be a non-empty string")
 
     try:
-        result = await db.execute(
-            select(Application).where(Application.id == id, Application.user_id == user.id)
-        )
+        result = await db.execute(select(Application).where(Application.id == id, Application.user_id == user.id))
         app = result.scalar_one_or_none()
         if not app:
             raise HTTPException(status_code=404, detail="Application not found")
@@ -145,9 +137,7 @@ async def update_application(
         app_out = ApplicationOut.model_validate(app)
         if app.opportunity_id:
             try:
-                opp_result = await db.execute(
-                    select(Opportunity).where(Opportunity.id == app.opportunity_id)
-                )
+                opp_result = await db.execute(select(Opportunity).where(Opportunity.id == app.opportunity_id))
                 opp = opp_result.scalar_one_or_none()
                 if opp:
                     app_out.opportunity = OpportunityOut.model_validate(opp)
@@ -172,9 +162,7 @@ async def delete_application(
         raise HTTPException(status_code=422, detail="ID must be a non-empty string")
 
     try:
-        result = await db.execute(
-            select(Application).where(Application.id == id, Application.user_id == user.id)
-        )
+        result = await db.execute(select(Application).where(Application.id == id, Application.user_id == user.id))
         app = result.scalar_one_or_none()
         if not app:
             raise HTTPException(status_code=404, detail="Application not found")
@@ -194,5 +182,6 @@ async def tailor_resume(
 ):
     """Trigger the resume agent to tailor a resume for this application."""
     from app.agents.orchestrator.service import run_resume_tailoring
+
     task_id = await run_resume_tailoring(str(user.id), id)
     return {"task_id": task_id}

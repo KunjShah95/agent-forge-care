@@ -34,6 +34,21 @@ export function useUpdateProfile() {
   });
 }
 
+export function useEnrichProfile() {
+  return useMutation({
+    mutationFn: api.profile.enrich,
+  });
+}
+
+export function useDeveloperProfile() {
+  return useQuery({
+    queryKey: ["profile", "developer"],
+    queryFn: api.profile.developerProfile,
+    enabled: !!api.getAuthToken(),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 // ─── Opportunities ──────────────────────────────────────
 
 export function useOpportunities(params?: { type?: string; search?: string; remote?: boolean; work_type?: string }) {

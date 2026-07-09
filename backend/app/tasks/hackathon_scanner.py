@@ -9,13 +9,13 @@ hackathon scan for each opted-in user by calling the shared scan logic.
 
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from app.database import async_session_factory
-from app.models.user import MemoryEntry
 from sqlalchemy import select
 
 from app.api.v1.opportunities import _run_hackathon_scan
+from app.database import async_session_factory
+from app.models.user import MemoryEntry
 
 logger = logging.getLogger("agentforge.tasks.hackathon_scanner")
 
@@ -72,7 +72,7 @@ async def _should_scan_user(user_id: str) -> bool:
 
         try:
             last_time = datetime.fromisoformat(timestamp_str)
-            elapsed = (datetime.now(timezone.utc) - last_time).total_seconds()
+            elapsed = (datetime.now(UTC) - last_time).total_seconds()
             return elapsed >= HACKATHON_SCAN_INTERVAL
         except (ValueError, TypeError):
             return True
@@ -103,21 +103,17 @@ async def run_scheduled_hackathon_scan() -> None:
                         try:
                             # Check if user has email notifications enabled
                             from app.services.memory_service import MemoryService
+
                             mem = MemoryService(db)
-                            email_pref = await mem.get_memory(
-                                str(user_id), "hackathon_email_enabled"
-                            )
-                            email_enabled = (
-                                isinstance(email_pref, bool) and email_pref is True
-                            )
+                            email_pref = await mem.get_memory(str(user_id), "hackathon_email_enabled")
+                            email_enabled = isinstance(email_pref, bool) and email_pref is True
 
                             # Look up user's email if email notifications are on
                             user_email: str | None = None
                             if email_enabled:
                                 from app.models.user import User
-                                u_result = await db.execute(
-                                    select(User).where(User.id == user_id)
-                                )
+
+                                u_result = await db.execute(select(User).where(User.id == user_id))
                                 user_obj = u_result.scalar_one_or_none()
                                 if user_obj:
                                     user_email = user_obj.email

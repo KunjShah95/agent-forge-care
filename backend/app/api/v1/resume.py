@@ -1,59 +1,207 @@
-import logging
 import io
+import logging
 from datetime import datetime
-from pydantic import BaseModel
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Query
+
+import pypdf
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
-from sqlalchemy.ext.asyncio import AsyncSession
+from pydantic import BaseModel
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+
+from app.config import settings
 from app.database import get_db
 from app.dependencies import get_current_user
-from app.models.user import User, MemoryEntry, AgentTask, AgentType, TaskStatus, Profile, ProfileSkill
-from app.schemas.user import ResumeOut, ResumeList
-import pypdf
-from app.utils.embedding import get_text_embedding
 from app.memory.memory_layer import AgentMemory
-from app.config import settings
+from app.models.user import AgentTask, AgentType, MemoryEntry, Profile, ProfileSkill, TaskStatus, User
+from app.schemas.user import ResumeList, ResumeOut
 from app.services.memory_service import MemoryService
+from app.utils.embedding import get_text_embedding
 
 logger = logging.getLogger("agentforge.resume")
 
 TECH_KEYWORDS = [
-    "python", "javascript", "typescript", "java", "go", "golang", "rust", "c++", "c#", "ruby",
-    "swift", "kotlin", "scala", "php", "perl", "r", "matlab", "sql", "bash", "shell",
-    "react", "angular", "vue", "next.js", "node.js", "express", "django", "flask", "spring",
-    "fastapi", "graphql", "rest", "api", "docker", "kubernetes", "k8s", "aws", "azure", "gcp",
-    "terraform", "ansible", "jenkins", "ci/cd", "git", "linux", "nginx", "redis", "mongodb",
-    "postgresql", "mysql", "elasticsearch", "kafka", "rabbitmq", "grpc", "websocket",
-    "machine learning", "deep learning", "ai", "llm", "nlp", "computer vision", "tensorflow",
-    "pytorch", "scikit-learn", "langchain", "rag", "vector database", "openai", "hugging face",
-    "llama", "gpt", "bert", "transformer", "agent", "autogen", "crewai",
-    "tailwind", "sass", "redux", "webpack", "vite", "jest", "cypress",
-    "pandas", "numpy", "jupyter", "spark", "hadoop", "airflow", "dbt",
-    "microservices", "serverless", "lambda", "containers", "orchestration",
-    "oauth", "jwt", "saml", "ldap", "ssl", "tls", "https",
-    "agile", "scrum", "kanban", "jira", "confluence",
-    "tableau", "power bi", "looker", "datadog", "grafana", "prometheus",
+    "python",
+    "javascript",
+    "typescript",
+    "java",
+    "go",
+    "golang",
+    "rust",
+    "c++",
+    "c#",
+    "ruby",
+    "swift",
+    "kotlin",
+    "scala",
+    "php",
+    "perl",
+    "r",
+    "matlab",
+    "sql",
+    "bash",
+    "shell",
+    "react",
+    "angular",
+    "vue",
+    "next.js",
+    "node.js",
+    "express",
+    "django",
+    "flask",
+    "spring",
+    "fastapi",
+    "graphql",
+    "rest",
+    "api",
+    "docker",
+    "kubernetes",
+    "k8s",
+    "aws",
+    "azure",
+    "gcp",
+    "terraform",
+    "ansible",
+    "jenkins",
+    "ci/cd",
+    "git",
+    "linux",
+    "nginx",
+    "redis",
+    "mongodb",
+    "postgresql",
+    "mysql",
+    "elasticsearch",
+    "kafka",
+    "rabbitmq",
+    "grpc",
+    "websocket",
+    "machine learning",
+    "deep learning",
+    "ai",
+    "llm",
+    "nlp",
+    "computer vision",
+    "tensorflow",
+    "pytorch",
+    "scikit-learn",
+    "langchain",
+    "rag",
+    "vector database",
+    "openai",
+    "hugging face",
+    "llama",
+    "gpt",
+    "bert",
+    "transformer",
+    "agent",
+    "autogen",
+    "crewai",
+    "tailwind",
+    "sass",
+    "redux",
+    "webpack",
+    "vite",
+    "jest",
+    "cypress",
+    "pandas",
+    "numpy",
+    "jupyter",
+    "spark",
+    "hadoop",
+    "airflow",
+    "dbt",
+    "microservices",
+    "serverless",
+    "lambda",
+    "containers",
+    "orchestration",
+    "oauth",
+    "jwt",
+    "saml",
+    "ldap",
+    "ssl",
+    "tls",
+    "https",
+    "agile",
+    "scrum",
+    "kanban",
+    "jira",
+    "confluence",
+    "tableau",
+    "power bi",
+    "looker",
+    "datadog",
+    "grafana",
+    "prometheus",
 ]
 
 ACTION_VERBS = [
-    "achieved", "analyzed", "built", "conducted", "created", "delivered",
-    "designed", "developed", "established", "evaluated", "executed",
-    "expanded", "generated", "identified", "implemented", "improved",
-    "increased", "initiated", "integrated", "introduced", "launched",
-    "led", "managed", "negotiated", "optimized", "organized", "performed",
-    "planned", "produced", "reduced", "reorganized", "resolved",
-    "revamped", "streamlined", "strengthened", "structured", "supervised",
-    "transformed", "upgraded", "accelerated", "automated", "consolidated",
-    "coordinated", "cultivated", "demonstrated", "deployed", "engineered",
-    "facilitated", "formulated", "oversaw",
+    "achieved",
+    "analyzed",
+    "built",
+    "conducted",
+    "created",
+    "delivered",
+    "designed",
+    "developed",
+    "established",
+    "evaluated",
+    "executed",
+    "expanded",
+    "generated",
+    "identified",
+    "implemented",
+    "improved",
+    "increased",
+    "initiated",
+    "integrated",
+    "introduced",
+    "launched",
+    "led",
+    "managed",
+    "negotiated",
+    "optimized",
+    "organized",
+    "performed",
+    "planned",
+    "produced",
+    "reduced",
+    "reorganized",
+    "resolved",
+    "revamped",
+    "streamlined",
+    "strengthened",
+    "structured",
+    "supervised",
+    "transformed",
+    "upgraded",
+    "accelerated",
+    "automated",
+    "consolidated",
+    "coordinated",
+    "cultivated",
+    "demonstrated",
+    "deployed",
+    "engineered",
+    "facilitated",
+    "formulated",
+    "oversaw",
 ]
 
 SECTION_HEADERS = [
-    "experience", "education", "skills", "projects",
-    "work experience", "employment", "summary", "objective",
-    "certifications", "publications", "leadership",
+    "experience",
+    "education",
+    "skills",
+    "projects",
+    "work experience",
+    "employment",
+    "summary",
+    "objective",
+    "certifications",
+    "publications",
+    "leadership",
 ]
 
 router = APIRouter()
@@ -205,7 +353,7 @@ async def ats_analysis(
 
             # Add language-specific suggestions
             if gh_langs:
-                missing_langs = [l for l in gh_langs if l.lower() not in text_lower]
+                missing_langs = [lang for lang in gh_langs if lang.lower() not in text_lower]
                 if missing_langs:
                     github_suggestions.append(
                         f"Highlight your GitHub-proven skills in {', '.join(missing_langs[:3])} on your resume"
@@ -236,14 +384,11 @@ async def ats_analysis(
             pf_technologies = portfolio_data.get("technologies_detected", [])
             pf_projects = portfolio_data.get("projects", [])
             pf_experience = portfolio_data.get("experience", [])
-            pf_summary = portfolio_data.get("summary", "")
+            portfolio_data.get("summary", "")
             portfolio_role = portfolio_data.get("role")
 
             # Combine all portfolio-detected skills
-            all_pf_skills = list(set(
-                (pf_skills or []) +
-                (pf_technologies or [])
-            ))
+            all_pf_skills = list(set((pf_skills or []) + (pf_technologies or [])))
 
             for skill in all_pf_skills:
                 skill_lower = skill.lower()
@@ -320,9 +465,17 @@ async def ats_analysis(
 
         # Add tech keyword suggestions
         if tech_coverage < 30:
-            suggestions.append(f"Tech keyword score low ({tech_coverage}%). Add industry-standard technologies to improve ATS match")
+            suggestions.append(
+                f"Tech keyword score low ({tech_coverage}%). Add industry-standard technologies to improve ATS match"
+            )
         elif 30 <= tech_coverage < 60:
-            tech_high_value = [kw for kw in TECH_KEYWORDS if kw in ["kubernetes", "docker", "aws", "ci/cd", "terraform", "graphql", "react", "python", "typescript"] and kw.lower() not in text_lower]
+            tech_high_value = [
+                kw
+                for kw in TECH_KEYWORDS
+                if kw
+                in ["kubernetes", "docker", "aws", "ci/cd", "terraform", "graphql", "react", "python", "typescript"]
+                and kw.lower() not in text_lower
+            ]
             if tech_high_value:
                 suggestions.append(f"Missing high-demand keywords: {', '.join(tech_high_value[:4])}")
 
@@ -359,7 +512,9 @@ async def ats_analysis(
             if not github_demonstrated_skills and not portfolio_inferred_skills:
                 summary += " Overall, it is well-optimized for ATS systems."
             else:
-                summary += " Resume structure is strong, but add your GitHub/portfolio-proven skills to maximize matches."
+                summary += (
+                    " Resume structure is strong, but add your GitHub/portfolio-proven skills to maximize matches."
+                )
         elif keyword_score < 50:
             summary += " Consider adding more relevant skills and keywords."
         if tech_coverage < 30:
@@ -398,7 +553,9 @@ async def search_resume(
     """Search resume chunks using Qdrant and return top matches."""
     # Input validation
     if not q or not isinstance(q, str) or len(q.strip()) < 2:
-        raise HTTPException(status_code=422, detail="Search query must be a non-empty string with at least 2 characters")
+        raise HTTPException(
+            status_code=422, detail="Search query must be a non-empty string with at least 2 characters"
+        )
 
     try:
         vector = await get_text_embedding(q)
@@ -407,14 +564,16 @@ async def search_resume(
         items = []
         for r in results:
             payload = r.payload if hasattr(r, "payload") else {}
-            items.append({
-                "text": payload.get("text", "")[:800],
-                "filename": payload.get("filename"),
-                "chunk_index": payload.get("chunk_index"),
-                "pages": payload.get("pages"),
-                "characters": payload.get("characters"),
-                "score": getattr(r, "score", None),
-            })
+            items.append(
+                {
+                    "text": payload.get("text", "")[:800],
+                    "filename": payload.get("filename"),
+                    "chunk_index": payload.get("chunk_index"),
+                    "pages": payload.get("pages"),
+                    "characters": payload.get("characters"),
+                    "score": getattr(r, "score", None),
+                }
+            )
         return {"items": items}
     except Exception as e:
         logger.error("Failed to search resume for user %s: %s", user.id, str(e))
@@ -458,7 +617,7 @@ async def upload_resume(
     # Input validation
     if not file.filename or not isinstance(file.filename, str):
         raise HTTPException(status_code=400, detail="Invalid filename")
-    
+
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported")
 
@@ -468,6 +627,7 @@ async def upload_resume(
 
     try:
         from app.hiring_agent.pdf_extractor import extract_pdf_text as _smart_extract
+
         text = _smart_extract(content)
     except Exception:
         logger.debug("Hiring agent PDF extractor unavailable, falling back to pypdf")
@@ -481,9 +641,7 @@ async def upload_resume(
             raise HTTPException(status_code=400, detail=f"Failed to parse PDF: {str(e)}")
 
     if not text.strip():
-        raise HTTPException(
-            status_code=400, detail="No text could be extracted from the PDF"
-        )
+        raise HTTPException(status_code=400, detail="No text could be extracted from the PDF")
 
     text = text.strip()
     try:
@@ -524,13 +682,13 @@ async def upload_resume(
 
         # --- Chunk resume text and index chunks in Qdrant (vector store) ---
         try:
-            CHUNK_SIZE = 1000
-            CHUNK_OVERLAP = 200
+            chunk_size = 1000
+            chunk_overlap = 200
             agent_memory = AgentMemory(str(user.id))
             start = 0
             idx = 0
             while start < len(text):
-                end = min(start + CHUNK_SIZE, len(text))
+                end = min(start + chunk_size, len(text))
                 chunk = text[start:end]
                 vector = await get_text_embedding(chunk)
                 agent_memory.store_vector(
@@ -545,15 +703,16 @@ async def upload_resume(
                     },
                 )
                 idx += 1
-                start += CHUNK_SIZE - CHUNK_OVERLAP
+                start += chunk_size - chunk_overlap
         except Exception:
             # Do not fail the upload if embedding/indexing fails
             logger.exception("Failed to index resume chunks into Qdrant")
 
         # --- Enqueue background research tasks using RQ (reliable async processing) ---
         try:
-            from rq import Queue
             from redis import Redis
+            from rq import Queue
+
             from app.tasks.agent_tasks import process_research_task
 
             redis = Redis.from_url(settings.redis_url)
@@ -565,14 +724,24 @@ async def upload_resume(
 
             if profile and profile.github_url:
                 # create AgentTask record in DB (queued)
-                task = AgentTask(user_id=user.id, agent_type=AgentType.research, status=TaskStatus.queued, input={"query": profile.github_url, "focus": "company"})
+                task = AgentTask(
+                    user_id=user.id,
+                    agent_type=AgentType.research,
+                    status=TaskStatus.queued,
+                    input={"query": profile.github_url, "focus": "company"},
+                )
                 db.add(task)
                 await db.commit()
                 # enqueue background job with task id
                 q.enqueue(process_research_task, str(task.id), str(user.id), profile.github_url, "company")
 
             if profile and profile.portfolio_url:
-                task = AgentTask(user_id=user.id, agent_type=AgentType.research, status=TaskStatus.queued, input={"query": profile.portfolio_url, "focus": "company"})
+                task = AgentTask(
+                    user_id=user.id,
+                    agent_type=AgentType.research,
+                    status=TaskStatus.queued,
+                    input={"query": profile.portfolio_url, "focus": "company"},
+                )
                 db.add(task)
                 await db.commit()
                 q.enqueue(process_research_task, str(task.id), str(user.id), profile.portfolio_url, "company")
@@ -595,6 +764,7 @@ class ResumeSection(BaseModel):
     title: str
     content: list[str]
 
+
 class ResumeData(BaseModel):
     name: str
     email: str
@@ -604,6 +774,7 @@ class ResumeData(BaseModel):
     summary: str | None = None
     sections: list[ResumeSection]
 
+
 class CoverLetterData(BaseModel):
     name: str
     email: str
@@ -611,6 +782,7 @@ class CoverLetterData(BaseModel):
     company: str
     date: str | None = None
     body: str
+
 
 @router.post("/generate-pdf")
 async def generate_resume_pdf(
@@ -620,91 +792,84 @@ async def generate_resume_pdf(
     # Input validation
     if not data.name or not isinstance(data.name, str) or len(data.name.strip()) < 2:
         raise HTTPException(status_code=422, detail="Name must be a non-empty string with at least 2 characters")
-    
+
     if not data.email or not isinstance(data.email, str) or "@" not in data.email:
         raise HTTPException(status_code=422, detail="Valid email is required")
-    
+
     if not data.sections or not isinstance(data.sections, list) or len(data.sections) == 0:
         raise HTTPException(status_code=422, detail="At least one section is required")
 
     try:
-        from reportlab.lib.pagesizes import letter
-        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
-        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-        from reportlab.lib.enums import TA_CENTER, TA_LEFT
         from reportlab.lib import colors
-        
+        from reportlab.lib.enums import TA_CENTER, TA_LEFT
+        from reportlab.lib.pagesizes import letter
+        from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+        from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
+
         buffer = io.BytesIO()
-        doc = SimpleDocTemplate(
-            buffer,
-            pagesize=letter,
-            rightMargin=54,
-            leftMargin=54,
-            topMargin=54,
-            bottomMargin=54
-        )
-        
+        doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=54, leftMargin=54, topMargin=54, bottomMargin=54)
+
         styles = getSampleStyleSheet()
-        
+
         name_style = ParagraphStyle(
-            'ResumeName',
-            parent=styles['Normal'],
-            fontName='Helvetica-Bold',
+            "ResumeName",
+            parent=styles["Normal"],
+            fontName="Helvetica-Bold",
             fontSize=22,
             leading=26,
-            textColor=colors.HexColor('#0F172A'),
-            alignment=TA_CENTER
+            textColor=colors.HexColor("#0F172A"),
+            alignment=TA_CENTER,
         )
-        
+
         contact_style = ParagraphStyle(
-            'ResumeContact',
-            parent=styles['Normal'],
-            fontName='Helvetica',
+            "ResumeContact",
+            parent=styles["Normal"],
+            fontName="Helvetica",
             fontSize=9,
             leading=13,
-            textColor=colors.HexColor('#475569'),
-            alignment=TA_CENTER
+            textColor=colors.HexColor("#475569"),
+            alignment=TA_CENTER,
         )
-        
+
         section_title_style = ParagraphStyle(
-            'ResumeSectionTitle',
-            parent=styles['Normal'],
-            fontName='Helvetica-Bold',
+            "ResumeSectionTitle",
+            parent=styles["Normal"],
+            fontName="Helvetica-Bold",
             fontSize=12,
             leading=16,
-            textColor=colors.HexColor('#1E3A8A'),
+            textColor=colors.HexColor("#1E3A8A"),
             alignment=TA_LEFT,
-            spaceAfter=4
+            spaceAfter=4,
         )
-        
+
         body_style = ParagraphStyle(
-            'ResumeBody',
-            parent=styles['Normal'],
-            fontName='Helvetica',
+            "ResumeBody",
+            parent=styles["Normal"],
+            fontName="Helvetica",
             fontSize=10,
             leading=14,
-            textColor=colors.HexColor('#334155'),
-            alignment=TA_LEFT
+            textColor=colors.HexColor("#334155"),
+            alignment=TA_LEFT,
         )
-        
+
         bullet_style = ParagraphStyle(
-            'ResumeBullet',
-            parent=styles['Normal'],
-            fontName='Helvetica',
+            "ResumeBullet",
+            parent=styles["Normal"],
+            fontName="Helvetica",
             fontSize=9.5,
             leading=13.5,
-            textColor=colors.HexColor('#334155'),
+            textColor=colors.HexColor("#334155"),
             alignment=TA_LEFT,
             leftIndent=15,
-            firstLineIndent=-10
+            firstLineIndent=-10,
         )
-        
+
         story = []
-        
+
         # Header block
         story.append(Paragraph(data.name, name_style))
         story.append(Spacer(1, 4))
-        
+
         contact_parts = []
         if data.email:
             contact_parts.append(data.email)
@@ -714,26 +879,26 @@ async def generate_resume_pdf(
             contact_parts.append(data.linkedin)
         if data.github:
             contact_parts.append(data.github)
-            
+
         contact_str = "  |  ".join(contact_parts)
         story.append(Paragraph(contact_str, contact_style))
         story.append(Spacer(1, 15))
-        
+
         # Summary Section
         if data.summary:
             story.append(Paragraph("PROFESSIONAL SUMMARY", section_title_style))
             story.append(Paragraph(data.summary, body_style))
             story.append(Spacer(1, 10))
-            
+
         # Sections
         for sec in data.sections:
             sec_title = sec.title.upper()
             content_items = sec.content
             if not content_items:
                 continue
-                
+
             story.append(Paragraph(sec_title, section_title_style))
-            
+
             if "SKILL" in sec_title:
                 skills_str = ", ".join(content_items)
                 story.append(Paragraph(skills_str, body_style))
@@ -745,18 +910,19 @@ async def generate_resume_pdf(
                     else:
                         story.append(Paragraph(item, body_style))
             story.append(Spacer(1, 10))
-            
+
         doc.build(story)
         buffer.seek(0)
-        
+
         return StreamingResponse(
             buffer,
             media_type="application/pdf",
-            headers={"Content-Disposition": "attachment; filename=resume_tailored.pdf"}
+            headers={"Content-Disposition": "attachment; filename=resume_tailored.pdf"},
         )
     except Exception as e:
         logger.error("Failed to generate resume PDF for user %s: %s", user.id, str(e))
         raise HTTPException(status_code=500, detail=f"PDF generation failed: {str(e)}")
+
 
 @router.post("/generate-cover-letter-pdf")
 async def generate_cover_letter_pdf(
@@ -766,99 +932,92 @@ async def generate_cover_letter_pdf(
     # Input validation
     if not data.name or not isinstance(data.name, str) or len(data.name.strip()) < 2:
         raise HTTPException(status_code=422, detail="Name must be a non-empty string with at least 2 characters")
-    
+
     if not data.email or not isinstance(data.email, str) or "@" not in data.email:
         raise HTTPException(status_code=422, detail="Valid email is required")
-    
+
     if not data.company or not isinstance(data.company, str) or len(data.company.strip()) < 2:
         raise HTTPException(status_code=422, detail="Company must be a non-empty string with at least 2 characters")
-    
+
     if not data.body or not isinstance(data.body, str) or len(data.body.strip()) < 10:
         raise HTTPException(status_code=422, detail="Body must be a non-empty string with at least 10 characters")
 
     try:
-        from reportlab.lib.pagesizes import letter
-        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
-        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-        from reportlab.lib.enums import TA_LEFT, TA_JUSTIFY
         from reportlab.lib import colors
-        
+        from reportlab.lib.enums import TA_JUSTIFY, TA_LEFT
+        from reportlab.lib.pagesizes import letter
+        from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+        from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
+
         buffer = io.BytesIO()
-        doc = SimpleDocTemplate(
-            buffer,
-            pagesize=letter,
-            rightMargin=54,
-            leftMargin=54,
-            topMargin=54,
-            bottomMargin=54
-        )
-        
+        doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=54, leftMargin=54, topMargin=54, bottomMargin=54)
+
         styles = getSampleStyleSheet()
-        
+
         name_style = ParagraphStyle(
-            'CoverName',
-            parent=styles['Normal'],
-            fontName='Helvetica-Bold',
+            "CoverName",
+            parent=styles["Normal"],
+            fontName="Helvetica-Bold",
             fontSize=20,
             leading=24,
-            textColor=colors.HexColor('#111827'),
-            alignment=TA_LEFT
+            textColor=colors.HexColor("#111827"),
+            alignment=TA_LEFT,
         )
-        
+
         contact_style = ParagraphStyle(
-            'CoverContact',
-            parent=styles['Normal'],
-            fontName='Helvetica',
+            "CoverContact",
+            parent=styles["Normal"],
+            fontName="Helvetica",
             fontSize=9,
             leading=13,
-            textColor=colors.HexColor('#4B5563'),
-            alignment=TA_LEFT
+            textColor=colors.HexColor("#4B5563"),
+            alignment=TA_LEFT,
         )
-        
+
         body_style = ParagraphStyle(
-            'CoverBody',
-            parent=styles['Normal'],
-            fontName='Helvetica',
+            "CoverBody",
+            parent=styles["Normal"],
+            fontName="Helvetica",
             fontSize=10,
             leading=15,
-            textColor=colors.HexColor('#1F2937'),
-            alignment=TA_JUSTIFY
+            textColor=colors.HexColor("#1F2937"),
+            alignment=TA_JUSTIFY,
         )
-        
+
         story = []
-        
+
         story.append(Paragraph(data.name, name_style))
         story.append(Spacer(1, 4))
-        
+
         contact_parts = []
         if data.email:
             contact_parts.append(data.email)
         if data.phone:
             contact_parts.append(data.phone)
-            
+
         contact_str = "  |  ".join(contact_parts)
         story.append(Paragraph(contact_str, contact_style))
         story.append(Spacer(1, 15))
-        
+
         date_str = data.date or datetime.now().strftime("%B %d, %Y")
         story.append(Paragraph(date_str, body_style))
         story.append(Spacer(1, 12))
-        
+
         story.append(Paragraph(f"To the hiring team at {data.company},", body_style))
         story.append(Spacer(1, 12))
-        
+
         paragraphs = [p.strip() for p in data.body.split("\n\n") if p.strip()]
         for p in paragraphs:
             story.append(Paragraph(p.replace("\n", "<br/>"), body_style))
             story.append(Spacer(1, 12))
-            
+
         doc.build(story)
         buffer.seek(0)
-        
+
         return StreamingResponse(
             buffer,
             media_type="application/pdf",
-            headers={"Content-Disposition": f"attachment; filename=cover_letter_{data.company.replace(' ', '_')}.pdf"}
+            headers={"Content-Disposition": f"attachment; filename=cover_letter_{data.company.replace(' ', '_')}.pdf"},
         )
     except Exception as e:
         logger.error("Failed to generate cover letter PDF for user %s: %s", user.id, str(e))

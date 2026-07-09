@@ -1,7 +1,6 @@
 import logging
 import time
 import uuid
-from typing import Any, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 

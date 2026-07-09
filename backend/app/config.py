@@ -1,10 +1,10 @@
-from pydantic_settings import BaseSettings
-from pydantic import model_validator, field_validator
-from typing import List, Optional
 import os
 import re
 import secrets
 from pathlib import Path
+
+from pydantic import field_validator, model_validator
+from pydantic_settings import BaseSettings
 
 # Resolve .env path relative to this config file so it works from any working directory
 _ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
@@ -46,7 +46,7 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173,http://localhost:8080"
 
     @property
-    def cors_origin_list(self) -> List[str]:
+    def cors_origin_list(self) -> list[str]:
         origins = [o.strip() for o in self.cors_origins.split(",")]
         # Allow all Vercel preview deployments dynamically
         vercel_url = os.environ.get("VERCEL_URL")
@@ -55,9 +55,7 @@ class Settings(BaseSettings):
         return origins
 
     # Database
-    database_url: str = (
-        "postgresql+asyncpg://postgres:postgres@localhost:5432/agentforge"
-    )
+    database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/agentforge"
 
     # JWT — auto-generated cryptographically random key if not set
     jwt_secret: str = ""
@@ -133,6 +131,7 @@ class Settings(BaseSettings):
         # Warn if an insecure default is still being used
         if v.strip().lower() in _KNOWN_INSECURE_SECRETS:
             import warnings
+
             warnings.warn(
                 f"jwt_secret is set to a known insecure value ('{v[:20]}...'). "
                 "This is dangerous in production. Generate a strong random key."
@@ -144,6 +143,7 @@ class Settings(BaseSettings):
     def validate_firebase_project_id(cls, v: str) -> str:
         if not v or v.strip() == "":
             import warnings
+
             warnings.warn(
                 "firebase_project_id is not set. Firebase authentication will fail. "
                 "Set FIREBASE_PROJECT_ID environment variable."
@@ -167,7 +167,26 @@ class Settings(BaseSettings):
             raise ValueError("database_url must contain protocol (e.g., postgresql://)")
         return v
 
-    @field_validator("openai_api_key", "anthropic_api_key", "google_api_key", "groq_api_key", "openrouter_api_key", "mistral_api_key", "huggingface_api_key", "deepseek_api_key", "together_api_key", "fireworks_api_key", "cohere_api_key", "langchain_api_key", "sendgrid_api_key", "serpapi_key", "tavily_api_key", "brave_api_key", "exa_api_key", "github_token")
+    @field_validator(
+        "openai_api_key",
+        "anthropic_api_key",
+        "google_api_key",
+        "groq_api_key",
+        "openrouter_api_key",
+        "mistral_api_key",
+        "huggingface_api_key",
+        "deepseek_api_key",
+        "together_api_key",
+        "fireworks_api_key",
+        "cohere_api_key",
+        "langchain_api_key",
+        "sendgrid_api_key",
+        "serpapi_key",
+        "tavily_api_key",
+        "brave_api_key",
+        "exa_api_key",
+        "github_token",
+    )
     @classmethod
     def validate_api_keys(cls, v: str, info) -> str:
         if v and not re.match(r"^[a-zA-Z0-9_\-\.]{10,}$", v):

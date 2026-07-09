@@ -12,6 +12,7 @@ Gracefully degrades: returns empty fields when memory data is unavailable.
 
 import logging
 from typing import Any
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.memory_service import MemoryService
@@ -135,10 +136,7 @@ def _build_github_context(
                 lines.append("TOP REPOS (STARRED):")
                 for r in top_repos:
                     desc = (r.get("description", "") or "")[:100]
-                    lines.append(
-                        f"  - {r['name']} (⭐{r.get('stars', 0)}, "
-                        f"{r.get('language', 'N/A')}): {desc}"
-                    )
+                    lines.append(f"  - {r['name']} (⭐{r.get('stars', 0)}, {r.get('language', 'N/A')}): {desc}")
 
     return "\n".join(lines)
 
@@ -189,33 +187,21 @@ async def build_enrichment_context(
     try:
         # ── Portfolio ──
         portfolio_data: Any = await memory_service.get_memory(user_id, "portfolio_scrape")
-        if (
-            portfolio_data
-            and isinstance(portfolio_data, dict)
-            and "error" not in portfolio_data
-        ):
+        if portfolio_data and isinstance(portfolio_data, dict) and "error" not in portfolio_data:
             # Merge portfolio-detected skills (both explicit + tech keywords)
             pf_skills_raw = portfolio_data.get("skills", [])
             pf_techs_raw = portfolio_data.get("technologies_detected", [])
             _merge_skills(all_skills, (pf_skills_raw or []) + (pf_techs_raw or []))
 
-            portfolio_context, pf_projects, pf_experience = _build_portfolio_context(
-                portfolio_data
-            )
+            portfolio_context, pf_projects, pf_experience = _build_portfolio_context(portfolio_data)
 
         # ── GitHub ──
         github_raw = None
         if include_raw_repos:
             github_raw = await memory_service.get_memory(user_id, "github_profile_raw")
 
-        github_analysis: Any = await memory_service.get_memory(
-            user_id, "github_skills_analysis"
-        )
-        if (
-            github_analysis
-            and isinstance(github_analysis, dict)
-            and "error" not in github_analysis
-        ):
+        github_analysis: Any = await memory_service.get_memory(user_id, "github_skills_analysis")
+        if github_analysis and isinstance(github_analysis, dict) and "error" not in github_analysis:
             gh_skills_raw: list[str] = github_analysis.get("skills", [])
             gh_projects_raw: list[str] = github_analysis.get("project_highlights", [])
 

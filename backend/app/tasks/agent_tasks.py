@@ -1,12 +1,11 @@
 import asyncio
 import logging
 
-from app.models.user import AgentTask, TaskStatus
-from app.database import async_session_factory as async_session
 from app.agents.research_agent import conduct_research
-from app.services.profile_scraper import scrape_github_profile, analyze_github_for_skills, scrape_portfolio
+from app.database import async_session_factory as async_session
+from app.models.user import AgentTask, TaskStatus
 from app.services.memory_service import MemoryService
-
+from app.services.profile_scraper import analyze_github_for_skills, scrape_github_profile, scrape_portfolio
 
 logger = logging.getLogger("agentforge.tasks")
 
@@ -21,8 +20,10 @@ def _run_async(coro):
         if loop.is_running():
             # Event loop is already running (e.g., in tests or async context)
             import threading
+
             result = []
             exception = []
+
             def _run():
                 try:
                     new_loop = asyncio.new_event_loop()
@@ -32,6 +33,7 @@ def _run_async(coro):
                     exception.append(e)
                 finally:
                     new_loop.close()
+
             thread = threading.Thread(target=_run)
             thread.start()
             thread.join()
@@ -101,7 +103,10 @@ async def _run_github_scrape(task_id: str, user_id: str, github_url: str) -> Non
             t = await db.get(AgentTask, task_id)
             if t:
                 t.status = TaskStatus.completed
-                t.output = {"raw_data_summary": {k: v for k, v in raw_data.items() if k != "repositories"}, "analysis": analysis}
+                t.output = {
+                    "raw_data_summary": {k: v for k, v in raw_data.items() if k != "repositories"},
+                    "analysis": analysis,
+                }
                 await db.commit()
 
 

@@ -1,12 +1,13 @@
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
 
 from tests.conftest import (
-    make_user,
-    create_firebase_token,
+    TEST_FIREBASE_UID,
     TEST_USER_EMAIL,
     TEST_USER_NAME,
-    TEST_FIREBASE_UID,
+    create_firebase_token,
+    make_user,
 )
 
 # ─── GET /me ─────────────────────────────────────────────────
@@ -42,20 +43,20 @@ async def test_get_me_invalid_token(async_client):
 @pytest.mark.asyncio
 async def test_verify_firebase_token_valid():
     """A valid Firebase token should decode successfully."""
-    from app.dependencies import verify_firebase_token, _certs_cache
+    from app.dependencies import _certs_cache, verify_firebase_token
 
     _certs_cache["certs"] = None
     _certs_cache["expires_at"] = 0.0
 
     token = create_firebase_token()
 
-    from tests.conftest import TEST_PRIVATE_KEY
-
-    from cryptography.hazmat.primitives import serialization
-    from cryptography import x509
-    from cryptography.x509.oid import NameOID
-    from cryptography.hazmat.primitives import hashes
     import datetime
+
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.x509.oid import NameOID
+
+    from tests.conftest import TEST_PRIVATE_KEY
 
     private_k = serialization.load_pem_private_key(TEST_PRIVATE_KEY, password=None)
 
@@ -81,22 +82,22 @@ async def test_verify_firebase_token_valid():
 @pytest.mark.asyncio
 async def test_verify_firebase_token_wrong_key():
     """A token signed with the wrong key should be rejected."""
-    from app.dependencies import verify_firebase_token, _certs_cache
+    from app.dependencies import _certs_cache, verify_firebase_token
 
     _certs_cache["certs"] = None
     _certs_cache["expires_at"] = 0.0
 
     token = create_firebase_token()
 
-    from cryptography.hazmat.primitives import serialization
-    from cryptography import x509
-    from cryptography.x509.oid import NameOID
-    from cryptography.hazmat.primitives import hashes
     import datetime
 
-    wrong_key = __import__(
-        "cryptography.hazmat.primitives.asymmetric.rsa", fromlist=["rsa"]
-    ).generate_private_key(public_exponent=65537, key_size=2048)
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.x509.oid import NameOID
+
+    wrong_key = __import__("cryptography.hazmat.primitives.asymmetric.rsa", fromlist=["rsa"]).generate_private_key(
+        public_exponent=65537, key_size=2048
+    )
     subject = issuer = x509.Name([x509.NameAttribute(NameOID.COUNTRY_NAME, "US")])
     wrong_cert = (
         x509.CertificateBuilder()
@@ -110,9 +111,7 @@ async def test_verify_firebase_token_wrong_key():
     )
     wrong_cert_pem = wrong_cert.public_bytes(serialization.Encoding.PEM).decode()
 
-    with patch(
-        "app.dependencies._get_certs_sync", return_value={"test-kid-001": wrong_cert_pem}
-    ):
+    with patch("app.dependencies._get_certs_sync", return_value={"test-kid-001": wrong_cert_pem}):
         with pytest.raises(ValueError, match="Token verification failed"):
             verify_firebase_token(token)
 
@@ -121,7 +120,8 @@ async def test_verify_firebase_token_wrong_key():
 async def test_verify_firebase_token_missing_kid():
     """A token without a kid in the header should be rejected."""
     from jose import jws
-    from app.dependencies import verify_firebase_token, _certs_cache
+
+    from app.dependencies import _certs_cache, verify_firebase_token
 
     _certs_cache["certs"] = None
     _certs_cache["expires_at"] = 0.0
@@ -145,8 +145,9 @@ async def test_verify_firebase_token_missing_kid():
 @pytest.mark.asyncio
 async def test_auto_provision_new_user(async_client, mock_db):
     """A valid Firebase token for a new email should auto-create User + Profile."""
-    from app.dependencies import get_current_user
     from fastapi.security import HTTPAuthorizationCredentials
+
+    from app.dependencies import get_current_user
 
     new_email = "newfirebase@example.com"
     new_uid = "new-firebase-uid-999"
@@ -182,8 +183,9 @@ async def test_auto_provision_new_user(async_client, mock_db):
 @pytest.mark.asyncio
 async def test_auto_provision_links_existing_user(async_client, mock_db):
     """An existing user without firebase_uid should get linked on Firebase login."""
-    from app.dependencies import get_current_user
     from fastapi.security import HTTPAuthorizationCredentials
+
+    from app.dependencies import get_current_user
 
     existing_user = make_user(firebase_uid=None)
 

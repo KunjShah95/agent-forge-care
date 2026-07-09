@@ -1,35 +1,36 @@
 import logging
-from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, Query, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc, func
+from datetime import UTC, datetime
 
-from app.database import get_db
-from app.dependencies import get_current_user
-from app.models.user import User, AgentTask, AgentType, TaskStatus
-from app.services.notification_service import create_notification
-from app.agents.resume_agent import ResumeAgent
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import desc, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.agents.guidance_agent import GuidanceAgent
 from app.agents.interview_agent import InterviewAgent
 from app.agents.networking_agent import NetworkingAgent
-from app.agents.guidance_agent import GuidanceAgent
+from app.agents.resume_agent import ResumeAgent
+from app.database import get_db
+from app.dependencies import get_current_user
+from app.models.user import AgentTask, AgentType, TaskStatus, User
 from app.schemas.user import (
-    PlannerRunRequest,
-    TaskOut,
-    TaskList,
-    PlannerRunResponse,
-    InterviewPrepRequest,
-    ResearchRequest,
-    CoverLetterRequest,
-    ResumeTailorRequest,
     CareerGuidanceRequest,
-    NetworkingOutreachRequest,
-    InterviewFeedbackRequest,
-    InterviewSessionOut,
-    InterviewSessionList,
-    InterviewSessionCreate,
+    CoverLetterRequest,
     InternshipDiscoverRequest,
+    InterviewFeedbackRequest,
+    InterviewPrepRequest,
+    InterviewSessionCreate,
+    InterviewSessionList,
+    InterviewSessionOut,
     JobDiscoverRequest,
+    NetworkingOutreachRequest,
+    PlannerRunRequest,
+    PlannerRunResponse,
+    ResearchRequest,
+    ResumeTailorRequest,
+    TaskList,
+    TaskOut,
 )
+from app.services.notification_service import create_notification
 
 logger = logging.getLogger("agentforge.agents")
 
@@ -76,20 +77,14 @@ async def run_planner(
 
     # Input validation
     if not data.goal or not isinstance(data.goal, str) or len(data.goal.strip()) < 3:
-        raise HTTPException(
-            status_code=422,
-            detail="Goal must be a non-empty string with at least 3 characters"
-        )
+        raise HTTPException(status_code=422, detail="Goal must be a non-empty string with at least 3 characters")
 
     try:
         task_id = await run_planner_agent(str(user.id), data.goal.strip())
         return PlannerRunResponse(task_id=task_id)
     except Exception as e:
         logger.error("Planner agent failed for user %s: %s", user.id, str(e))
-        raise HTTPException(
-            status_code=500,
-            detail=f"Planner agent failed: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Planner agent failed: {str(e)}")
 
 
 @router.get("/planner/status")
@@ -159,11 +154,10 @@ async def clear_tasks(
 ):
     """Clear all completed or failed agent tasks for the user."""
     from sqlalchemy import delete
-    
+
     await db.execute(
         delete(AgentTask).where(
-            AgentTask.user_id == user.id,
-            AgentTask.status.in_([TaskStatus.completed, TaskStatus.failed])
+            AgentTask.user_id == user.id, AgentTask.status.in_([TaskStatus.completed, TaskStatus.failed])
         )
     )
     await db.commit()
@@ -176,9 +170,7 @@ async def delete_task(
     db: AsyncSession = Depends(get_db),
 ):
     """Delete an agent task."""
-    result = await db.execute(
-        select(AgentTask).where(AgentTask.id == id, AgentTask.user_id == user.id)
-    )
+    result = await db.execute(select(AgentTask).where(AgentTask.id == id, AgentTask.user_id == user.id))
     task = result.scalar_one_or_none()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -192,9 +184,7 @@ async def get_task(
     db: AsyncSession = Depends(get_db),
 ):
     """Get a single agent task with full details."""
-    result = await db.execute(
-        select(AgentTask).where(AgentTask.id == id, AgentTask.user_id == user.id)
-    )
+    result = await db.execute(select(AgentTask).where(AgentTask.id == id, AgentTask.user_id == user.id))
     task = result.scalar_one_or_none()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -208,59 +198,60 @@ async def retry_task(
     db: AsyncSession = Depends(get_db),
 ):
     """Retry a failed or completed agent task."""
-    result = await db.execute(
-        select(AgentTask).where(AgentTask.id == id, AgentTask.user_id == user.id)
-    )
+    result = await db.execute(select(AgentTask).where(AgentTask.id == id, AgentTask.user_id == user.id))
     task = result.scalar_one_or_none()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
     task.status = TaskStatus.running
     task.error = None
-    task.started_at = datetime.now(timezone.utc)
+    task.started_at = datetime.now(UTC)
     task.completed_at = None
     await db.commit()
 
     try:
         if task.agent_type == AgentType.planner:
             from app.agents.graph import run_planner_agent
+
             goal = task.input.get("goal") or task.input.get("goal_text") or ""
             await run_planner_agent(str(user.id), goal)
             task.status = TaskStatus.completed
-            task.completed_at = datetime.now(timezone.utc)
+            task.completed_at = datetime.now(UTC)
             await db.commit()
         elif task.agent_type == AgentType.monitor:
             from app.agents.orchestrator.service import run_opportunity_scan
+
             await run_opportunity_scan(str(user.id))
             task.status = TaskStatus.completed
-            task.completed_at = datetime.now(timezone.utc)
+            task.completed_at = datetime.now(UTC)
             await db.commit()
         elif task.agent_type == AgentType.resume:
             from app.agents.orchestrator.service import run_resume_tailoring
+
             app_id = task.input.get("application_id")
             if app_id:
                 await run_resume_tailoring(str(user.id), app_id)
             else:
                 agent = ResumeAgent(db, str(user.id))
                 res = await agent.run(task.input)
-                res_output = res.output if res.output else {"error": res.error}
                 task.status = TaskStatus.completed
-                task.completed_at = datetime.now(timezone.utc)
+                task.completed_at = datetime.now(UTC)
                 await db.commit()
         else:
             from app.agents.orchestrator.service import dispatch_agent
+
             agent_str = task.agent_type.value if hasattr(task.agent_type, "value") else str(task.agent_type)
             res = await dispatch_agent(agent_str, str(user.id), task.input, db)
             task.output = res
             task.status = TaskStatus.completed
-            task.completed_at = datetime.now(timezone.utc)
+            task.completed_at = datetime.now(UTC)
             await db.commit()
-            
+
         return {"status": "success", "message": f"Task {id} retried successfully"}
     except Exception as e:
         task.status = TaskStatus.failed
         task.error = str(e)
-        task.completed_at = datetime.now(timezone.utc)
+        task.completed_at = datetime.now(UTC)
         await db.commit()
         raise HTTPException(status_code=500, detail=f"Retry failed: {str(e)}")
 
@@ -272,9 +263,7 @@ async def cancel_task(
     db: AsyncSession = Depends(get_db),
 ):
     """Cancel a running or queued agent task."""
-    result = await db.execute(
-        select(AgentTask).where(AgentTask.id == id, AgentTask.user_id == user.id)
-    )
+    result = await db.execute(select(AgentTask).where(AgentTask.id == id, AgentTask.user_id == user.id))
     task = result.scalar_one_or_none()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -282,13 +271,11 @@ async def cancel_task(
     if task.status in (TaskStatus.queued, TaskStatus.running):
         task.status = TaskStatus.failed
         task.error = "Cancelled by user"
-        task.completed_at = datetime.now(timezone.utc)
+        task.completed_at = datetime.now(UTC)
         await db.commit()
         return {"status": "success", "message": f"Task {id} cancelled"}
     else:
         return {"status": "ignored", "message": f"Task {id} is not running"}
-
-
 
 
 @router.post("/monitor/run", response_model=PlannerRunResponse, status_code=202)
@@ -336,15 +323,20 @@ async def interview_prep(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-
     # Input validation
     if not data.company or not isinstance(data.company, str) or len(data.company.strip()) < 2:
-        raise HTTPException(status_code=422, detail="Company name must be a non-empty string with at least 2 characters")
-    
+        raise HTTPException(
+            status_code=422, detail="Company name must be a non-empty string with at least 2 characters"
+        )
+
     if not data.role or not isinstance(data.role, str) or len(data.role.strip()) < 2:
         raise HTTPException(status_code=422, detail="Role must be a non-empty string with at least 2 characters")
-    
-    if not data.type or not isinstance(data.type, str) or data.type not in ["behavioral", "technical", "system", "mixed"]:
+
+    if (
+        not data.type
+        or not isinstance(data.type, str)
+        or data.type not in ["behavioral", "technical", "system", "mixed"]
+    ):
         raise HTTPException(status_code=422, detail="Type must be one of: behavioral, technical, system, mixed")
 
     params = data.model_dump()
@@ -377,13 +369,11 @@ async def interview_prep(
     except Exception as e:
         logger.error("Interview prep failed for user %s: %s", user.id, str(e))
         # Clean up task if it was created
-        if 'task' in locals():
+        if "task" in locals():
             task.status = TaskStatus.failed
             task.error = str(e)
             await db.commit()
-        await create_notification(
-            db, user.id, title="Interview prep failed", body=str(e)[:200], type="error"
-        )
+        await create_notification(db, user.id, title="Interview prep failed", body=str(e)[:200], type="error")
         raise HTTPException(status_code=500, detail=f"Interview preparation failed: {str(e)}")
 
 
@@ -397,7 +387,9 @@ async def research(
 
     # Input validation
     if not data.company or not isinstance(data.company, str) or len(data.company.strip()) < 2:
-        raise HTTPException(status_code=422, detail="Company name must be a non-empty string with at least 2 characters")
+        raise HTTPException(
+            status_code=422, detail="Company name must be a non-empty string with at least 2 characters"
+        )
 
     params = data.model_dump()
     # Map frontend's "company" to backend's "query"
@@ -429,13 +421,11 @@ async def research(
     except Exception as e:
         logger.error("Research failed for user %s: %s", user.id, str(e))
         # Clean up task if it was created
-        if 'task' in locals():
+        if "task" in locals():
             task.status = TaskStatus.failed
             task.error = str(e)
             await db.commit()
-        await create_notification(
-            db, user.id, title="Research failed", body=str(e)[:200], type="error"
-        )
+        await create_notification(db, user.id, title="Research failed", body=str(e)[:200], type="error")
         raise HTTPException(status_code=500, detail=f"Research failed: {str(e)}")
 
 
@@ -445,11 +435,12 @@ async def cover_letter(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-
     # Input validation
     if not data.company or not isinstance(data.company, str) or len(data.company.strip()) < 2:
-        raise HTTPException(status_code=422, detail="Company name must be a non-empty string with at least 2 characters")
-    
+        raise HTTPException(
+            status_code=422, detail="Company name must be a non-empty string with at least 2 characters"
+        )
+
     if not data.role or not isinstance(data.role, str) or len(data.role.strip()) < 2:
         raise HTTPException(status_code=422, detail="Role must be a non-empty string with at least 2 characters")
 
@@ -478,7 +469,7 @@ async def cover_letter(
     except Exception as e:
         logger.error("Cover letter generation failed for user %s: %s", user.id, str(e))
         # Clean up task if it was created
-        if 'task' in locals():
+        if "task" in locals():
             task.status = TaskStatus.failed
             task.error = str(e)
             await db.commit()
@@ -498,7 +489,6 @@ async def resume_tailor(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-
     # Input validation
     if not data.role_type or not isinstance(data.role_type, str) or len(data.role_type.strip()) < 2:
         raise HTTPException(status_code=422, detail="Role type must be a non-empty string with at least 2 characters")
@@ -531,7 +521,7 @@ async def resume_tailor(
     except Exception as e:
         logger.error("Resume tailoring failed for user %s: %s", user.id, str(e))
         # Clean up task if it was created
-        if 'task' in locals():
+        if "task" in locals():
             task.status = TaskStatus.failed
             task.error = str(e)
             await db.commit()
@@ -551,14 +541,15 @@ async def career_guidance(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-
     # Input validation
     if not data.career_goal or not isinstance(data.career_goal, str) or len(data.career_goal.strip()) < 3:
         raise HTTPException(status_code=422, detail="Career goal must be a non-empty string with at least 3 characters")
-    
+
     if not data.current_role or not isinstance(data.current_role, str) or len(data.current_role.strip()) < 2:
-        raise HTTPException(status_code=422, detail="Current role must be a non-empty string with at least 2 characters")
-    
+        raise HTTPException(
+            status_code=422, detail="Current role must be a non-empty string with at least 2 characters"
+        )
+
     if not data.target_role or not isinstance(data.target_role, str) or len(data.target_role.strip()) < 2:
         raise HTTPException(status_code=422, detail="Target role must be a non-empty string with at least 2 characters")
 
@@ -587,13 +578,11 @@ async def career_guidance(
     except Exception as e:
         logger.error("Career guidance failed for user %s: %s", user.id, str(e))
         # Clean up task if it was created
-        if 'task' in locals():
+        if "task" in locals():
             task.status = TaskStatus.failed
             task.error = str(e)
             await db.commit()
-        await create_notification(
-            db, user.id, title="Career guidance failed", body=str(e)[:200], type="error"
-        )
+        await create_notification(db, user.id, title="Career guidance failed", body=str(e)[:200], type="error")
         raise HTTPException(status_code=500, detail=f"Career guidance failed: {str(e)}")
 
 
@@ -603,13 +592,9 @@ async def networking_outreach(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-
     # Input validation
     if not data.target_companies or not isinstance(data.target_companies, list) or len(data.target_companies) == 0:
         raise HTTPException(status_code=422, detail="Target companies must be a non-empty list")
-    
-    if not data.message_purpose or not isinstance(data.message_purpose, str) or len(data.message_purpose.strip()) < 3:
-        raise HTTPException(status_code=422, detail="Message purpose must be a non-empty string with at least 3 characters")
 
     try:
         task = AgentTask(
@@ -636,7 +621,7 @@ async def networking_outreach(
     except Exception as e:
         logger.error("Networking outreach failed for user %s: %s", user.id, str(e))
         # Clean up task if it was created
-        if 'task' in locals():
+        if "task" in locals():
             task.status = TaskStatus.failed
             task.error = str(e)
             await db.commit()
@@ -661,7 +646,7 @@ async def internship_discover(
     # Input validation
     if not data.query or not isinstance(data.query, str) or len(data.query.strip()) < 2:
         raise HTTPException(status_code=422, detail="Query must be a non-empty string with at least 2 characters")
-    
+
     if not data.location or not isinstance(data.location, str) or len(data.location.strip()) < 2:
         raise HTTPException(status_code=422, detail="Location must be a non-empty string with at least 2 characters")
 
@@ -690,7 +675,7 @@ async def internship_discover(
     except Exception as e:
         logger.error("Internship discovery failed for user %s: %s", user.id, str(e))
         # Clean up task if it was created
-        if 'task' in locals():
+        if "task" in locals():
             task.status = TaskStatus.failed
             task.error = str(e)
             await db.commit()
@@ -715,7 +700,7 @@ async def job_discover(
     # Input validation
     if not data.query or not isinstance(data.query, str) or len(data.query.strip()) < 2:
         raise HTTPException(status_code=422, detail="Query must be a non-empty string with at least 2 characters")
-    
+
     if not data.location or not isinstance(data.location, str) or len(data.location.strip()) < 2:
         raise HTTPException(status_code=422, detail="Location must be a non-empty string with at least 2 characters")
 
@@ -744,7 +729,7 @@ async def job_discover(
     except Exception as e:
         logger.error("Job discovery failed for user %s: %s", user.id, str(e))
         # Clean up task if it was created
-        if 'task' in locals():
+        if "task" in locals():
             task.status = TaskStatus.failed
             task.error = str(e)
             await db.commit()
@@ -806,19 +791,24 @@ async def create_interview_session(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    from app.models.user import MemoryEntry
     import uuid
+
+    from app.models.user import MemoryEntry
 
     # Input validation
     if not data.company or not isinstance(data.company, str) or len(data.company.strip()) < 2:
         raise HTTPException(status_code=422, detail="Company must be a non-empty string with at least 2 characters")
-    
-    if not data.type or not isinstance(data.type, str) or data.type not in ["behavioral", "technical", "system", "mixed"]:
+
+    if (
+        not data.type
+        or not isinstance(data.type, str)
+        or data.type not in ["behavioral", "technical", "system", "mixed"]
+    ):
         raise HTTPException(status_code=422, detail="Type must be one of: behavioral, technical, system, mixed")
-    
+
     if not isinstance(data.score, (int, float)) or data.score < 0 or data.score > 100:
         raise HTTPException(status_code=422, detail="Score must be a number between 0 and 100")
-    
+
     if not isinstance(data.duration, (int, float)) or data.duration < 0:
         raise HTTPException(status_code=422, detail="Duration must be a non-negative number")
 
@@ -834,7 +824,7 @@ async def create_interview_session(
             "id": str(uuid.uuid4())[:8],
             "company": data.company,
             "type": data.type,
-            "date": datetime.now(timezone.utc).strftime("%b %d"),
+            "date": datetime.now(UTC).strftime("%b %d"),
             "score": data.score,
             "duration": data.duration,
         }
@@ -865,17 +855,16 @@ async def interview_feedback(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-
     # Input validation
     if not data.question or not isinstance(data.question, str) or len(data.question.strip()) < 3:
         raise HTTPException(status_code=422, detail="Question must be a non-empty string with at least 3 characters")
-    
+
     if not data.answer or not isinstance(data.answer, str) or len(data.answer.strip()) < 3:
         raise HTTPException(status_code=422, detail="Answer must be a non-empty string with at least 3 characters")
-    
+
     if not data.company or not isinstance(data.company, str) or len(data.company.strip()) < 2:
         raise HTTPException(status_code=422, detail="Company must be a non-empty string with at least 2 characters")
-    
+
     if not data.role or not isinstance(data.role, str) or len(data.role.strip()) < 2:
         raise HTTPException(status_code=422, detail="Role must be a non-empty string with at least 2 characters")
 

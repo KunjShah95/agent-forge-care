@@ -1,4 +1,3 @@
-from typing import Optional
 from pydantic import BaseModel, Field
 
 
@@ -34,63 +33,65 @@ class EvaluationData(BaseModel):
 
 
 class ResumeBasics(BaseModel):
-    name: Optional[str] = None
-    email: Optional[str] = None
-    phone: Optional[str] = None
-    url: Optional[str] = None
-    summary: Optional[str] = None
-    location: Optional[str] = None
-    profiles: Optional[list[dict]] = None
+    name: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    url: str | None = None
+    summary: str | None = None
+    location: str | None = None
+    profiles: list[dict] | None = None
 
 
 class ResumeWork(BaseModel):
-    name: Optional[str] = None
-    position: Optional[str] = None
-    url: Optional[str] = None
-    startDate: Optional[str] = None
-    endDate: Optional[str] = None
-    summary: Optional[str] = None
-    highlights: Optional[list[str]] = None
+    model_config = {"populate_by_name": True}
+    name: str | None = None
+    position: str | None = None
+    url: str | None = None
+    start_date: str | None = Field(None, alias="startDate")
+    end_date: str | None = Field(None, alias="endDate")
+    summary: str | None = None
+    highlights: list[str] | None = None
 
 
 class ResumeEducation(BaseModel):
-    institution: Optional[str] = None
-    area: Optional[str] = None
-    studyType: Optional[str] = None
-    startDate: Optional[str] = None
-    endDate: Optional[str] = None
-    score: Optional[str] = None
+    model_config = {"populate_by_name": True}
+    institution: str | None = None
+    area: str | None = None
+    study_type: str | None = Field(None, alias="studyType")
+    start_date: str | None = Field(None, alias="startDate")
+    end_date: str | None = Field(None, alias="endDate")
+    score: str | None = None
 
 
 class ResumeSkill(BaseModel):
-    name: Optional[str] = None
-    level: Optional[str] = None
-    keywords: Optional[list[str]] = None
+    name: str | None = None
+    level: str | None = None
+    keywords: list[str] | None = None
 
 
 class ResumeProject(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    url: Optional[str] = None
-    technologies: Optional[list[str]] = None
-    highlights: Optional[list[str]] = None
+    name: str | None = None
+    description: str | None = None
+    url: str | None = None
+    technologies: list[str] | None = None
+    highlights: list[str] | None = None
 
 
 class ResumeAward(BaseModel):
-    title: Optional[str] = None
-    date: Optional[str] = None
-    awarder: Optional[str] = None
-    summary: Optional[str] = None
+    title: str | None = None
+    date: str | None = None
+    awarder: str | None = None
+    summary: str | None = None
 
 
 class ExtractedResume(BaseModel):
-    basics: Optional[ResumeBasics] = None
-    work: Optional[list[ResumeWork]] = None
-    education: Optional[list[ResumeEducation]] = None
-    skills: Optional[list[ResumeSkill]] = None
-    projects: Optional[list[ResumeProject]] = None
-    awards: Optional[list[ResumeAward]] = None
-    raw_text: Optional[str] = None
+    basics: ResumeBasics | None = None
+    work: list[ResumeWork] | None = None
+    education: list[ResumeEducation] | None = None
+    skills: list[ResumeSkill] | None = None
+    projects: list[ResumeProject] | None = None
+    awards: list[ResumeAward] | None = None
+    raw_text: str | None = None
 
 
 class ATSScore(BaseModel):
@@ -100,8 +101,8 @@ class ATSScore(BaseModel):
     matched_count: int
     missing_count: int
     suggestions: list[str]
-    experience_years: Optional[int] = None
-    resume_experience_years: Optional[int] = None
+    experience_years: int | None = None
+    resume_experience_years: int | None = None
 
 
 class JDMatchResult(BaseModel):
@@ -130,6 +131,6 @@ class PipelineResult(BaseModel):
     evaluation: EvaluationData
     improvements: list[ImprovementItem]
     live_demo_status: list[dict]
-    github_summary: Optional[dict] = None
-    portfolio_summary: Optional[dict] = None
-    report_html: Optional[str] = None
+    github_summary: dict | None = None
+    portfolio_summary: dict | None = None
+    report_html: str | None = None

@@ -165,7 +165,7 @@ export default function InterviewPrep() {
       "ML/AI": { done: 0, total: 6, score: 0 },
     };
     for (const s of sessions) {
-      const cat = s.type === "behavioral" ? "Behavioral" : s.type === "technical" ? "Technical" : s.type === "system_design" ? "System Design" : "ML/AI";
+      const cat = s.type === "behavioral" ? "Behavioral" : s.type === "technical" ? "Technical" : s.type === "system" ? "System Design" : "ML/AI";
       if (catMap[cat]) {
         catMap[cat].done++;
         catMap[cat].score = s.score || catMap[cat].score;
@@ -395,7 +395,7 @@ export default function InterviewPrep() {
                   <Badge variant="outline" className="text-[10px]">{s.type}</Badge>
                 </div>
                 <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                  <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {s.duration}</span>
+                  <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {s.duration} min</span>
                   <span className="flex items-center gap-1"><Trophy className="h-3 w-3" /> {s.score}%</span>
                   <span className="ml-auto">{s.date}</span>
                 </div>
@@ -436,7 +436,8 @@ export default function InterviewPrep() {
                 <SelectContent>
                   <SelectItem value="behavioral">Behavioral</SelectItem>
                   <SelectItem value="technical">Technical</SelectItem>
-                  <SelectItem value="system_design">System Design</SelectItem>
+                  <SelectItem value="system">System Design</SelectItem>
+                  <SelectItem value="mixed">Mixed</SelectItem>
                 </SelectContent>
               </Select>
             </div>

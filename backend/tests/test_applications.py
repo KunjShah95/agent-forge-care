@@ -1,18 +1,14 @@
-import pytest
-import uuid
-from datetime import date
 from unittest.mock import AsyncMock
+
+import pytest
 
 from tests.conftest import (
     MockResult,
+    _uid,
     make_application,
     make_opportunity,
     setup_mock_execute,
-    TEST_USER_ID,
-    OTHER_USER_ID,
-    _uid,
 )
-from app.models.user import ApplicationStage
 
 
 @pytest.mark.asyncio

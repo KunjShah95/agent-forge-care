@@ -6,9 +6,9 @@ using an LLM (when available), dispatches each to the appropriate
 specialist agent, and collects results.
 """
 
-from typing import TypedDict
 import json
 import logging
+from typing import TypedDict
 
 from app.services.model_manager import get_completion_llm
 
@@ -17,6 +17,7 @@ logger = logging.getLogger("agentforge.planner")
 
 class Task(TypedDict):
     """A single task unit for a specialist agent."""
+
     agent: str  # internship, job, research, resume, interview, networking, monitor
     action: str
     params: dict
@@ -171,94 +172,119 @@ def _keyword_decompose(goal: str, profile: dict, memory_context: dict) -> list[T
             locations.append(loc.title())
 
     # Extract skills mention
-    skill_keywords = ["python", "typescript", "react", "machine learning", "ai", "nlp",
-                      "pytorch", "tensorflow", "full-stack", "backend", "frontend"]
+    skill_keywords = [
+        "python",
+        "typescript",
+        "react",
+        "machine learning",
+        "ai",
+        "nlp",
+        "pytorch",
+        "tensorflow",
+        "full-stack",
+        "backend",
+        "frontend",
+    ]
     mentioned_skills = [s for s in skill_keywords if s in goal_lower]
 
     # Build task list
     if has_internship:
-        tasks.append(Task(
-            agent="internship",
-            action="Search for internship opportunities",
-            params={
-                "query": goal,
-                "location": locations[0] if locations else None,
-                "skills": mentioned_skills or profile.get("skills", []),
-                "limit": 20,
-            },
-            priority=1,
-        ))
+        tasks.append(
+            Task(
+                agent="internship",
+                action="Search for internship opportunities",
+                params={
+                    "query": goal,
+                    "location": locations[0] if locations else None,
+                    "skills": mentioned_skills or profile.get("skills", []),
+                    "limit": 20,
+                },
+                priority=1,
+            )
+        )
 
     if has_job:
-        tasks.append(Task(
-            agent="job",
-            action="Search for job opportunities",
-            params={
-                "query": goal,
-                "location": locations[0] if locations else None,
-                "skills": mentioned_skills or profile.get("skills", []),
-                "limit": 20,
-            },
-            priority=1,
-        ))
+        tasks.append(
+            Task(
+                agent="job",
+                action="Search for job opportunities",
+                params={
+                    "query": goal,
+                    "location": locations[0] if locations else None,
+                    "skills": mentioned_skills or profile.get("skills", []),
+                    "limit": 20,
+                },
+                priority=1,
+            )
+        )
 
     if has_research:
-        tasks.append(Task(
-            agent="research",
-            action="Research companies and interview insights",
-            params={
-                "query": goal,
-                "topics": mentioned_skills,
-            },
-            priority=2,
-        ))
+        tasks.append(
+            Task(
+                agent="research",
+                action="Research companies and interview insights",
+                params={
+                    "query": goal,
+                    "topics": mentioned_skills,
+                },
+                priority=2,
+            )
+        )
 
     if has_resume:
-        tasks.append(Task(
-            agent="resume",
-            action="Tailor resume for target roles",
-            params={
-                "role_type": "internship" if has_internship else "job",
-                "skills": mentioned_skills,
-                "target_companies": [],
-            },
-            priority=2,
-        ))
+        tasks.append(
+            Task(
+                agent="resume",
+                action="Tailor resume for target roles",
+                params={
+                    "role_type": "internship" if has_internship else "job",
+                    "skills": mentioned_skills,
+                    "target_companies": [],
+                },
+                priority=2,
+            )
+        )
 
     if has_interview:
-        tasks.append(Task(
-            agent="interview",
-            action="Generate interview preparation materials",
-            params={
-                "role_type": "internship" if has_internship else "job",
-                "skills": mentioned_skills,
-                "question_count": 10,
-            },
-            priority=3,
-        ))
+        tasks.append(
+            Task(
+                agent="interview",
+                action="Generate interview preparation materials",
+                params={
+                    "role_type": "internship" if has_internship else "job",
+                    "skills": mentioned_skills,
+                    "question_count": 10,
+                },
+                priority=3,
+            )
+        )
 
     if has_networking:
-        tasks.append(Task(
-            agent="networking",
-            action="Draft networking outreach messages",
-            params={
-                "target_companies": [],
-                "location": locations[0] if locations else None,
-            },
-            priority=3,
-        ))
+        tasks.append(
+            Task(
+                agent="networking",
+                action="Draft networking outreach messages",
+                params={
+                    "target_companies": [],
+                    "location": locations[0] if locations else None,
+                },
+                priority=3,
+            )
+        )
 
     # If no specific intent detected, do a general scan
     if not tasks:
-        tasks.append(Task(
-            agent="monitor",
-            action="General opportunity scan",
-            params={
-                "query": goal,
-                "limit": 10,
-            },
-            priority=1,
-        ))
+        tasks.append(
+            Task(
+                agent="monitor",
+                action="General opportunity scan",
+                params={
+                    "query": goal,
+                    "limit": 10,
+                },
+                priority=1,
+            )
+        )
 
     return tasks
 
@@ -272,10 +298,10 @@ async def decompose_goal_with_llm(goal: str, profile: dict, memory_context: dict
     if not goal or not isinstance(goal, str) or len(goal.strip()) < 3:
         logger.warning("Empty or invalid goal received: %r — returning empty task list", goal)
         return []
-    
+
     if not isinstance(profile, dict):
         profile = {}
-    
+
     if not isinstance(memory_context, dict):
         memory_context = {}
 

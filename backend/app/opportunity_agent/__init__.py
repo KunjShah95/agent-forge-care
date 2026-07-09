@@ -1,11 +1,11 @@
-from app.opportunity_agent.service import OpportunityAgentService
 from app.opportunity_agent.schemas import (
-    OpportunityFeedback,
     OpportunityAnalysis,
-    ScoredOpportunityItem,
+    OpportunityFeedback,
     OpportunityResult,
     OpportunityScanResult,
+    ScoredOpportunityItem,
 )
+from app.opportunity_agent.service import OpportunityAgentService
 
 __all__ = [
     "OpportunityAgentService",

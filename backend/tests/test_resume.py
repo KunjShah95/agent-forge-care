@@ -1,18 +1,15 @@
 import io
-import pytest
-import pytest_asyncio
-from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
+from app.models.user import ProfileSkill, Skill
 from tests.conftest import (
-    TEST_USER_ID,
     MockResult,
-    make_user,
     make_memory_entry,
     make_profile,
     setup_mock_execute,
 )
-from app.models.user import MemoryEntry, Profile, ProfileSkill, Skill
 
 
 @pytest.mark.asyncio
@@ -66,7 +63,9 @@ async def test_upload_resume_success(auth_client, mock_db):
     mock_db.execute = AsyncMock(return_value=mock_result)
 
     # Mock the hiring agent pdf extractor to raise (trigger pypdf fallback)
-    with patch("app.hiring_agent.pdf_extractor.extract_pdf_text", side_effect=Exception("Mock: hiring agent unavailable")):
+    with patch(
+        "app.hiring_agent.pdf_extractor.extract_pdf_text", side_effect=Exception("Mock: hiring agent unavailable")
+    ):
         with patch("app.api.v1.resume.pypdf.PdfReader") as mock_pdf_reader:
             mock_page = MagicMock()
             mock_page.extract_text.return_value = "John Doe\nSoftware Engineer\nExperience: Built APIs"

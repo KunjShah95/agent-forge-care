@@ -1,15 +1,15 @@
-import pytest
 import uuid
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+
+from app.models.user import Skill
 from tests.conftest import (
     MockResult,
-    make_profile,
-    make_user,
-    setup_mock_execute,
     _uid,
+    make_profile,
+    setup_mock_execute,
 )
-from app.models.user import Profile, ProfileSkill, Skill
 
 
 @pytest.mark.asyncio

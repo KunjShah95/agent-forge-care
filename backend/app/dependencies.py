@@ -1,17 +1,18 @@
 import time
+
 import httpx
-from fastapi import Depends, HTTPException, Request, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from sqlalchemy.ext.asyncio import AsyncSession
-from jose import jwt
-from cryptography.x509 import load_pem_x509_certificate
+import redis.asyncio as aioredis
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
-import redis.asyncio as aioredis
+from cryptography.x509 import load_pem_x509_certificate
+from fastapi import Depends, HTTPException, Request, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jose import jwt
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database import get_db
-from app.models.user import User, Profile
+from app.models.user import Profile, User
 
 security = HTTPBearer(auto_error=False)
 
@@ -160,9 +161,7 @@ class RedisRateLimiter:
             )
         return self._redis
 
-    async def is_rate_limited(
-        self, key: str, max_requests: int, window_seconds: int
-    ) -> bool:
+    async def is_rate_limited(self, key: str, max_requests: int, window_seconds: int) -> bool:
         r = await self._get_redis()
         now = time.time()
         window_start = now - window_seconds
@@ -220,13 +219,28 @@ def _in_memory_is_rate_limited(key: str, max_requests: int, window_seconds: int)
 # ─── Helpers ────────────────────────────────────────────────
 
 
+def _verify_local_token(token: str) -> dict:
+    """Verify a locally-issued HS256 JWT and return its payload."""
+    from jose import JWTError, jwt as jose_jwt
+    try:
+        payload = jose_jwt.decode(
+            token,
+            settings.jwt_secret,
+            algorithms=[settings.jwt_algorithm],
+        )
+        if payload.get("type") != "local":
+            raise ValueError("Not a local token")
+        return payload
+    except JWTError as e:
+        raise ValueError(f"Local token invalid: {e}")
+
+
 async def _resolve_user_from_token(
     credentials: HTTPAuthorizationCredentials | None,
     db: AsyncSession,
 ) -> tuple[User, dict]:
     """
-    Verify the Firebase token, resolve/create the user, and return (user, payload).
-    Shared between get_current_user and get_current_user_unverified.
+    Verify token (local JWT first, then Firebase) and return (user, payload).
     """
     if credentials is None:
         raise HTTPException(
@@ -235,6 +249,21 @@ async def _resolve_user_from_token(
         )
 
     token = credentials.credentials
+    from sqlalchemy import select
+
+    # ── Try local JWT first ──────────────────────────────────
+    try:
+        payload = _verify_local_token(token)
+        user_id = payload.get("sub")
+        result = await db.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
+        if user is None:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+        return user, payload
+    except (ValueError, Exception):
+        pass  # fall through to Firebase
+
+    # ── Try Firebase token ───────────────────────────────────
     try:
         payload = verify_firebase_token(token)
     except Exception:
@@ -242,8 +271,6 @@ async def _resolve_user_from_token(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
         )
-
-    from sqlalchemy import select
 
     firebase_uid = payload.get("sub", "")
     email = payload.get("email", "")
@@ -267,7 +294,6 @@ async def _resolve_user_from_token(
         )
         db.add(user)
         await db.flush()
-
         profile = Profile(user_id=user.id, is_onboarded=False)
         db.add(profile)
         await db.flush()
@@ -297,9 +323,7 @@ async def get_current_user(
     if not email_verified:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=(
-                "Email not verified. Please verify your email address before using this feature."
-            ),
+            detail=("Email not verified. Please verify your email address before using this feature."),
             headers={"X-Email-Verification-Required": "true"},
         )
 
@@ -327,9 +351,7 @@ async def get_current_user_unverified(
 
 
 async def get_optional_user(
-    credentials: HTTPAuthorizationCredentials | None = Depends(
-        HTTPBearer(auto_error=False)
-    ),
+    credentials: HTTPAuthorizationCredentials | None = Depends(HTTPBearer(auto_error=False)),
     db: AsyncSession = Depends(get_db),
 ) -> User | None:
     """Optionally authenticate — returns None if no token."""

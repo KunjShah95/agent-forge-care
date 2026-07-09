@@ -1,30 +1,32 @@
 import asyncio
 import logging
-import time
 import uuid
-from datetime import datetime, timezone
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from datetime import UTC, datetime
+from typing import Any
 
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.schemas import AgentResult, AgentStatus
 from app.agents.base import BaseAgent
-from app.agents.planner import decompose_goal_with_llm
-from app.agents.resume_agent import ResumeAgent
-from app.agents.interview_agent import InterviewAgent
-from app.agents.networking_agent import NetworkingAgent
-from app.agents.monitor_agent import MonitorAgent
 from app.agents.guidance_agent import GuidanceAgent
 from app.agents.internship_agent import InternshipAgent
+from app.agents.interview_agent import InterviewAgent
 from app.agents.job_agent import JobAgent
+from app.agents.monitor_agent import MonitorAgent
+from app.agents.networking_agent import NetworkingAgent
+from app.agents.orchestrator.schemas import TaskDef
+from app.agents.planner import decompose_goal_with_llm
+from app.agents.discovery_agent import DiscoveryAgent
 from app.agents.research_agent import ResearchAgent
-from app.agents.orchestrator.schemas import OrchestratorResult, TaskDef
+from app.agents.resume_agent import ResumeAgent
+from app.agents.schemas import AgentResult, AgentStatus
 from app.database import async_session_factory
-from app.models.user import AgentTask as AgentTaskModel, TaskStatus, PlannerGoal, Opportunity, Application
+from app.models.user import AgentTask as AgentTaskModel
+from app.models.user import Application, Opportunity, PlannerGoal, TaskStatus
 from app.services.memory_service import MemoryService
-from app.services.profile_service import ProfileService
 from app.services.notification_service import create_notification
+from app.services.profile_service import ProfileService
 
 logger = logging.getLogger("agentforge.orchestrator")
 
@@ -35,6 +37,7 @@ AGENT_TIMEOUT_SECS = 120
 
 def _gen_id() -> str:
     return str(uuid.uuid4())
+
 
 # ── Single source of truth for agent registries ─────────────
 
@@ -47,6 +50,7 @@ AGENT_REGISTRY: dict[str, Any] = {
     "internship": lambda db, uid: InternshipAgent(db, uid),
     "job": lambda db, uid: JobAgent(db, uid),
     "research": lambda db, uid: ResearchAgent(db, uid),
+    "discovery": lambda db, uid: DiscoveryAgent(db, uid),
 }
 
 
@@ -58,20 +62,26 @@ async def _run_with_retry(coro_factory: Callable[[], Any], label: str) -> Any:
     for attempt in range(MAX_RETRIES + 1):
         try:
             return await asyncio.wait_for(coro_factory(), timeout=AGENT_TIMEOUT_SECS)
-        except asyncio.TimeoutError as e:
+        except TimeoutError as e:
             last_exc = e
             logger.warning(
                 "%s timed out (%ds) attempt %d/%d",
-                label, AGENT_TIMEOUT_SECS, attempt + 1, MAX_RETRIES + 1,
+                label,
+                AGENT_TIMEOUT_SECS,
+                attempt + 1,
+                MAX_RETRIES + 1,
             )
         except Exception as e:
             last_exc = e
             logger.warning(
                 "%s failed (attempt %d/%d): %s",
-                label, attempt + 1, MAX_RETRIES + 1, e,
+                label,
+                attempt + 1,
+                MAX_RETRIES + 1,
+                e,
             )
         if attempt < MAX_RETRIES:
-            await asyncio.sleep(RETRY_DELAY_SECS * (2 ** attempt))
+            await asyncio.sleep(RETRY_DELAY_SECS * (2**attempt))
     raise last_exc
 
 
@@ -144,14 +154,9 @@ async def _score_agent_output(agent_type: str, result: dict, goal: str, profile_
 
     scores["total"] = sum(v for k, v in scores.items() if k != "total")
     weaknesses = [
-        f"{dim} is low ({sc}/10)"
-        for dim, sc in scores.items()
-        if dim not in ("total", "feedback") and sc < 5
+        f"{dim} is low ({sc}/10)" for dim, sc in scores.items() if dim not in ("total", "feedback") and sc < 5
     ]
-    scores["feedback"] = (
-        "; ".join(weaknesses) if weaknesses
-        else f"{agent_type}: Output quality acceptable"
-    )
+    scores["feedback"] = "; ".join(weaknesses) if weaknesses else f"{agent_type}: Output quality acceptable"
     return scores
 
 
@@ -220,7 +225,9 @@ class OrchestratorAgent(BaseAgent):
         subtasks = await decompose_goal_with_llm(goal, profile_dict, memory_context)
         if not subtasks:
             return {
-                "run_id": self.run_id, "goal": goal, "status": "completed",
+                "run_id": self.run_id,
+                "goal": goal,
+                "status": "completed",
                 "results": {
                     "guidance": {"message": "No specific tasks identified", "goal": goal},
                 },
@@ -257,10 +264,7 @@ class OrchestratorAgent(BaseAgent):
         for k, v in self.results.items():
             flat[k] = {
                 "status": v.status,
-                "message": (
-                    (v.output or {}).get("message", str(v.output)[:200])
-                    if v.output else v.error
-                ),
+                "message": ((v.output or {}).get("message", str(v.output)[:200]) if v.output else v.error),
                 "duration_ms": v.duration_ms,
             }
 
@@ -270,17 +274,15 @@ class OrchestratorAgent(BaseAgent):
             "status": "completed",
             "results": flat,
             "reflection_scores": reflection_scores,
-            "detail": {
-                k: v.output
-                for k, v in self.results.items()
-                if v.output and v.status == AgentStatus.COMPLETED
-            },
+            "detail": {k: v.output for k, v in self.results.items() if v.output and v.status == AgentStatus.COMPLETED},
         }
 
     # ── Parallel Dispatch ────────────────────────────────────
 
     async def _dispatch_parallel(
-        self, task_defs: list[TaskDef], memory_context: dict,
+        self,
+        task_defs: list[TaskDef],
+        memory_context: dict,
     ) -> None:
         coros = []
         for td in task_defs:
@@ -301,19 +303,23 @@ class OrchestratorAgent(BaseAgent):
                         self.results[k] = v
                     elif isinstance(v, dict) and "error" not in v:
                         self.results[k] = AgentResult(
-                            agent_type=k, status=AgentStatus.COMPLETED,
+                            agent_type=k,
+                            status=AgentStatus.COMPLETED,
                             output=v,
                         )
                     elif isinstance(v, dict) and "error" in v:
                         self.results[k] = AgentResult(
-                            agent_type=k, status=AgentStatus.FAILED,
+                            agent_type=k,
+                            status=AgentStatus.FAILED,
                             error=v["error"],
                         )
 
     # ── Sequential Dispatch ──────────────────────────────────
 
     async def _dispatch_sequential(
-        self, task_defs: list[TaskDef], memory_context: dict,
+        self,
+        task_defs: list[TaskDef],
+        memory_context: dict,
     ) -> None:
         for td in task_defs:
             agent_type = td.agent
@@ -328,7 +334,8 @@ class OrchestratorAgent(BaseAgent):
                 self.results[agent_type] = agent_result
             else:
                 self.results[agent_type] = AgentResult(
-                    agent_type=agent_type, status=AgentStatus.SKIPPED,
+                    agent_type=agent_type,
+                    status=AgentStatus.SKIPPED,
                     error=f"No handler for agent type: {agent_type}",
                 )
 
@@ -342,14 +349,18 @@ class OrchestratorAgent(BaseAgent):
             agent = factory(self.db, self.user_id)
             return await self._run_class_agent(agent_type, agent, td.params)
         return AgentResult(
-            agent_type=agent_type, status=AgentStatus.SKIPPED,
+            agent_type=agent_type,
+            status=AgentStatus.SKIPPED,
             error=f"No handler for agent type: {agent_type}",
         )
 
     # ── Agent Execution Wrappers ─────────────────────────────
 
     async def _run_class_agent(
-        self, agent_type: str, agent: BaseAgent, params: dict,
+        self,
+        agent_type: str,
+        agent: BaseAgent,
+        params: dict,
     ) -> AgentResult:
         try:
             return await _run_with_retry(
@@ -359,7 +370,9 @@ class OrchestratorAgent(BaseAgent):
         except Exception as e:
             logger.exception("Agent %s permanently failed: %s", agent_type, e)
             return AgentResult(
-                agent_type=agent_type, status=AgentStatus.FAILED, error=str(e),
+                agent_type=agent_type,
+                status=AgentStatus.FAILED,
+                error=str(e),
             )
 
     # ── Persistence Helpers ──────────────────────────────────
@@ -367,8 +380,10 @@ class OrchestratorAgent(BaseAgent):
     async def _persist_plan(self, goal: str, tasks: list[TaskDef]) -> None:
         try:
             pg = PlannerGoal(
-                user_id=self.user_id, goal_text=goal,
-                plan=[dict(t) for t in tasks], status="running",
+                user_id=self.user_id,
+                goal_text=goal,
+                plan=[dict(t) for t in tasks],
+                status="running",
             )
             self.db.add(pg)
             await self.db.flush()
@@ -379,13 +394,11 @@ class OrchestratorAgent(BaseAgent):
         try:
             for agent_type, result in self.results.items():
                 task = AgentTaskModel(
-                    user_id=self.user_id, agent_type=agent_type,
-                    input={}, output=result.output or {},
-                    status=(
-                        TaskStatus.completed
-                        if result.status == AgentStatus.COMPLETED
-                        else TaskStatus.failed
-                    ),
+                    user_id=self.user_id,
+                    agent_type=agent_type,
+                    input={},
+                    output=result.output or {},
+                    status=(TaskStatus.completed if result.status == AgentStatus.COMPLETED else TaskStatus.failed),
                     error=result.error,
                 )
                 self.db.add(task)
@@ -411,8 +424,12 @@ async def run_opportunity_scan(user_id: str, query: str | None = None) -> str:
 
     async with async_session_factory() as db:
         task = AgentTaskModel(
-            id=task_id, user_id=user_id, agent_type="monitor",
-            input=params, status=TaskStatus.running, started_at=datetime.now(timezone.utc),
+            id=task_id,
+            user_id=user_id,
+            agent_type="monitor",
+            input=params,
+            status=TaskStatus.running,
+            started_at=datetime.now(UTC),
         )
         db.add(task)
         await db.flush()
@@ -422,9 +439,10 @@ async def run_opportunity_scan(user_id: str, query: str | None = None) -> str:
             result = await agent.run(params)
             task.status = TaskStatus.completed
             task.output = result.output or {}
-            task.completed_at = datetime.now(timezone.utc)
+            task.completed_at = datetime.now(UTC)
             await create_notification(
-                db, user_id,
+                db,
+                user_id,
                 title="Opportunity scan complete",
                 body="New opportunities may be available.",
                 type="info",
@@ -432,7 +450,7 @@ async def run_opportunity_scan(user_id: str, query: str | None = None) -> str:
         except Exception as e:
             task.status = TaskStatus.failed
             task.error = str(e)
-            task.completed_at = datetime.now(timezone.utc)
+            task.completed_at = datetime.now(UTC)
             await db.rollback()
             return task_id
         await db.commit()
@@ -445,43 +463,47 @@ async def run_resume_tailoring(user_id: str, application_id: str) -> str:
 
     task_id = _gen_id()
     async with async_session_factory() as db:
-        result = await db.execute(
-            select(Application).where(Application.id == application_id)
-        )
+        result = await db.execute(select(Application).where(Application.id == application_id))
         app = result.scalar_one_or_none()
 
         task = AgentTaskModel(
-            id=task_id, user_id=user_id, agent_type="resume",
+            id=task_id,
+            user_id=user_id,
+            agent_type="resume",
             input={"application_id": application_id},
-            status=TaskStatus.running, started_at=datetime.now(timezone.utc),
+            status=TaskStatus.running,
+            started_at=datetime.now(UTC),
         )
 
         if app:
-            opp_result = await db.execute(
-                select(Opportunity).where(Opportunity.id == app.opportunity_id)
-            )
+            opp_result = await db.execute(select(Opportunity).where(Opportunity.id == app.opportunity_id))
             opp = opp_result.scalar_one_or_none()
             agent = ResumeAgent(db, user_id)
-            agent_result = await agent.run({
-                "role_type": opp.type.lower() if opp else "internship",
-                "target_company": opp.company if opp else None,
-                "skills": opp.skills_required if opp else [],
-                "application_id": application_id,
-            })
+            agent_result = await agent.run(
+                {
+                    "role_type": opp.type.lower() if opp else "internship",
+                    "target_company": opp.company if opp else None,
+                    "skills": opp.skills_required if opp else [],
+                    "application_id": application_id,
+                }
+            )
             task.output = agent_result.output or {}
         else:
             task.output = {"error": "Application not found"}
 
         task.status = TaskStatus.completed
-        task.completed_at = datetime.now(timezone.utc)
+        task.completed_at = datetime.now(UTC)
         db.add(task)
         await db.commit()
     return task_id
 
 
 async def dispatch_agent(
-    agent_type: str, user_id: str, params: dict,
-    db: AsyncSession, memory_context: dict | None = None,
+    agent_type: str,
+    user_id: str,
+    params: dict,
+    db: AsyncSession,
+    memory_context: dict | None = None,
 ) -> dict:
     """Dispatch a single agent via the AGENT_REGISTRY."""
     if memory_context:

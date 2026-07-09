@@ -14,11 +14,13 @@ from app.services.rerank_service import get_reranker
 
 logger = logging.getLogger("agentforge.memory")
 
+
 # Lazy imports for Qdrant — not installed in test/dev environments
 def _get_qdrant_client():
     """Get the Qdrant client, returning None if not available."""
     try:
         from app.memory.qdrant_client import get_qdrant_client as _client
+
         return _client()
     except Exception as e:
         logger.debug("Qdrant client unavailable: %s", e)
@@ -28,8 +30,9 @@ def _get_qdrant_client():
 def _get_point_types():
     """Get Qdrant model types, returning None if not available."""
     try:
-        from qdrant_client.models import PointStruct, Filter, FieldCondition, MatchValue
-        return PointStruct, Filter, FieldCondition, MatchValue
+        from qdrant_client.models import FieldCondition, Filter, MatchValue, PointStruct
+
+        return PointStruct, Filter, FieldCondition, MatchValue  # noqa: N806
     except Exception:
         return None, None, None, None
 
@@ -48,11 +51,9 @@ class AgentMemory:
 
     def _get_filter(self, collection: str = ""):
         """Create a filter for the current user."""
-        PointStruct, Filter, FieldCondition, MatchValue = _get_point_types() or (None, None, None, None)
-        if Filter and FieldCondition and MatchValue:
-            return Filter(
-                must=[FieldCondition(key="user_id", match=MatchValue(value=self.user_id))]
-            )
+        PointStruct, Filter, FieldCondition, MatchValue = _get_point_types() or (None, None, None, None)  # noqa: N806
+        if Filter and FieldCondition and MatchValue:  # noqa: N806
+            return Filter(must=[FieldCondition(key="user_id", match=MatchValue(value=self.user_id))])  # noqa: N806
         return None
 
     # ─── Vector Storage ───────────────────────────────────
@@ -71,7 +72,7 @@ class AgentMemory:
         types = _get_point_types()
         if not types[0]:
             return
-        PointStruct = types[0]
+        point_struct_cls = types[0]
 
         point_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{collection}:{text[:1000]}"))
 
@@ -84,7 +85,7 @@ class AgentMemory:
         self.client.upsert(
             collection_name=collection,
             points=[
-                PointStruct(
+                point_struct_cls(
                     id=point_id,
                     vector=vector,
                     payload=payload,
@@ -105,10 +106,8 @@ class AgentMemory:
 
         types = _get_point_types()
         if types[1]:
-            Filter, FieldCondition, MatchValue = types[1], types[2], types[3]
-            query_filter = Filter(
-                must=[FieldCondition(key="user_id", match=MatchValue(value=self.user_id))]
-            )
+            filter_cls, field_condition_cls, match_value_cls = types[1], types[2], types[3]
+            query_filter = filter_cls(must=[field_condition_cls(key="user_id", match=match_value_cls(value=self.user_id))])
         else:
             query_filter = None
 
@@ -127,12 +126,10 @@ class AgentMemory:
 
         types = _get_point_types()
         if types[1] and types[2] and types[3]:
-            Filter, FieldCondition, MatchValue = types[1], types[2], types[3]
+            filter_cls, field_condition_cls, match_value_cls = types[1], types[2], types[3]
             self.client.delete(
                 collection_name=collection,
-                points_selector=Filter(
-                    must=[FieldCondition(key="user_id", match=MatchValue(value=self.user_id))]
-                ),
+                points_selector=filter_cls(must=[field_condition_cls(key="user_id", match=match_value_cls(value=self.user_id))]),
             )
 
     def search_vectors_reranked(
@@ -161,14 +158,16 @@ class AgentMemory:
         documents = []
         for r in results:
             payload = r.payload if hasattr(r, "payload") else {}
-            documents.append({
-                "title": payload.get("title", "Untitled"),
-                "company": payload.get("company", ""),
-                "description": payload.get("text", "")[:500],
-                "match_score": payload.get("match_score", 0),
-                "_qdrant_score": r.score if hasattr(r, "score") else 0,
-                "_payload": payload,
-            })
+            documents.append(
+                {
+                    "title": payload.get("title", "Untitled"),
+                    "company": payload.get("company", ""),
+                    "description": payload.get("text", "")[:500],
+                    "match_score": payload.get("match_score", 0),
+                    "_qdrant_score": r.score if hasattr(r, "score") else 0,
+                    "_payload": payload,
+                }
+            )
 
         # Stage 2: Cohere rerank
         reranker = get_reranker()
@@ -214,7 +213,8 @@ class AgentMemory:
 
         # Search opportunity embeddings with Cohere rerank
         opps = self.search_vectors_reranked(
-            "opportunity_embeddings", query_vector,
+            "opportunity_embeddings",
+            query_vector,
             query_text="retrieve matching opportunities from memory",
             limit=limit,
         )

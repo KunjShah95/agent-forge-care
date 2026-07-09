@@ -1,5 +1,5 @@
 import pytest
-from datetime import datetime, timezone
+
 from tests.conftest import (
     MockResult,
     make_memory_entry,

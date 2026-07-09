@@ -19,7 +19,6 @@ import logging
 import random
 import re
 import time
-from typing import Optional
 from urllib.parse import quote_plus
 
 import httpx
@@ -59,7 +58,7 @@ async def _scrape_with_retry(
     fetch_coro,
     max_retries: int = 2,
     base_delay: float = 1.0,
-) -> tuple[Optional[httpx.Response], Optional[str]]:
+) -> tuple[httpx.Response | None, str | None]:
     """
     Execute an async scrape with random delay between retries.
     Returns (response, error_message).
@@ -91,7 +90,9 @@ async def _safe_get(url: str, headers: dict, follow_redirects: bool = True, time
         return await client.get(url)
 
 
-async def _safe_post(url: str, headers: dict, data: Optional[dict] = None, follow_redirects: bool = True, timeout: int = 15) -> httpx.Response:
+async def _safe_post(
+    url: str, headers: dict, data: dict | None = None, follow_redirects: bool = True, timeout: int = 15
+) -> httpx.Response:
     """HTTP POST with proper AsyncClient context manager to avoid resource leaks."""
     async with httpx.AsyncClient(headers=headers, follow_redirects=follow_redirects, timeout=timeout) as client:
         return await client.post(url, data=data)
@@ -102,11 +103,11 @@ CACHE_TTL = 300  # 5 minutes
 _search_cache: dict[str, tuple[float, list[dict]]] = {}
 
 
-def _cache_key(query: str, source_filter: Optional[str] = None, location: Optional[str] = None) -> str:
+def _cache_key(query: str, source_filter: str | None = None, location: str | None = None) -> str:
     return f"{source_filter or 'all'}:{location or ''}:{query.lower().strip()}"
 
 
-def _get_cached(key: str) -> Optional[list[dict]]:
+def _get_cached(key: str) -> list[dict] | None:
     entry = _search_cache.get(key)
     if entry and (time.time() - entry[0]) < CACHE_TTL:
         logger.debug("Search cache HIT for key: %s", key[:60])
@@ -155,10 +156,10 @@ class SearchAdapter:
     async def search(
         self,
         query: str,
-        location: Optional[str] = None,
-        skills: Optional[list[str]] = None,
+        location: str | None = None,
+        skills: list[str] | None = None,
         limit: int = 10,
-        source_filter: Optional[str] = None,
+        source_filter: str | None = None,
     ) -> list[dict]:
         """
         Search across all available sources and return deduplicated results.
@@ -185,7 +186,9 @@ class SearchAdapter:
         results = []
 
         # Prepend type-specific keywords
-        if source_filter == "internship" and not any(k in query.lower() for k in ["intern", "internship", "fellowship"]):
+        if source_filter == "internship" and not any(
+            k in query.lower() for k in ["intern", "internship", "fellowship"]
+        ):
             query = f"internship {query}"
         elif source_filter == "job" and not any(k in query.lower() for k in ["job", "full-time", "position", "hiring"]):
             query = f"job {query}"
@@ -226,9 +229,13 @@ class SearchAdapter:
                         if not r.get("company"):
                             r["company"] = self._extract_company(r.get("title", ""), r.get("snippet", ""))
                         if not r.get("type"):
-                            r["type"] = self._extract_job_type(r.get("title", ""), r.get("description", "") or r.get("snippet", ""))
+                            r["type"] = self._extract_job_type(
+                                r.get("title", ""), r.get("description", "") or r.get("snippet", "")
+                            )
                         if not r.get("skills"):
-                            r["skills"] = self._extract_skills(r.get("description", "") or r.get("snippet", "") or r.get("title", ""))
+                            r["skills"] = self._extract_skills(
+                                r.get("description", "") or r.get("snippet", "") or r.get("title", "")
+                            )
                     results.extend(tavily_results)
                     logger.info("Tavily returned %d results", len(tavily_results))
                 except Exception as e:
@@ -261,9 +268,13 @@ class SearchAdapter:
                         if not r.get("company"):
                             r["company"] = self._extract_company(r.get("title", ""), r.get("snippet", ""))
                         if not r.get("type"):
-                            r["type"] = self._extract_job_type(r.get("title", ""), r.get("description", "") or r.get("snippet", ""))
+                            r["type"] = self._extract_job_type(
+                                r.get("title", ""), r.get("description", "") or r.get("snippet", "")
+                            )
                         if not r.get("skills"):
-                            r["skills"] = self._extract_skills(r.get("description", "") or r.get("snippet", "") or r.get("title", ""))
+                            r["skills"] = self._extract_skills(
+                                r.get("description", "") or r.get("snippet", "") or r.get("title", "")
+                            )
                     results.extend(exa_results)
                     logger.info("Exa returned %d results", len(exa_results))
                 except Exception as e:
@@ -337,7 +348,9 @@ class SearchAdapter:
             logger.warning(
                 "All search sources returned 0 results for query='%s' location='%s' filter='%s'. "
                 "Agents will fall back to demo data.",
-                query, location, source_filter,
+                query,
+                location,
+                source_filter,
             )
 
         # ── Quality filter: for job/internship results, prioritize real company names ──
@@ -347,7 +360,11 @@ class SearchAdapter:
             generic = [r for r in results if not r.get("company") or r["company"] == "Tech Company"]
             results = real + generic
             if generic:
-                logger.debug("Quality filter: %d real results, %d generic ('Tech Company') deprioritized", len(real), len(generic))
+                logger.debug(
+                    "Quality filter: %d real results, %d generic ('Tech Company') deprioritized",
+                    len(real),
+                    len(generic),
+                )
 
         # Deduplicate by (title, company) pair
         seen = set()
@@ -452,7 +469,7 @@ class SearchAdapter:
         """Fetch search suggestions from Google Autocomplete API."""
         if not query:
             return []
-            
+
         url = "http://suggestqueries.google.com/complete/search"
         params = {"client": "chrome", "q": query}
         async with httpx.AsyncClient(timeout=5) as client:
@@ -471,7 +488,7 @@ class SearchAdapter:
     async def _search_google(
         self,
         query: str,
-        location: Optional[str] = None,
+        location: str | None = None,
         limit: int = 10,
     ) -> list[dict]:
         """Search using Google Custom Search API."""
@@ -502,14 +519,16 @@ class SearchAdapter:
             link = item.get("link", "")
             company = self._extract_company(title, snippet)
 
-            results.append({
-                "title": title,
-                "company": company,
-                "description": snippet,
-                "apply_url": link,
-                "source": "google",
-                "remote": "remote" in (snippet or "").lower(),
-            })
+            results.append(
+                {
+                    "title": title,
+                    "company": company,
+                    "description": snippet,
+                    "apply_url": link,
+                    "source": "google",
+                    "remote": "remote" in (snippet or "").lower(),
+                }
+            )
 
         return results
 
@@ -518,7 +537,7 @@ class SearchAdapter:
     async def _search_serpapi(
         self,
         query: str,
-        location: Optional[str] = None,
+        location: str | None = None,
         limit: int = 10,
     ) -> list[dict]:
         """Search using SerpAPI for structured job results."""
@@ -553,21 +572,20 @@ class SearchAdapter:
                 job_type = "Part-time"
             else:
                 job_type = self._extract_job_type(title, desc)
-            results.append({
-                "title": job.get("title"),
-                "company": job.get("company_name"),
-                "location": job.get("location"),
-                "description": desc,
-                "apply_url": (
-                    job.get("related_links", [{}])[0].get("link")
-                    if job.get("related_links") else None
-                ),
-                "source": "serpapi",
-                "type": job_type,
-                "skills": self._extract_skills(desc),
-                "remote": "remote" in desc.lower(),
-                "salary": self._extract_salary(desc),
-            })
+            results.append(
+                {
+                    "title": job.get("title"),
+                    "company": job.get("company_name"),
+                    "location": job.get("location"),
+                    "description": desc,
+                    "apply_url": (job.get("related_links", [{}])[0].get("link") if job.get("related_links") else None),
+                    "source": "serpapi",
+                    "type": job_type,
+                    "skills": self._extract_skills(desc),
+                    "remote": "remote" in desc.lower(),
+                    "salary": self._extract_salary(desc),
+                }
+            )
 
         return results
 
@@ -587,10 +605,10 @@ class SearchAdapter:
             "div[data-hveid]",
             "div[data-sokoban-container]",
             "div[role='heading'] ~ div",
-            "div.N54G5d",       # newer Google result container
-            "div.Wt5Tfe",       # another modern container
-            "div[jscontroller]",    # Google's newer JS-driven layout
-            "div.yuRUbf",       # title+link wrapper in modern Google
+            "div.N54G5d",  # newer Google result container
+            "div.Wt5Tfe",  # another modern container
+            "div[jscontroller]",  # Google's newer JS-driven layout
+            "div.yuRUbf",  # title+link wrapper in modern Google
         ]
         result_blocks = []
         for sel in result_selectors:
@@ -601,11 +619,7 @@ class SearchAdapter:
         for g in result_blocks:
             if len(results) >= limit:
                 break
-            title_el = (
-                g.select_one("h3")
-                or g.select_one("[role='heading']")
-                or g.select_one("a[href^='http']")
-            )
+            title_el = g.select_one("h3") or g.select_one("[role='heading']") or g.select_one("a[href^='http']")
             link_el = g.select_one("a[href^='http']") or g.select_one("a")
             snippet_el = (
                 g.select_one("span.aCOpRe, div.VwiC3b, span.st, div[data-sncf], div.lEBKkf, span.st")
@@ -619,14 +633,16 @@ class SearchAdapter:
                 link = link_el.get("href", "")
                 snippet = snippet_el.get_text(strip=True) if snippet_el else ""
                 company = self._extract_company(title, snippet)
-                results.append({
-                    "title": title,
-                    "company": company,
-                    "description": snippet[:500],
-                    "apply_url": link,
-                    "source": source,
-                    "remote": "remote" in (snippet or "").lower(),
-                })
+                results.append(
+                    {
+                        "title": title,
+                        "company": company,
+                        "description": snippet[:500],
+                        "apply_url": link,
+                        "source": source,
+                        "remote": "remote" in (snippet or "").lower(),
+                    }
+                )
         return results
 
     def _parse_serp_results_research(self, soup, limit: int = 5) -> list[dict]:
@@ -650,11 +666,7 @@ class SearchAdapter:
         for g in result_blocks:
             if len(results) >= limit:
                 break
-            title_el = (
-                g.select_one("h3")
-                or g.select_one("[role='heading']")
-                or g.select_one("a[href^='http']")
-            )
+            title_el = g.select_one("h3") or g.select_one("[role='heading']") or g.select_one("a[href^='http']")
             link_el = g.select_one("a[href^='http']") or g.select_one("a")
             snippet_el = (
                 g.select_one("span.aCOpRe, div.VwiC3b, span.st, div[data-sncf]")
@@ -666,18 +678,20 @@ class SearchAdapter:
                 title = title_el.get_text(strip=True)
                 link = link_el.get("href", "")
                 snippet = snippet_el.get_text(strip=True) if snippet_el else ""
-                results.append({
-                    "title": title,
-                    "snippet": snippet[:500],
-                    "url": link,
-                    "source": "web_research",
-                })
+                results.append(
+                    {
+                        "title": title,
+                        "snippet": snippet[:500],
+                        "url": link,
+                        "source": "web_research",
+                    }
+                )
         return results
 
     async def _scrape_web(
         self,
         query: str,
-        location: Optional[str] = None,
+        location: str | None = None,
         limit: int = 5,
     ) -> list[dict]:
         """
@@ -705,9 +719,9 @@ class SearchAdapter:
     async def _scrape_job_boards(
         self,
         query: str,
-        location: Optional[str] = None,
+        location: str | None = None,
         limit: int = 5,
-        source_filter: Optional[str] = None,
+        source_filter: str | None = None,
     ) -> list[dict]:
         """
         Scrape job board listings via Google site: search.
@@ -719,14 +733,9 @@ class SearchAdapter:
         board_queries = []
         indeed_q = quote_plus(f"{q} internship" if source_filter == "internship" else q)
         indeed_loc = quote_plus(loc) if loc else ""
-        board_queries.append(
-            f"https://www.indeed.com/jobs?q={indeed_q}"
-            f"{'&l=' + indeed_loc if indeed_loc else ''}"
-        )
+        board_queries.append(f"https://www.indeed.com/jobs?q={indeed_q}{'&l=' + indeed_loc if indeed_loc else ''}")
         for site in ["linkedin.com/jobs", "simplyhired.com", "glassdoor.com"]:
-            board_queries.append(
-                f"https://www.google.com/search?q={quote_plus(f'site:{site} {q} {loc}')}&num=10"
-            )
+            board_queries.append(f"https://www.google.com/search?q={quote_plus(f'site:{site} {q} {loc}')}&num=10")
 
         results = []
         for url in board_queries:
@@ -737,9 +746,7 @@ class SearchAdapter:
             )
             if resp and resp.status_code == 200:
                 soup = BeautifulSoup(resp.text, "html.parser")
-                results.extend(
-                    self._parse_serp_results(soup, limit - len(results), source="job_board_scrape")
-                )
+                results.extend(self._parse_serp_results(soup, limit - len(results), source="job_board_scrape"))
             else:
                 logger.debug("Board scrape failed for %s: %s", url, error)
 
@@ -770,17 +777,17 @@ class SearchAdapter:
     async def _scrape_duckduckgo(
         self,
         query: str,
-        location: Optional[str] = None,
+        location: str | None = None,
         limit: int = 5,
     ) -> list[dict]:
         """Scrape DuckDuckGo HTML search as a resilient fallback."""
         q = query
         if location:
             q += f" {location}"
-            
+
         url = "https://html.duckduckgo.com/html/"
         headers = _make_headers()
-        
+
         resp, error = await _scrape_with_retry(
             lambda: _safe_post(url, headers, data={"q": q}),
             max_retries=1,
@@ -795,19 +802,21 @@ class SearchAdapter:
                 result_div = a.find_parent("div", class_="result")
                 title_el = result_div.select_one("h2.result__title a") if result_div else None
                 snippet_el = result_div.select_one("a.result__snippet") if result_div else None
-                
+
                 title = title_el.get_text(strip=True) if title_el else "Unknown"
                 snippet = snippet_el.get_text(strip=True) if snippet_el else ""
-                
+
                 company = self._extract_company(title, snippet)
-                results.append({
-                    "title": title,
-                    "company": company,
-                    "description": snippet[:500],
-                    "apply_url": link,
-                    "source": "duckduckgo_scrape",
-                    "remote": "remote" in snippet.lower(),
-                })
+                results.append(
+                    {
+                        "title": title,
+                        "company": company,
+                        "description": snippet[:500],
+                        "apply_url": link,
+                        "source": "duckduckgo_scrape",
+                        "remote": "remote" in snippet.lower(),
+                    }
+                )
             return results
 
         logger.debug("DuckDuckGo scrape failed: %s", error)
@@ -816,17 +825,17 @@ class SearchAdapter:
     async def _scrape_linkedin_direct(
         self,
         query: str,
-        location: Optional[str] = None,
+        location: str | None = None,
         limit: int = 5,
     ) -> list[dict]:
         """Scrape LinkedIn jobs directory without auth."""
         params = {"keywords": query}
         if location:
             params["location"] = location
-            
+
         url = "https://www.linkedin.com/jobs/search"
         headers = _make_headers()
-        
+
         resp, error = await _scrape_with_retry(
             lambda: _safe_get(url, headers, follow_redirects=True, timeout=15),
             max_retries=1,
@@ -841,22 +850,24 @@ class SearchAdapter:
                 company_el = job_card.select_one("h4.base-search-card__subtitle")
                 link_el = job_card.select_one("a.base-card__full-link")
                 loc_el = job_card.select_one("span.job-search-card__location")
-                
+
                 if title_el and company_el:
                     title = title_el.get_text(strip=True)
                     company = company_el.get_text(strip=True)
                     link = link_el.get("href", "") if link_el else ""
                     loc = loc_el.get_text(strip=True) if loc_el else ""
-                    
-                    results.append({
-                        "title": title,
-                        "company": company,
-                        "location": loc,
-                        "description": f"Role at {company} in {loc}",
-                        "apply_url": link.split("?")[0],
-                        "source": "linkedin_direct",
-                        "remote": "remote" in title.lower() or "remote" in loc.lower(),
-                    })
+
+                    results.append(
+                        {
+                            "title": title,
+                            "company": company,
+                            "location": loc,
+                            "description": f"Role at {company} in {loc}",
+                            "apply_url": link.split("?")[0],
+                            "source": "linkedin_direct",
+                            "remote": "remote" in title.lower() or "remote" in loc.lower(),
+                        }
+                    )
             return results
 
         logger.debug("LinkedIn direct scrape failed: %s", error)
@@ -889,12 +900,14 @@ class SearchAdapter:
 
         results = []
         for r in data.get("web", {}).get("results", [])[:limit]:
-            results.append({
-                "title": r.get("title", ""),
-                "snippet": r.get("description", ""),
-                "url": r.get("url", ""),
-                "source": "brave",
-            })
+            results.append(
+                {
+                    "title": r.get("title", ""),
+                    "snippet": r.get("description", ""),
+                    "url": r.get("url", ""),
+                    "source": "brave",
+                }
+            )
 
         return results
 
@@ -925,12 +938,14 @@ class SearchAdapter:
 
         results = []
         for r in data.get("results", [])[:limit]:
-            results.append({
-                "title": r.get("title", ""),
-                "snippet": r.get("text", "")[:500],
-                "url": r.get("url", ""),
-                "source": "exa",
-            })
+            results.append(
+                {
+                    "title": r.get("title", ""),
+                    "snippet": r.get("text", "")[:500],
+                    "url": r.get("url", ""),
+                    "source": "exa",
+                }
+            )
 
         return results
 
@@ -963,12 +978,14 @@ class SearchAdapter:
 
         results = []
         for r in data.get("results", [])[:limit]:
-            results.append({
-                "title": r.get("title", ""),
-                "snippet": r.get("content", ""),
-                "url": r.get("url", ""),
-                "source": "searxng",
-            })
+            results.append(
+                {
+                    "title": r.get("title", ""),
+                    "snippet": r.get("content", ""),
+                    "url": r.get("url", ""),
+                    "source": "searxng",
+                }
+            )
 
         return results
 
@@ -1001,12 +1018,14 @@ class SearchAdapter:
 
         results = []
         for r in response.get("results", [])[:limit]:
-            results.append({
-                "title": r.get("title", ""),
-                "snippet": r.get("desc", ""),
-                "url": r.get("url", ""),
-                "source": "mojeek",
-            })
+            results.append(
+                {
+                    "title": r.get("title", ""),
+                    "snippet": r.get("desc", ""),
+                    "url": r.get("url", ""),
+                    "source": "mojeek",
+                }
+            )
 
         return results
 
@@ -1015,7 +1034,7 @@ class SearchAdapter:
     async def _scrape_mojeek(
         self,
         query: str,
-        location: Optional[str] = None,
+        location: str | None = None,
         limit: int = 5,
     ) -> list[dict]:
         """
@@ -1052,14 +1071,16 @@ class SearchAdapter:
                 snippet = desc_el.get_text(strip=True) if desc_el else ""
 
                 company = self._extract_company(title, snippet)
-                results.append({
-                    "title": title,
-                    "company": company,
-                    "description": snippet[:500],
-                    "apply_url": link,
-                    "source": "mojeek_scrape",
-                    "remote": "remote" in (snippet or "").lower(),
-                })
+                results.append(
+                    {
+                        "title": title,
+                        "company": company,
+                        "description": snippet[:500],
+                        "apply_url": link,
+                        "source": "mojeek_scrape",
+                        "remote": "remote" in (snippet or "").lower(),
+                    }
+                )
 
             return results
 
@@ -1090,12 +1111,14 @@ class SearchAdapter:
 
         results = []
         for r in data.get("results", []):
-            results.append({
-                "title": r.get("title", ""),
-                "snippet": r.get("content", ""),
-                "url": r.get("url", ""),
-                "source": "tavily",
-            })
+            results.append(
+                {
+                    "title": r.get("title", ""),
+                    "snippet": r.get("content", ""),
+                    "url": r.get("url", ""),
+                    "source": "tavily",
+                }
+            )
 
         return results
 
@@ -1105,26 +1128,26 @@ class SearchAdapter:
         """Extract company name from search result text."""
         text = f"{title} {snippet}"
 
-        m = re.search(r'\bat\s+([A-Z][A-Za-z0-9\s&.]+?)(?:\s+[–-]|\s+\||\s+-\s+|$|\.|\))', text)
+        m = re.search(r"\bat\s+([A-Z][A-Za-z0-9\s&.]+?)(?:\s+[–-]|\s+\||\s+-\s+|$|\.|\))", text)
         if m:
             return m.group(1).strip()[:50]
 
-        m = re.search(r'([A-Z][A-Za-z0-9\s&.]+?)\s+(?:hiring|jobs|cares?ers|recruiting)', text)
+        m = re.search(r"([A-Z][A-Za-z0-9\s&.]+?)\s+(?:hiring|jobs|cares?ers|recruiting)", text)
         if m:
             return m.group(1).strip()[:50]
 
-        m = re.search(r'^([A-Z][A-Za-z0-9\s&.]+?)\s+[-–|]\s+', title)
+        m = re.search(r"^([A-Z][A-Za-z0-9\s&.]+?)\s+[-–|]\s+", title)
         if m:
             return m.group(1).strip()[:50]
 
         return "Tech Company"
 
-    def _extract_salary(self, text: str) -> Optional[str]:
+    def _extract_salary(self, text: str) -> str | None:
         """Extract salary range from text."""
-        m = re.search(r'\$(\d{2,3}[kK]?[\s,]*[-–to]*[\s,]*\$?\d{2,3}[kK]?)', text)
+        m = re.search(r"\$(\d{2,3}[kK]?[\s,]*[-–to]*[\s,]*\$?\d{2,3}[kK]?)", text)
         if m:
             return m.group(1)
-        m = re.search(r'(\d{2,3}[kK])\s*[-–]\s*(\d{2,3}[kK])', text)
+        m = re.search(r"(\d{2,3}[kK])\s*[-–]\s*(\d{2,3}[kK])", text)
         if m:
             return f"${m.group(1)}-${m.group(2)}"
         return None
@@ -1146,17 +1169,52 @@ class SearchAdapter:
         found = []
         # Simple keyword matching (no regex issues)
         simple_keywords = [
-            "python", "javascript", "typescript", "react", "angular", "vue",
-            "java", "go", "golang", "rust", "swift", "kotlin",
-            "ruby", "php", "sql", "nosql", "mongodb", "postgresql",
-            "mysql", "redis", "aws", "azure", "gcp", "docker", "kubernetes",
-            "git", "jenkins", "terraform", "ansible",
-            "pytorch", "tensorflow", "pandas", "numpy", "flask", "django",
-            "fastapi", "express", "graphql", "devops", "mlops",
-            "llm", "rag", "langchain",
+            "python",
+            "javascript",
+            "typescript",
+            "react",
+            "angular",
+            "vue",
+            "java",
+            "go",
+            "golang",
+            "rust",
+            "swift",
+            "kotlin",
+            "ruby",
+            "php",
+            "sql",
+            "nosql",
+            "mongodb",
+            "postgresql",
+            "mysql",
+            "redis",
+            "aws",
+            "azure",
+            "gcp",
+            "docker",
+            "kubernetes",
+            "git",
+            "jenkins",
+            "terraform",
+            "ansible",
+            "pytorch",
+            "tensorflow",
+            "pandas",
+            "numpy",
+            "flask",
+            "django",
+            "fastapi",
+            "express",
+            "graphql",
+            "devops",
+            "mlops",
+            "llm",
+            "rag",
+            "langchain",
         ]
         for k in simple_keywords:
-            if re.search(rf'\b{re.escape(k)}\b', text_lower):
+            if re.search(rf"\b{re.escape(k)}\b", text_lower):
                 found.append(k)
         # Multi-word / special-char patterns (simple substring check)
         multi_patterns = {

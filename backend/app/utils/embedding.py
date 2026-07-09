@@ -11,19 +11,17 @@ Provides text-to-vector embedding using a multi-provider fallback chain:
 Uses the AI Model Manager for provider discovery and fallback.
 """
 
-import logging
 import hashlib
-from typing import Optional
+import logging
 
 import numpy as np
 
-from app.config import settings
 from app.services.model_manager import get_embeddings
 
 logger = logging.getLogger("agentforge.embeddings")
 
 # Cache for the LangChain embeddings instance
-_embeddings_instance: Optional[object] = None
+_embeddings_instance: object | None = None
 
 
 async def get_text_embedding(text: str) -> list[float]:

@@ -1,5 +1,6 @@
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from app.search.adapters import SearchAdapter
 
@@ -46,10 +47,14 @@ async def test_search_with_google_api(mock_settings, mock_httpx_cls, adapter):
     mock_settings.serpapi_key = ""
     mock_settings.tavily_api_key = ""
 
-    mock_httpx_cls.return_value = _mock_httpx(_google_response([
-        {"title": "Software Engineer at Google", "snippet": "Remote role", "link": "https://google.com/jobs/1"},
-        {"title": "Data Scientist at Meta", "snippet": "NYC office", "link": "https://meta.com/jobs/2"},
-    ]))
+    mock_httpx_cls.return_value = _mock_httpx(
+        _google_response(
+            [
+                {"title": "Software Engineer at Google", "snippet": "Remote role", "link": "https://google.com/jobs/1"},
+                {"title": "Data Scientist at Meta", "snippet": "NYC office", "link": "https://meta.com/jobs/2"},
+            ]
+        )
+    )
 
     results = await adapter.search("software engineer", limit=10)
 
@@ -72,15 +77,19 @@ async def test_search_with_serpapi(mock_settings, mock_httpx_cls, adapter):
     mock_settings.serpapi_key = "serp-key"
     mock_settings.tavily_api_key = ""
 
-    mock_httpx_cls.return_value = _mock_httpx(_serp_response([
-        {
-            "title": "Backend Engineer",
-            "company_name": "Stripe",
-            "location": "San Francisco",
-            "description": "Build payment APIs. $150k-$200k salary.",
-            "related_links": [{"link": "https://stripe.com/jobs/1"}],
-        },
-    ]))
+    mock_httpx_cls.return_value = _mock_httpx(
+        _serp_response(
+            [
+                {
+                    "title": "Backend Engineer",
+                    "company_name": "Stripe",
+                    "location": "San Francisco",
+                    "description": "Build payment APIs. $150k-$200k salary.",
+                    "related_links": [{"link": "https://stripe.com/jobs/1"}],
+                },
+            ]
+        )
+    )
 
     results = await adapter.search("backend engineer", limit=10)
 
@@ -159,12 +168,22 @@ async def test_search_deduplication(mock_settings, mock_httpx_cls, adapter):
     mock_settings.serpapi_key = "serp-key"
     mock_settings.tavily_api_key = ""
 
-    google_data = _google_response([
-        {"title": "SWE at Stripe", "snippet": "Payment APIs", "link": "https://g.co/1"},
-    ])
-    serp_data = _serp_response([
-        {"title": "SWE at Stripe", "company_name": "Stripe", "location": "SF", "description": "Payment APIs", "related_links": []},
-    ])
+    google_data = _google_response(
+        [
+            {"title": "SWE at Stripe", "snippet": "Payment APIs", "link": "https://g.co/1"},
+        ]
+    )
+    serp_data = _serp_response(
+        [
+            {
+                "title": "SWE at Stripe",
+                "company_name": "Stripe",
+                "location": "SF",
+                "description": "Payment APIs",
+                "related_links": [],
+            },
+        ]
+    )
 
     call_count = 0
 
@@ -204,10 +223,18 @@ async def test_search_research_with_tavily(mock_settings, mock_httpx_cls, adapte
     mock_settings.google_cse_id = ""
     mock_settings.tavily_api_key = "tavily-key"
 
-    mock_httpx_cls.return_value = _mock_httpx(_tavily_response([
-        {"title": "Google Interview Process", "content": "Detailed guide...", "url": "https://example.com/guide"},
-        {"title": "FAANG Salaries 2025", "content": "Salary data...", "url": "https://example.com/salaries"},
-    ]))
+    mock_httpx_cls.return_value = _mock_httpx(
+        _tavily_response(
+            [
+                {
+                    "title": "Google Interview Process",
+                    "content": "Detailed guide...",
+                    "url": "https://example.com/guide",
+                },
+                {"title": "FAANG Salaries 2025", "content": "Salary data...", "url": "https://example.com/salaries"},
+            ]
+        )
+    )
 
     results = await adapter.search_research("Google interview process", limit=5)
 
@@ -416,9 +443,13 @@ async def test_search_with_location(mock_settings, mock_httpx_cls, adapter):
     mock_settings.serpapi_key = ""
     mock_settings.tavily_api_key = ""
 
-    mock_httpx_cls.return_value = _mock_httpx(_google_response([
-        {"title": "SWE at Netflix", "snippet": "LA office", "link": "https://netflix.com/jobs/1"},
-    ]))
+    mock_httpx_cls.return_value = _mock_httpx(
+        _google_response(
+            [
+                {"title": "SWE at Netflix", "snippet": "LA office", "link": "https://netflix.com/jobs/1"},
+            ]
+        )
+    )
 
     results = await adapter.search("software engineer", location="Los Angeles", limit=5)
 
@@ -441,8 +472,7 @@ async def test_search_respects_limit(mock_settings, mock_httpx_cls, adapter):
     mock_settings.tavily_api_key = ""
 
     items = [
-        {"title": f"Job {i} at Company{i}", "snippet": f"Desc {i}", "link": f"https://c{i}.com"}
-        for i in range(10)
+        {"title": f"Job {i} at Company{i}", "snippet": f"Desc {i}", "link": f"https://c{i}.com"} for i in range(10)
     ]
     mock_httpx_cls.return_value = _mock_httpx(_google_response(items))
 
@@ -476,9 +506,13 @@ async def test_search_google_api_error(mock_settings, mock_httpx_cls, adapter):
 async def test_search_serpapi_no_links(mock_settings, mock_httpx_cls, adapter):
     mock_settings.serpapi_key = "serp-key"
 
-    mock_httpx_cls.return_value = _mock_httpx(_serp_response([
-        {"title": "Dev", "company_name": "Acme", "location": "Remote", "description": "Code stuff"},
-    ]))
+    mock_httpx_cls.return_value = _mock_httpx(
+        _serp_response(
+            [
+                {"title": "Dev", "company_name": "Acme", "location": "Remote", "description": "Code stuff"},
+            ]
+        )
+    )
 
     results = await adapter._search_serpapi("dev")
 
@@ -497,10 +531,9 @@ async def test_search_research_respects_limit(mock_settings, mock_httpx_cls, ada
     mock_settings.google_cse_id = ""
     mock_settings.tavily_api_key = "tavily-key"
 
-    tavily_data = _tavily_response([
-        {"title": f"Result {i}", "content": f"Content {i}", "url": f"https://r{i}.com"}
-        for i in range(10)
-    ])
+    tavily_data = _tavily_response(
+        [{"title": f"Result {i}", "content": f"Content {i}", "url": f"https://r{i}.com"} for i in range(10)]
+    )
     mock_httpx_cls.return_value = _mock_httpx(tavily_data)
 
     results = await adapter.search_research("topic", limit=3)
@@ -521,12 +554,21 @@ async def test_search_uses_tavily(mock_settings, mock_httpx_cls, adapter):
     mock_settings.tavily_api_key = "tavily-key"
 
     from app.search.adapters import _search_cache
+
     _search_cache.clear()
 
-    mock_httpx_cls.return_value = _mock_httpx(_tavily_response([
-        {"title": "Software Engineer at Google", "content": "Remote role at Google", "url": "https://google.com/jobs/1"},
-        {"title": "Data Scientist at Meta", "content": "NYC office", "url": "https://meta.com/jobs/2"},
-    ]))
+    mock_httpx_cls.return_value = _mock_httpx(
+        _tavily_response(
+            [
+                {
+                    "title": "Software Engineer at Google",
+                    "content": "Remote role at Google",
+                    "url": "https://google.com/jobs/1",
+                },
+                {"title": "Data Scientist at Meta", "content": "NYC office", "url": "https://meta.com/jobs/2"},
+            ]
+        )
+    )
 
     results = await adapter.search("unique_tavily_test_query", limit=5)
 
@@ -557,7 +599,7 @@ async def test_search_tavily_only_source(mock_settings, mock_httpx_cls, adapter)
     mock_client.__aexit__ = AsyncMock(return_value=False)
     mock_httpx_cls.return_value = mock_client
 
-    results = await adapter.search("python developer", limit=5, source_filter="job")
+    await adapter.search("python developer", limit=5, source_filter="job")
 
     post_calls = [c for c in mock_client.post.call_args_list if "tavily" in str(c)]
     assert len(post_calls) >= 1
@@ -575,11 +617,16 @@ async def test_search_caching(mock_settings, mock_httpx_cls, adapter):
     mock_settings.serpapi_key = ""
     mock_settings.tavily_api_key = ""
 
-    mock_httpx_cls.return_value = _mock_httpx(_google_response([
-        {"title": "SWE at Google", "snippet": "Build products", "link": "https://google.com/1"},
-    ]))
+    mock_httpx_cls.return_value = _mock_httpx(
+        _google_response(
+            [
+                {"title": "SWE at Google", "snippet": "Build products", "link": "https://google.com/1"},
+            ]
+        )
+    )
 
     from app.search.adapters import _search_cache
+
     _search_cache.clear()
 
     results1 = await adapter.search("cached search test", limit=5)
@@ -604,11 +651,16 @@ async def test_search_research_caching(mock_settings, mock_httpx_cls, adapter):
     mock_settings.google_cse_id = ""
     mock_settings.tavily_api_key = "tavily-key"
 
-    mock_httpx_cls.return_value = _mock_httpx(_tavily_response([
-        {"title": "Research Result", "content": "Content", "url": "https://r.com"},
-    ]))
+    mock_httpx_cls.return_value = _mock_httpx(
+        _tavily_response(
+            [
+                {"title": "Research Result", "content": "Content", "url": "https://r.com"},
+            ]
+        )
+    )
 
     from app.search.adapters import _search_cache
+
     _search_cache.clear()
 
     results1 = await adapter.search_research("cached research", limit=5)
@@ -634,13 +686,13 @@ async def test_cache_miss_after_clear(mock_settings, mock_httpx_cls, adapter):
     mock_settings.serpapi_key = ""
     mock_settings.tavily_api_key = ""
 
-    google_items = _google_response([
-        {"title": f"Job {i}", "snippet": f"Desc {i}", "link": f"https://c{i}.com"}
-        for i in range(3)
-    ])
+    google_items = _google_response(
+        [{"title": f"Job {i}", "snippet": f"Desc {i}", "link": f"https://c{i}.com"} for i in range(3)]
+    )
     mock_httpx_cls.return_value = _mock_httpx(google_items)
 
     from app.search.adapters import _search_cache
+
     _search_cache.clear()
 
     await adapter.search("cache miss test", limit=3)
@@ -710,9 +762,11 @@ async def test_search_empty_logs_warning(mock_settings, mock_httpx_cls, adapter,
     mock_httpx_cls.return_value = mock_client
 
     from app.search.adapters import _search_cache
+
     _search_cache.clear()
 
     import logging
+
     caplog.set_level(logging.WARNING, logger="agentforge.search")
 
     results = await adapter.search("nothing should match", limit=5)

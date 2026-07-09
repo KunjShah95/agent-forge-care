@@ -6,7 +6,7 @@ import {
 
 export type AgentTypeKey =
   | "planner" | "internship" | "job" | "research"
-  | "resume" | "interview" | "networking" | "monitor" | "memory";
+  | "resume" | "interview" | "networking" | "monitor" | "memory" | "discovery";
 
 export type AgentTypeInfo = {
   key: AgentTypeKey;
@@ -28,6 +28,7 @@ export const AGENT_TYPES: AgentTypeInfo[] = [
   T("networking", "Networking Agent", Network, "Networking"),
   T("monitor", "Opportunity Monitor", Bell, "Opportunity Monitor"),
   T("memory", "Memory Layer", Layers3, "Memory"),
+  T("discovery", "Discovery Agent", FileSearch, "Discovery"),
 ];
 
 export const AGENT_TYPE_MAP: Record<string, AgentTypeInfo> = {};

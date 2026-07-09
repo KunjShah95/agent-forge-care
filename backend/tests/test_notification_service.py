@@ -1,5 +1,6 @@
+from unittest.mock import AsyncMock, patch
+
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
 
 from app.services.notification_service import create_notification
 from tests.conftest import TEST_USER_ID
@@ -7,9 +8,7 @@ from tests.conftest import TEST_USER_ID
 
 @pytest.mark.asyncio
 async def test_create_notification_success(mock_db):
-    with patch(
-        "app.services.notification_service.MemoryService"
-    ) as MockMemory:
+    with patch("app.services.notification_service.MemoryService") as MockMemory:
         instance = MockMemory.return_value
         instance.set_memory = AsyncMock()
 
@@ -29,30 +28,24 @@ async def test_create_notification_success(mock_db):
 
 @pytest.mark.asyncio
 async def test_create_notification_with_email(mock_db):
-    with patch(
-        "app.services.notification_service.MemoryService"
-    ) as MockMemory, patch(
-        "app.services.email_service.send_email", new_callable=AsyncMock
-    ) as mock_send:
+    with (
+        patch("app.services.notification_service.MemoryService") as MockMemory,
+        patch("app.services.email_service.send_email", new_callable=AsyncMock) as mock_send,
+    ):
         instance = MockMemory.return_value
         instance.set_memory = AsyncMock()
 
-        await create_notification(
-            mock_db, TEST_USER_ID, "Subject", "Body", to_email="user@test.com"
-        )
+        await create_notification(mock_db, TEST_USER_ID, "Subject", "Body", to_email="user@test.com")
 
-        mock_send.assert_called_once_with(
-            to_email="user@test.com", subject="Subject", body="Body"
-        )
+        mock_send.assert_called_once_with(to_email="user@test.com", subject="Subject", body="Body")
 
 
 @pytest.mark.asyncio
 async def test_create_notification_without_email(mock_db):
-    with patch(
-        "app.services.notification_service.MemoryService"
-    ) as MockMemory, patch(
-        "app.services.email_service.send_email", new_callable=AsyncMock
-    ) as mock_send:
+    with (
+        patch("app.services.notification_service.MemoryService") as MockMemory,
+        patch("app.services.email_service.send_email", new_callable=AsyncMock) as mock_send,
+    ):
         instance = MockMemory.return_value
         instance.set_memory = AsyncMock()
 
@@ -64,15 +57,11 @@ async def test_create_notification_without_email(mock_db):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("ntype", ["success", "error", "info"])
 async def test_create_notification_types(mock_db, ntype):
-    with patch(
-        "app.services.notification_service.MemoryService"
-    ) as MockMemory:
+    with patch("app.services.notification_service.MemoryService") as MockMemory:
         instance = MockMemory.return_value
         instance.set_memory = AsyncMock()
 
-        await create_notification(
-            mock_db, TEST_USER_ID, "T", "B", type=ntype
-        )
+        await create_notification(mock_db, TEST_USER_ID, "T", "B", type=ntype)
 
         value = instance.set_memory.call_args[0][2]
         assert value["type"] == ntype
@@ -80,15 +69,11 @@ async def test_create_notification_types(mock_db, ntype):
 
 @pytest.mark.asyncio
 async def test_notification_stored_in_memory(mock_db):
-    with patch(
-        "app.services.notification_service.MemoryService"
-    ) as MockMemory:
+    with patch("app.services.notification_service.MemoryService") as MockMemory:
         instance = MockMemory.return_value
         instance.set_memory = AsyncMock()
 
-        await create_notification(
-            mock_db, TEST_USER_ID, "Offer Alert", "New match found", type="success"
-        )
+        await create_notification(mock_db, TEST_USER_ID, "Offer Alert", "New match found", type="success")
 
         call_args = instance.set_memory.call_args
         key = call_args[0][1]

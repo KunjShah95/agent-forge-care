@@ -3,23 +3,24 @@
 Run with: pytest tests/test_integration.py -x -v
 Skip the default skipif by removing the skip or passing --run-integration.
 """
+
 import uuid
-from datetime import datetime, timezone, date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import select, func, text
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlalchemy import func, select, text
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.database import Base
 from app.models.user import (
-    User,
-    Profile,
-    Opportunity,
     Application,
     ApplicationStage,
     MemoryEntry,
+    Opportunity,
+    Profile,
+    User,
 )
 
 pytestmark = pytest.mark.skipif(
@@ -46,9 +47,7 @@ async def engine():
 async def db_session(engine):
     connection = await engine.connect()
     transaction = await connection.begin()
-    session = async_sessionmaker(
-        bind=connection, class_=AsyncSession, expire_on_commit=False
-    )()
+    session = async_sessionmaker(bind=connection, class_=AsyncSession, expire_on_commit=False)()
     yield session
     await transaction.rollback()
     await connection.close()
@@ -69,7 +68,7 @@ async def test_database_connectivity(db_session):
 @pytest.mark.asyncio
 async def test_create_and_retrieve_user(db_session):
     user_id = uuid.uuid4()
-    ts = datetime.now(timezone.utc)
+    ts = datetime.now(UTC)
     user = User(
         id=user_id,
         email="integration-test@example.com",
@@ -91,7 +90,7 @@ async def test_create_and_retrieve_user(db_session):
 
 @pytest.mark.asyncio
 async def test_user_unique_email_constraint(db_session):
-    ts = datetime.now(timezone.utc)
+    ts = datetime.now(UTC)
     user1 = User(
         id=uuid.uuid4(),
         email="duplicate-test@example.com",
@@ -116,7 +115,7 @@ async def test_user_unique_email_constraint(db_session):
 
 @pytest.mark.asyncio
 async def test_find_user_by_email(db_session):
-    ts = datetime.now(timezone.utc)
+    ts = datetime.now(UTC)
     user = User(
         id=uuid.uuid4(),
         email="find-by-email@example.com",
@@ -128,9 +127,7 @@ async def test_find_user_by_email(db_session):
     db_session.add(user)
     await db_session.flush()
 
-    result = await db_session.execute(
-        select(User).where(User.email == "find-by-email@example.com")
-    )
+    result = await db_session.execute(select(User).where(User.email == "find-by-email@example.com"))
     fetched = result.scalar_one_or_none()
     assert fetched is not None
     assert fetched.full_name == "Find By Email"
@@ -138,7 +135,7 @@ async def test_find_user_by_email(db_session):
 
 @pytest.mark.asyncio
 async def test_user_without_firebase_uid(db_session):
-    ts = datetime.now(timezone.utc)
+    ts = datetime.now(UTC)
     user = User(
         id=uuid.uuid4(),
         email="no-firebase@example.com",
@@ -149,9 +146,7 @@ async def test_user_without_firebase_uid(db_session):
     db_session.add(user)
     await db_session.flush()
 
-    result = await db_session.execute(
-        select(User).where(User.firebase_uid.is_(None))
-    )
+    result = await db_session.execute(select(User).where(User.firebase_uid.is_(None)))
     match = result.scalars().all()
     fetched = [u for u in match if u.email == "no-firebase@example.com"]
     assert len(fetched) == 1
@@ -167,8 +162,8 @@ async def test_profile_crud(db_session):
         email="profile-test@example.com",
         full_name="Profile Test User",
         firebase_uid="firebase-profile-test",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     db_session.add(user)
     await db_session.flush()
@@ -182,15 +177,13 @@ async def test_profile_crud(db_session):
         role_types=["Full-time"],
         career_goal="Backend Engineer",
         is_onboarded=False,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     db_session.add(profile)
     await db_session.flush()
 
-    result = await db_session.execute(
-        select(Profile).where(Profile.user_id == user.id)
-    )
+    result = await db_session.execute(select(Profile).where(Profile.user_id == user.id))
     fetched = result.scalar_one_or_none()
     assert fetched is not None
     assert fetched.school == "Integration University"
@@ -211,9 +204,7 @@ async def test_profile_crud(db_session):
     await db_session.delete(fetched)
     await db_session.flush()
 
-    result = await db_session.execute(
-        select(Profile).where(Profile.user_id == user.id)
-    )
+    result = await db_session.execute(select(Profile).where(Profile.user_id == user.id))
     assert result.scalar_one_or_none() is None
 
 
@@ -224,8 +215,8 @@ async def test_profile_unique_user_id(db_session):
         email="profile-unique-test@example.com",
         full_name="Profile Unique User",
         firebase_uid="firebase-profile-unique",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     db_session.add(user)
     await db_session.flush()
@@ -234,8 +225,8 @@ async def test_profile_unique_user_id(db_session):
         id=uuid.uuid4(),
         user_id=user.id,
         school="First School",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     db_session.add(p1)
     await db_session.flush()
@@ -244,8 +235,8 @@ async def test_profile_unique_user_id(db_session):
         id=uuid.uuid4(),
         user_id=user.id,
         school="Second School",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     db_session.add(p2)
     with pytest.raises(Exception):
@@ -259,8 +250,8 @@ async def test_profile_cascade_delete(db_session):
         email="cascade-delete@example.com",
         full_name="Cascade Delete User",
         firebase_uid="firebase-cascade",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     db_session.add(user)
     await db_session.flush()
@@ -269,8 +260,8 @@ async def test_profile_cascade_delete(db_session):
         id=uuid.uuid4(),
         user_id=user.id,
         school="Cascade University",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     db_session.add(profile)
     await db_session.flush()
@@ -278,9 +269,7 @@ async def test_profile_cascade_delete(db_session):
     await db_session.delete(user)
     await db_session.flush()
 
-    result = await db_session.execute(
-        select(Profile).where(Profile.id == profile.id)
-    )
+    result = await db_session.execute(select(Profile).where(Profile.id == profile.id))
     assert result.scalar_one_or_none() is None
 
 
@@ -294,8 +283,8 @@ async def test_opportunity_crud(db_session):
         email="opp-test@example.com",
         full_name="Opportunity Test User",
         firebase_uid="firebase-opp-test",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     db_session.add(user)
     await db_session.flush()
@@ -312,15 +301,13 @@ async def test_opportunity_crud(db_session):
         skills_required=["Python", "SQL"],
         source="test",
         is_active=True,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     db_session.add(opp)
     await db_session.flush()
 
-    result = await db_session.execute(
-        select(Opportunity).where(Opportunity.user_id == user.id)
-    )
+    result = await db_session.execute(select(Opportunity).where(Opportunity.user_id == user.id))
     items = result.scalars().all()
     assert len(items) == 1
     assert items[0].title == "Integration Intern"
@@ -347,24 +334,20 @@ async def test_opportunity_crud(db_session):
         skills_required=["Python"],
         source="test",
         is_active=True,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     db_session.add(opp2)
     await db_session.flush()
 
-    result = await db_session.execute(
-        select(Opportunity).where(Opportunity.user_id == user.id)
-    )
+    result = await db_session.execute(select(Opportunity).where(Opportunity.user_id == user.id))
     items = result.scalars().all()
     assert len(items) == 2
 
     await db_session.delete(opp)
     await db_session.flush()
 
-    result = await db_session.execute(
-        select(Opportunity).where(Opportunity.user_id == user.id)
-    )
+    result = await db_session.execute(select(Opportunity).where(Opportunity.user_id == user.id))
     remaining = result.scalars().all()
     assert len(remaining) == 1
     assert remaining[0].title == "Full-time Engineer"
@@ -377,13 +360,13 @@ async def test_opportunity_filter_by_type_and_active(db_session):
         email="opp-filter@example.com",
         full_name="Opportunity Filter User",
         firebase_uid="firebase-opp-filter",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     db_session.add(user)
     await db_session.flush()
 
-    ts = datetime.now(timezone.utc)
+    ts = datetime.now(UTC)
     for title, otype in [("Intern A", "Internship"), ("Intern B", "Internship"), ("Full-time", "Full-time")]:
         opp = Opportunity(
             id=uuid.uuid4(),
@@ -418,12 +401,14 @@ async def test_opportunity_filter_by_type_and_active(db_session):
     active = result.scalars().all()
     assert len(active) == 3
 
-    opp = (await db_session.execute(
-        select(Opportunity).where(
-            Opportunity.user_id == user.id,
-            Opportunity.title == "Full-time",
+    opp = (
+        await db_session.execute(
+            select(Opportunity).where(
+                Opportunity.user_id == user.id,
+                Opportunity.title == "Full-time",
+            )
         )
-    )).scalar_one_or_none()
+    ).scalar_one_or_none()
     opp.is_active = False
     await db_session.flush()
 
@@ -448,8 +433,8 @@ async def test_memory_entry_with_ttl(db_session):
         email="memory-test@example.com",
         full_name="Memory Test User",
         firebase_uid="firebase-memory-test",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     db_session.add(user)
     await db_session.flush()
@@ -461,15 +446,13 @@ async def test_memory_entry_with_ttl(db_session):
         value={"skill": "Python"},
         weight=Decimal("1.00"),
         ttl_days=30,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     db_session.add(entry)
     await db_session.flush()
 
-    result = await db_session.execute(
-        select(MemoryEntry).where(MemoryEntry.user_id == user.id)
-    )
+    result = await db_session.execute(select(MemoryEntry).where(MemoryEntry.user_id == user.id))
     fetched = result.scalar_one_or_none()
     assert fetched is not None
     assert fetched.key == "skill_preference"
@@ -484,8 +467,8 @@ async def test_memory_entry_with_ttl(db_session):
         value={"theme": "dark"},
         weight=Decimal("0.80"),
         ttl_days=None,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     db_session.add(entry_no_ttl)
     await db_session.flush()
@@ -518,13 +501,13 @@ async def test_memory_entry_ttl_cleanup_query(db_session):
         email="memory-ttl-cleanup@example.com",
         full_name="Memory TTL Cleanup User",
         firebase_uid="firebase-memory-ttl",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     db_session.add(user)
     await db_session.flush()
 
-    ts = datetime.now(timezone.utc)
+    ts = datetime.now(UTC)
     recent_entry = MemoryEntry(
         id=uuid.uuid4(),
         user_id=user.id,
@@ -582,13 +565,13 @@ async def test_memory_entry_multiple_per_user(db_session):
         email="memory-multi@example.com",
         full_name="Memory Multi User",
         firebase_uid="firebase-memory-multi",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     db_session.add(user)
     await db_session.flush()
 
-    ts = datetime.now(timezone.utc)
+    ts = datetime.now(UTC)
     entries = []
     for i in range(5):
         entry = MemoryEntry(
@@ -606,9 +589,7 @@ async def test_memory_entry_multiple_per_user(db_session):
     await db_session.flush()
 
     result = await db_session.execute(
-        select(MemoryEntry)
-        .where(MemoryEntry.user_id == user.id)
-        .order_by(MemoryEntry.key)
+        select(MemoryEntry).where(MemoryEntry.user_id == user.id).order_by(MemoryEntry.key)
     )
     fetched = result.scalars().all()
     assert len(fetched) == 5
@@ -627,8 +608,8 @@ async def test_full_application_lifecycle(db_session):
         email="lifecycle-test@example.com",
         full_name="Lifecycle User",
         firebase_uid="firebase-lifecycle-test",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     db_session.add(user)
     await db_session.flush()
@@ -640,8 +621,8 @@ async def test_full_application_lifecycle(db_session):
         bio="Testing full lifecycle",
         career_goal="Full-stack Engineer",
         is_onboarded=True,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     db_session.add(profile)
     await db_session.flush()
@@ -657,20 +638,16 @@ async def test_full_application_lifecycle(db_session):
         skills_required=["Python", "React"],
         source="test",
         is_active=True,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     db_session.add(opp)
     await db_session.flush()
 
-    result = await db_session.execute(
-        select(Profile).where(Profile.user_id == user.id)
-    )
+    result = await db_session.execute(select(Profile).where(Profile.user_id == user.id))
     assert result.scalar_one_or_none() is not None
 
-    result = await db_session.execute(
-        select(Opportunity).where(Opportunity.id == opp.id)
-    )
+    result = await db_session.execute(select(Opportunity).where(Opportunity.id == opp.id))
     assert result.scalar_one_or_none() is not None
 
     app_entry = Application(
@@ -679,15 +656,13 @@ async def test_full_application_lifecycle(db_session):
         opportunity_id=opp.id,
         stage=ApplicationStage.saved,
         notes="Lifecycle test application",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     db_session.add(app_entry)
     await db_session.flush()
 
-    result = await db_session.execute(
-        select(Application).where(Application.user_id == user.id)
-    )
+    result = await db_session.execute(select(Application).where(Application.user_id == user.id))
     fetched_app = result.scalar_one_or_none()
     assert fetched_app is not None
     assert fetched_app.stage == ApplicationStage.saved
@@ -709,19 +684,13 @@ async def test_full_application_lifecycle(db_session):
     await db_session.delete(fetched_app)
     await db_session.flush()
 
-    result = await db_session.execute(
-        select(Application).where(Application.user_id == user.id)
-    )
+    result = await db_session.execute(select(Application).where(Application.user_id == user.id))
     assert result.scalar_one_or_none() is None
 
-    result = await db_session.execute(
-        select(Opportunity).where(Opportunity.id == opp.id)
-    )
+    result = await db_session.execute(select(Opportunity).where(Opportunity.id == opp.id))
     assert result.scalar_one_or_none() is not None
 
-    result = await db_session.execute(
-        select(Profile).where(Profile.user_id == user.id)
-    )
+    result = await db_session.execute(select(Profile).where(Profile.user_id == user.id))
     assert result.scalar_one_or_none() is not None
 
 
@@ -732,8 +701,8 @@ async def test_application_stage_transitions(db_session):
         email="app-stages@example.com",
         full_name="App Stages User",
         firebase_uid="firebase-app-stages",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     db_session.add(user)
     await db_session.flush()
@@ -747,8 +716,8 @@ async def test_application_stage_transitions(db_session):
         description="Test stage transitions",
         source="test",
         is_active=True,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     db_session.add(opp)
     await db_session.flush()
@@ -759,8 +728,8 @@ async def test_application_stage_transitions(db_session):
         opportunity_id=opp.id,
         stage=ApplicationStage.saved,
         applied_date=date.today(),
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     db_session.add(app_entry)
     await db_session.flush()
@@ -786,13 +755,13 @@ async def test_cascade_delete_removes_related(db_session):
         email="full-cascade@example.com",
         full_name="Full Cascade User",
         firebase_uid="firebase-full-cascade",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     db_session.add(user)
     await db_session.flush()
 
-    ts = datetime.now(timezone.utc)
+    ts = datetime.now(UTC)
     opps = []
     for i in range(3):
         opp = Opportunity(

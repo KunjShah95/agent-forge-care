@@ -13,8 +13,6 @@ Two small pure functions shared by the job agent and the monitor scan:
   from the listing text plus the boolean ``remote`` flag.
 """
 
-from typing import Optional
-
 # Work-mode values understood by the frontend filters (Opportunities.tsx).
 WORK_TYPE_REMOTE = "remote"
 WORK_TYPE_HYBRID = "hybrid"
@@ -35,7 +33,7 @@ def categorize_search_keyword(keyword: str) -> str:
     return "job"
 
 
-def infer_work_type(remote: bool, *texts: Optional[str]) -> Optional[str]:
+def infer_work_type(remote: bool, *texts: str | None) -> str | None:
     """
     Infer the work mode ("remote" / "hybrid" / "onsite") from listing text.
 

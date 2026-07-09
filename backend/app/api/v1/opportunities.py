@@ -1,19 +1,19 @@
 import logging
 import re
-from typing import Optional
-from pydantic import BaseModel
+
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
+from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, desc
 
 from app.database import get_db
 from app.dependencies import get_current_user
-from app.models.user import User, Opportunity, MatchScore
+from app.models.user import MatchScore, Opportunity, User
 from app.schemas.user import (
-    OpportunityOut,
     OpportunityList,
-    ScoredOpportunityOut,
+    OpportunityOut,
     ScoredOpportunityList,
+    ScoredOpportunityOut,
 )
 
 logger = logging.getLogger("agentforge.opportunities")
@@ -23,10 +23,10 @@ router = APIRouter()
 
 def _extract_company_from_title(title: str) -> str:
     """Extract a company/organization name from a hackathon title."""
-    m = re.search(r'\b(at|by|hosted by|presented by)\s+([A-Z][A-Za-z0-9\s&.]+)', title, re.I)
+    m = re.search(r"\b(at|by|hosted by|presented by)\s+([A-Z][A-Za-z0-9\s&.]+)", title, re.I)
     if m:
         return m.group(2).strip()[:50]
-    m = re.search(r'^([A-Z][A-Za-z0-9\s&.]+?)\s+Hackathon', title)
+    m = re.search(r"^([A-Z][A-Za-z0-9\s&.]+?)\s+Hackathon", title)
     if m:
         return m.group(1).strip()[:50]
     return "Hackathon"
@@ -38,7 +38,7 @@ async def get_search_suggestions(
 ):
     """Get autocomplete suggestions from Google."""
     from app.search.adapters import SearchAdapter
-    
+
     adapter = SearchAdapter()
     suggestions = await adapter.get_suggestions(q)
     return {"suggestions": suggestions}
@@ -135,9 +135,7 @@ async def matched_opportunities(
     items = []
     for opp, ms in rows:
         scored = ScoredOpportunityOut(
-            **OpportunityOut.model_validate(opp).model_dump(
-                exclude={"match_score", "match_reasons"}
-            ),
+            **OpportunityOut.model_validate(opp).model_dump(exclude={"match_score", "match_reasons"}),
             match_score=float(ms.overall_score),
             match_reasons=ms.reasons or [],
         )
@@ -147,7 +145,7 @@ async def matched_opportunities(
 
 
 class RefreshRequest(BaseModel):
-    query: Optional[str] = None
+    query: str | None = None
 
 
 @router.get("/hackathons")
@@ -174,44 +172,53 @@ async def search_upcoming_hackathons(
 
         # Normalize web search results to HackathonResult shape
         from_search = []
-        for r in (results or []):
-            from_search.append({
-                "title": r.get("title", "Untitled Hackathon"),
-                "company": r.get("company") or _extract_company_from_title(r.get("title", "")),
-                "location": r.get("location"),
-            # Map Tavily/Exa search fields
-                "description": r.get("description") or r.get("snippet", ""),
-                "apply_url": r.get("apply_url") or r.get("url", ""),
-                "deadline": None,
-                "source": r.get("source", "web"),
-                "skills_required": r.get("skills", []),
-            })
+        for r in results or []:
+            from_search.append(
+                {
+                    "title": r.get("title", "Untitled Hackathon"),
+                    "company": r.get("company") or _extract_company_from_title(r.get("title", "")),
+                    "location": r.get("location"),
+                    # Map Tavily/Exa search fields
+                    "description": r.get("description") or r.get("snippet", ""),
+                    "apply_url": r.get("apply_url") or r.get("url", ""),
+                    "deadline": None,
+                    "source": r.get("source", "web"),
+                    "skills_required": r.get("skills", []),
+                }
+            )
 
         # Also get opportunities already saved as Hackathon type
-        hackathon_query = select(Opportunity).where(
-            Opportunity.user_id == user.id,
-            Opportunity.type == "Hackathon",
-            Opportunity.is_active.is_(True),
-        ).order_by(desc(Opportunity.deadline)).limit(15)
+        hackathon_query = (
+            select(Opportunity)
+            .where(
+                Opportunity.user_id == user.id,
+                Opportunity.type == "Hackathon",
+                Opportunity.is_active.is_(True),
+            )
+            .order_by(desc(Opportunity.deadline))
+            .limit(15)
+        )
         hackathon_result = await db.execute(hackathon_query)
         saved_hackathons = hackathon_result.scalars().all()
 
         saved_data = []
         for h in saved_hackathons:
-            saved_data.append({
-                "id": str(h.id),
-                "title": h.title,
-                "company": h.company,
-                "location": h.location,
-                "city": h.city,
-                "state": h.state,
-                "country": h.country,
-                "description": h.description,
-                "apply_url": h.apply_url,
-                "deadline": h.deadline.isoformat() if h.deadline else None,
-                "source": h.source or "saved",
-                "skills_required": h.skills_required or [],
-            })
+            saved_data.append(
+                {
+                    "id": str(h.id),
+                    "title": h.title,
+                    "company": h.company,
+                    "location": h.location,
+                    "city": h.city,
+                    "state": h.state,
+                    "country": h.country,
+                    "description": h.description,
+                    "apply_url": h.apply_url,
+                    "deadline": h.deadline.isoformat() if h.deadline else None,
+                    "source": h.source or "saved",
+                    "skills_required": h.skills_required or [],
+                }
+            )
 
         return {
             "from_search": from_search,
@@ -237,26 +244,42 @@ async def get_filter_options(
     try:
         # Get distinct values for each filter field, limited to prevent unbounded results
         queries = {
-            "cities": select(Opportunity.city).where(
+            "cities": select(Opportunity.city)
+            .where(
                 Opportunity.user_id == user.id,
                 Opportunity.city.isnot(None),
                 Opportunity.city != "",
-            ).distinct().order_by(Opportunity.city).limit(FILTER_RESULT_LIMIT),
-            "states": select(Opportunity.state).where(
+            )
+            .distinct()
+            .order_by(Opportunity.city)
+            .limit(FILTER_RESULT_LIMIT),
+            "states": select(Opportunity.state)
+            .where(
                 Opportunity.user_id == user.id,
                 Opportunity.state.isnot(None),
                 Opportunity.state != "",
-            ).distinct().order_by(Opportunity.state).limit(FILTER_RESULT_LIMIT),
-            "countries": select(Opportunity.country).where(
+            )
+            .distinct()
+            .order_by(Opportunity.state)
+            .limit(FILTER_RESULT_LIMIT),
+            "countries": select(Opportunity.country)
+            .where(
                 Opportunity.user_id == user.id,
                 Opportunity.country.isnot(None),
                 Opportunity.country != "",
-            ).distinct().order_by(Opportunity.country).limit(FILTER_RESULT_LIMIT),
-            "industries": select(Opportunity.industry).where(
+            )
+            .distinct()
+            .order_by(Opportunity.country)
+            .limit(FILTER_RESULT_LIMIT),
+            "industries": select(Opportunity.industry)
+            .where(
                 Opportunity.user_id == user.id,
                 Opportunity.industry.isnot(None),
                 Opportunity.industry != "",
-            ).distinct().order_by(Opportunity.industry).limit(FILTER_RESULT_LIMIT),
+            )
+            .distinct()
+            .order_by(Opportunity.industry)
+            .limit(FILTER_RESULT_LIMIT),
         }
 
         result = {}
@@ -313,22 +336,24 @@ async def get_opportunity_locations(
         for key, loc in location_groups.items():
             scores = []
             for opp in loc["opportunities"]:
-                for ms in (opp.match_scores or []):
+                for ms in opp.match_scores or []:
                     if ms.overall_score:
                         scores.append(float(ms.overall_score))
             if scores:
                 loc["avg_score"] = sum(scores) / len(scores)
 
             if loc["lat"] is not None and loc["lng"] is not None:
-                locations.append({
-                    "city": loc["city"],
-                    "state": loc["state"],
-                    "country": loc["country"],
-                    "lat": loc["lat"],
-                    "lng": loc["lng"],
-                    "count": loc["count"],
-                    "avg_score": loc["avg_score"],
-                })
+                locations.append(
+                    {
+                        "city": loc["city"],
+                        "state": loc["state"],
+                        "country": loc["country"],
+                        "lat": loc["lat"],
+                        "lng": loc["lng"],
+                        "count": loc["count"],
+                        "avg_score": loc["avg_score"],
+                    }
+                )
 
         return {"locations": locations}
     except Exception as e:
@@ -347,9 +372,7 @@ async def get_opportunity(
         raise HTTPException(status_code=422, detail="ID must be a non-empty string")
 
     try:
-        result = await db.execute(
-            select(Opportunity).where(Opportunity.id == id, Opportunity.user_id == user.id)
-        )
+        result = await db.execute(select(Opportunity).where(Opportunity.id == id, Opportunity.user_id == user.id))
         opp = result.scalar_one_or_none()
         if not opp:
             raise HTTPException(status_code=404, detail="Opportunity not found")
@@ -374,18 +397,18 @@ async def get_opportunity(
 
 
 class HackathonScanRequest(BaseModel):
-    skills: Optional[list[str]] = None
-    alert_enabled: Optional[bool] = None
-    email_enabled: Optional[bool] = None
+    skills: list[str] | None = None
+    alert_enabled: bool | None = None
+    email_enabled: bool | None = None
 
 
 async def _run_hackathon_scan(
     db: AsyncSession,
     user_id: str,
-    skills: Optional[list[str]] = None,
-    persist_alert: Optional[bool] = None,
-    persist_email: Optional[bool] = None,
-    user_email: Optional[str] = None,
+    skills: list[str] | None = None,
+    persist_alert: bool | None = None,
+    persist_email: bool | None = None,
+    user_email: str | None = None,
 ) -> dict:
     """
     Core hackathon scan logic — reusable between the API endpoint and background task.
@@ -400,11 +423,11 @@ async def _run_hackathon_scan(
     Returns the same dict shape as the API endpoint (new_matches, total_found, message).
     """
     from app.search.adapters import SearchAdapter
+    from app.services.memory_service import MemoryService
     from app.services.notification_service import create_notification
     from app.services.profile_service import ProfileService
-    from app.utils.location import parse_location
     from app.utils.industry import detect_industry
-    from app.services.memory_service import MemoryService
+    from app.utils.location import parse_location
 
     try:
         # ── Get user profile skills ──
@@ -447,9 +470,7 @@ async def _run_hackathon_scan(
                 Opportunity.type == "Hackathon",
             )
         )
-        existing_titles = set(
-            row[0].lower().strip() for row in existing_result.all() if row[0]
-        )
+        existing_titles = set(row[0].lower().strip() for row in existing_result.all() if row[0])
 
         # ── Score each hackathon against user skills ──
         new_matches = []
@@ -465,12 +486,8 @@ async def _run_hackathon_scan(
 
             # Calculate skill match score
             combined_text = f"{title} {desc} {company}".lower()
-            matched_skills = [
-                s for s in user_skills if s.lower() in combined_text
-            ]
-            skill_score = (
-                len(matched_skills) / max(len(user_skills), 1) * 100
-            )
+            matched_skills = [s for s in user_skills if s.lower() in combined_text]
+            skill_score = len(matched_skills) / max(len(user_skills), 1) * 100
 
             # Only keep matches above threshold (at least 1 skill match or 15%+)
             if len(matched_skills) < 1 and skill_score < 15:
@@ -511,27 +528,26 @@ async def _run_hackathon_scan(
                 db,
                 str(user_id),
                 title=f"🎯 Hackathon match: {title[:60]}",
-                body=(
-                    f"Found '{title}' by {company} — matches your skills: "
-                    f"{', '.join(matched_skills[:3])}"
-                ),
+                body=(f"Found '{title}' by {company} — matches your skills: {', '.join(matched_skills[:3])}"),
                 type="success",
                 to_email=user_email if user_email else None,
             )
 
-            new_matches.append({
-                "id": str(opp.id),
-                "title": title,
-                "company": company,
-                "location": loc_raw,
-                "city": parsed["city"],
-                "state": parsed["state"],
-                "country": parsed["country"],
-                "description": desc[:200] if desc else None,
-                "apply_url": opp.apply_url,
-                "matched_skills": matched_skills,
-                "skill_score": round(skill_score, 1),
-            })
+            new_matches.append(
+                {
+                    "id": str(opp.id),
+                    "title": title,
+                    "company": company,
+                    "location": loc_raw,
+                    "city": parsed["city"],
+                    "state": parsed["state"],
+                    "country": parsed["country"],
+                    "description": desc[:200] if desc else None,
+                    "apply_url": opp.apply_url,
+                    "matched_skills": matched_skills,
+                    "skill_score": round(skill_score, 1),
+                }
+            )
 
         await db.flush()
 
@@ -556,9 +572,7 @@ async def _run_hackathon_scan(
             str(user_id),
             "last_hackathon_scan",
             {
-                "timestamp": __import__("datetime").datetime.now(
-                    __import__("datetime").timezone.utc
-                ).isoformat(),
+                "timestamp": __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(),
                 "new_matches": len(new_matches),
                 "total_searched": len(search_results),
             },
@@ -569,8 +583,7 @@ async def _run_hackathon_scan(
             "new_matches": new_matches,
             "total_found": len(new_matches),
             "message": (
-                f"Found {len(new_matches)} new hackathon{'s' if len(new_matches) != 1 else ''} "
-                f"matching your skills!"
+                f"Found {len(new_matches)} new hackathon{'s' if len(new_matches) != 1 else ''} matching your skills!"
             ),
         }
 
@@ -610,7 +623,7 @@ async def scan_hackathon_alerts(
 
 @router.post("/refresh", status_code=202)
 async def refresh_opportunities(
-    body: Optional[RefreshRequest] = None,
+    body: RefreshRequest | None = None,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):

@@ -1,10 +1,31 @@
-import io
+"""
+Service-level tests for HiringAgentService.
+
+These tests directly test the HiringAgentService methods rather than
+the HTTP endpoints, since the current API endpoints all require PDF
+file uploads which are difficult to mock in HTTP tests.
+"""
+
 import json
+from unittest.mock import AsyncMock, patch
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
-from tests.conftest import TEST_USER_ID, MockResult, make_memory_entry
-
+from app.hiring_agent.schemas import (
+    ATSScore,
+    BonusPoints,
+    CategoryScore,
+    Deductions,
+    EvaluationData,
+    ExtractedResume,
+    ImprovementItem,
+    ResumeBasics,
+    ResumeSkill,
+    ResumeWork,
+    Scores,
+)
+from app.hiring_agent.service import HiringAgentService
+from tests.conftest import TEST_USER_ID
 
 SAMPLE_RESUME_TEXT = (
     "John Doe\nSoftware Engineer\n"
@@ -14,276 +35,218 @@ SAMPLE_RESUME_TEXT = (
 )
 
 
-def mock_llm_chain(response_text):
-    chain = AsyncMock()
-    chain.ainvoke.return_value = response_text
-    return chain
+@pytest.fixture
+def mock_db():
+    db = AsyncMock()
+    db.commit = AsyncMock()
+    db.flush = AsyncMock()
+    db.execute = AsyncMock()
+    return db
 
 
-resume_extraction = {
-    "basics": {"name": "John Doe", "email": "john@example.com"},
-    "skills": [{"name": "Python", "keywords": ["flask", "fastapi"]}],
-    "work": [{"name": "Acme Corp", "position": "Engineer"}],
-    "education": [{"institution": "MIT", "area": "CS"}],
-    "projects": [{"name": "MyApp", "technologies": ["react", "node"]}],
-    "raw_text": SAMPLE_RESUME_TEXT,
-}
+@pytest.fixture
+def service(mock_db):
+    return HiringAgentService(mock_db, TEST_USER_ID)
 
 
-evaluation_json = json.dumps({
-    "scores": {
-        "open_source": {"score": 3.0, "max": 5, "evidence": "some oss work"},
-        "self_projects": {"score": 2.0, "max": 5, "evidence": "side projects"},
-        "production": {"score": 4.0, "max": 5, "evidence": "prod exp"},
-        "technical_skills": {"score": 4.0, "max": 5, "evidence": "strong tech stack"},
-    },
-    "bonus_points": {"total": 2.0, "breakdown": "demos + oss"},
-    "deductions": {"total": 1.0, "reasons": "no live demos"},
-    "key_strengths": ["Full-stack dev", "Cloud exp"],
-    "areas_for_improvement": ["Add portfolio"],
-})
+@pytest.fixture
+def sample_resume():
+    return ExtractedResume(
+        basics=ResumeBasics(name="John Doe", email="john@example.com"),
+        skills=[ResumeSkill(name="Python", keywords=["flask", "fastapi"])],
+        work=[ResumeWork(name="Acme Corp", position="Engineer")],
+        education=[],
+        projects=[],
+        raw_text=SAMPLE_RESUME_TEXT,
+    )
 
-ats_json = json.dumps({
-    "keyword_coverage_pct": 65.0,
-    "matched_keywords": ["python", "aws"],
-    "missing_keywords": ["docker"],
-    "matched_count": 2,
-    "missing_count": 1,
-    "suggestions": ["Add docker"],
-    "experience_years": 3,
-    "resume_experience_years": 5,
-})
 
-jd_match_json = json.dumps({
-    "skill_match": {"matched": ["python"], "missing": ["java"], "score": 50},
-    "experience_match": {"assessment": "good fit", "years": 3},
-    "education_match": {"requirement": "BS", "status": "met"},
-    "project_relevance": {"relevant": 2, "score": 70},
-    "overall_score": 72,
-    "overall_assessment": "Strong candidate",
-    "gap_analysis": [{"area": "java", "severity": "low"}],
-})
-
-cover_letter = "# Cover Letter\n\nDear Hiring Manager..."
-
-github_data = json.dumps({
-    "repos": [{"name": "project-x", "stars": 42}],
-    "total_stars": 42,
-    "languages": {"Python": 5000},
-    "summary": "Solid github profile",
-})
-
-portfolio_data = json.dumps({
-    "url": "https://johndoe.dev",
-    "role": "Full Stack Dev",
-    "summary": "impressive portfolio",
-    "projects": [{"name": "Portfolio Site"}],
-})
+@pytest.fixture
+def sample_evaluation():
+    return EvaluationData(
+        scores=Scores(
+            open_source=CategoryScore(score=3, max=5, evidence="some oss work"),
+            self_projects=CategoryScore(score=2, max=5, evidence="side projects"),
+            production=CategoryScore(score=4, max=5, evidence="prod exp"),
+            technical_skills=CategoryScore(score=4, max=10, evidence="strong tech stack"),
+        ),
+        bonus_points=BonusPoints(total=2.0, breakdown="demos + oss"),
+        deductions=Deductions(total=1.0, reasons="no live demos"),
+        key_strengths=["Full-stack dev", "Cloud exp"],
+        areas_for_improvement=["Add portfolio"],
+    )
 
 
 @pytest.mark.asyncio
-async def test_hiring_pipeline_full(auth_client, mock_db):
-    resume_entry = make_memory_entry(
-        key="resume_cv.pdf",
-        value={"text": SAMPLE_RESUME_TEXT, "filename": "cv.pdf", "pages": 1, "characters": len(SAMPLE_RESUME_TEXT)},
-    )
-    mock_result = MockResult(scalar_value=resume_entry)
-    mock_result.all.return_value = [resume_entry]
-    mock_db.execute = AsyncMock(return_value=mock_result)
-
-    with patch.multiple(
-        "app.hiring_agent.service.HiringAgentService",
-        _summarize_resume=AsyncMock(return_value=resume_extraction),
-        _evaluate_candidate=AsyncMock(return_value=json.loads(evaluation_json)),
-        _recommend_improvements=AsyncMock(return_value=[
-            {"category": "Skills", "suggestion": "Add Docker", "impact": "high", "effort": "low", "priority_score": 8},
-        ]),
-        _check_live_demos=AsyncMock(return_value=[{"url": "https://demo.dev", "status": "live"}]),
+async def test_extract_resume(service):
+    """Test that extract_resume delegates to pdf_extractor and returns ExtractedResume."""
+    with (
+        patch("app.hiring_agent.service.extract_pdf_text", return_value=SAMPLE_RESUME_TEXT) as mock_extract,
+        patch("app.hiring_agent.service.parse_resume_sections") as mock_parse,
     ):
-        payload = {"github_url": "https://github.com/johndoe", "portfolio_url": "https://johndoe.dev"}
-        response = await auth_client.post("/api/v1/hiring-agent/pipeline", json=payload)
+        mock_parse.return_value = ExtractedResume(
+            basics=ResumeBasics(name="John Doe"),
+            skills=[ResumeSkill(name="Python", keywords=["flask"])],
+            work=[ResumeWork(name="Acme Corp", position="Engineer")],
+            education=[],
+            projects=[],
+            raw_text=SAMPLE_RESUME_TEXT,
+        )
 
-    assert response.status_code == 200
-    data = response.json()
-    assert data["name"] == "John Doe"
-    assert data["overall_score"] >= 0
-    assert "resume" in data
-    assert "evaluation" in data
-    assert "improvements" in data
-    assert "live_demo_status" in data
+        result = await service.extract_resume(b"fake pdf content")
 
-
-@pytest.mark.asyncio
-async def test_hiring_extract_when_no_resume(auth_client, mock_db):
-    mock_result = MockResult(scalar_value=None)
-    mock_result.all.return_value = []
-    mock_db.execute = AsyncMock(return_value=mock_result)
-
-    response = await auth_client.get("/api/v1/hiring-agent/extract")
-    assert response.status_code == 404
-    assert "No resume found" in response.json()["detail"]
+        assert isinstance(result, ExtractedResume)
+        assert result.basics.name == "John Doe"
+        assert len(result.skills) == 1
+        assert result.skills[0].name == "Python"
+        assert len(result.work) == 1
+        assert result.raw_text == SAMPLE_RESUME_TEXT
+        mock_extract.assert_called_once_with(b"fake pdf content")
 
 
 @pytest.mark.asyncio
-async def test_hiring_extract_success(auth_client, mock_db):
-    resume_entry = make_memory_entry(
-        key="resume_cv.pdf",
-        value={"text": SAMPLE_RESUME_TEXT, "filename": "cv.pdf", "pages": 1, "characters": len(SAMPLE_RESUME_TEXT)},
-    )
-    mock_result = MockResult(scalar_value=resume_entry)
-    mock_db.execute = AsyncMock(return_value=mock_result)
-
-    with patch("app.hiring_agent.service.HiringAgentService._summarize_resume", new_callable=AsyncMock) as mock_sum:
-        mock_sum.return_value = resume_extraction
-        response = await auth_client.get("/api/v1/hiring-agent/extract")
-
-    assert response.status_code == 200
-    data = response.json()
-    assert data["basics"]["name"] == "John Doe"
-    assert data["skills"][0]["name"] == "Python"
-
-
-@pytest.mark.asyncio
-async def test_hiring_evaluate_text(auth_client, mock_db):
-    resume_entry = make_memory_entry(
-        key="resume_cv.pdf",
-        value={"text": SAMPLE_RESUME_TEXT, "filename": "cv.pdf", "pages": 1, "characters": len(SAMPLE_RESUME_TEXT)},
-    )
-    mock_result = MockResult(scalar_value=resume_entry)
-    mock_db.execute = AsyncMock(return_value=mock_result)
-
-    with patch("app.hiring_agent.service.HiringAgentService._evaluate_candidate", new_callable=AsyncMock) as mock_eval:
-        mock_eval.return_value = json.loads(evaluation_json)
-        response = await auth_client.post("/api/v1/hiring-agent/evaluate-text")
-
-    assert response.status_code == 200
-    data = response.json()
-    assert "scores" in data
-    assert data["key_strengths"][0] == "Full-stack dev"
-
-
-@pytest.mark.asyncio
-async def test_hiring_ats(auth_client, mock_db):
-    resume_entry = make_memory_entry(
-        key="resume_cv.pdf",
-        value={"text": SAMPLE_RESUME_TEXT, "filename": "cv.pdf", "pages": 1, "characters": len(SAMPLE_RESUME_TEXT)},
-    )
-    mock_result = MockResult(scalar_value=resume_entry)
-    mock_db.execute = AsyncMock(return_value=mock_result)
-
-    with patch("app.hiring_agent.service.HiringAgentService._summarize_resume", new_callable=AsyncMock) as mock_sum:
-        mock_sum.return_value = resume_extraction
-        with patch("app.hiring_agent.service.HiringAgentService._compute_ats_score", new_callable=AsyncMock) as mock_ats:
-            mock_ats.return_value = json.loads(ats_json)
-            response = await auth_client.get("/api/v1/hiring-agent/ats")
-
-    assert response.status_code == 200
-    data = response.json()
-    assert data["keyword_coverage_pct"] == 65.0
-    assert "python" in data["matched_keywords"]
-
-
-@pytest.mark.asyncio
-async def test_hiring_match_jd(auth_client, mock_db):
-    resume_entry = make_memory_entry(
-        key="resume_cv.pdf",
-        value={"text": SAMPLE_RESUME_TEXT, "filename": "cv.pdf", "pages": 1, "characters": len(SAMPLE_RESUME_TEXT)},
-    )
-    mock_result = MockResult(scalar_value=resume_entry)
-    mock_db.execute = AsyncMock(return_value=mock_result)
-
-    with patch("app.hiring_agent.service.HiringAgentService._summarize_resume", new_callable=AsyncMock) as mock_sum:
-        mock_sum.return_value = resume_extraction
-        with patch("app.hiring_agent.service.HiringAgentService._match_jd", new_callable=AsyncMock) as mock_jd:
-            mock_jd.return_value = json.loads(jd_match_json)
-            response = await auth_client.post("/api/v1/hiring-agent/match-jd", json={"job_description": "Looking for a Python developer with Java experience"})
-
-    assert response.status_code == 200
-    data = response.json()
-    assert data["overall_score"] == 72
-    assert data["overall_assessment"] == "Strong candidate"
-
-
-@pytest.mark.asyncio
-async def test_hiring_cover_letter(auth_client, mock_db):
-    resume_entry = make_memory_entry(
-        key="resume_cv.pdf",
-        value={"text": SAMPLE_RESUME_TEXT, "filename": "cv.pdf", "pages": 1, "characters": len(SAMPLE_RESUME_TEXT)},
-    )
-    mock_result = MockResult(scalar_value=resume_entry)
-    mock_db.execute = AsyncMock(return_value=mock_result)
-
-    with patch("app.hiring_agent.service.HiringAgentService._generate_cover_letter", new_callable=AsyncMock) as mock_cl:
-        mock_cl.return_value = cover_letter
-        response = await auth_client.post("/api/v1/hiring-agent/cover-letter", json={
-            "job_title": "Software Engineer",
-            "company_name": "Acme Corp",
-            "job_description": "Building cool stuff",
-        })
-
-    assert response.status_code == 200
-    assert "# Cover Letter" in response.text
-
-
-@pytest.mark.asyncio
-async def test_hiring_github_enrich(auth_client, mock_db):
-    resume_entry = make_memory_entry(
-        key="resume_cv.pdf",
-        value={"text": SAMPLE_RESUME_TEXT, "filename": "cv.pdf", "pages": 1, "characters": len(SAMPLE_RESUME_TEXT)},
-    )
-    mock_result = MockResult(scalar_value=resume_entry)
-    mock_db.execute = AsyncMock(return_value=mock_result)
-
-    with patch("app.hiring_agent.service.HiringAgentService._enrich_github", new_callable=AsyncMock) as mock_gh:
-        mock_gh.return_value = json.loads(github_data)
-        response = await auth_client.post("/api/v1/hiring-agent/github-enrich", json={"github_url": "https://github.com/johndoe"})
-
-    assert response.status_code == 200
-    data = response.json()
-    assert data["total_stars"] == 42
-    assert data["repos"][0]["name"] == "project-x"
-
-
-@pytest.mark.asyncio
-async def test_hiring_portfolio_enrich(auth_client, mock_db):
-    resume_entry = make_memory_entry(
-        key="resume_cv.pdf",
-        value={"text": SAMPLE_RESUME_TEXT, "filename": "cv.pdf", "pages": 1, "characters": len(SAMPLE_RESUME_TEXT)},
-    )
-    mock_result = MockResult(scalar_value=resume_entry)
-    mock_db.execute = AsyncMock(return_value=mock_result)
-
-    with patch("app.hiring_agent.service.HiringAgentService._enrich_portfolio", new_callable=AsyncMock) as mock_pf:
-        mock_pf.return_value = json.loads(portfolio_data)
-        response = await auth_client.post("/api/v1/hiring-agent/portfolio-enrich", json={"portfolio_url": "https://johndoe.dev"})
-
-    assert response.status_code == 200
-    data = response.json()
-    assert data["role"] == "Full Stack Dev"
-    assert data["projects"][0]["name"] == "Portfolio Site"
-
-
-@pytest.mark.asyncio
-async def test_hiring_report(auth_client, mock_db):
-    resume_entry = make_memory_entry(
-        key="resume_cv.pdf",
-        value={"text": SAMPLE_RESUME_TEXT, "filename": "cv.pdf", "pages": 1, "characters": len(SAMPLE_RESUME_TEXT)},
-    )
-    mock_result = MockResult(scalar_value=resume_entry)
-    mock_db.execute = AsyncMock(return_value=mock_result)
-
-    with patch.multiple(
-        "app.hiring_agent.service.HiringAgentService",
-        _summarize_resume=AsyncMock(return_value=resume_extraction),
-        _evaluate_candidate=AsyncMock(return_value=json.loads(evaluation_json)),
-        _compute_ats_score=AsyncMock(return_value=json.loads(ats_json)),
-        _recommend_improvements=AsyncMock(return_value=[
-            {"category": "Skills", "suggestion": "Add Docker", "impact": "high", "effort": "low", "priority_score": 8},
-        ]),
-        _check_live_demos=AsyncMock(return_value=[{"url": "https://demo.dev", "status": "live"}]),
+async def test_extract_resume_empty_pdf(service):
+    """Test that an empty PDF returns a stub ExtractedResume."""
+    with (
+        patch("app.hiring_agent.service.extract_pdf_text", return_value=""),
+        patch("app.hiring_agent.service.parse_resume_sections") as mock_parse,
     ):
-        response = await auth_client.get("/api/v1/hiring-agent/report")
+        mock_parse.return_value = ExtractedResume(
+            basics=ResumeBasics(name=""),
+            skills=[],
+            work=[],
+            education=[],
+            projects=[],
+            raw_text="",
+        )
 
-    assert response.status_code == 200
-    assert response.headers["content-type"] == "text/html; charset=utf-8"
-    assert "John Doe" in response.text
+        result = await service.extract_resume(b"")
+        assert isinstance(result, ExtractedResume)
+        assert result.basics.name == ""
+        assert result.raw_text == ""
+
+
+@pytest.mark.asyncio
+async def test_evaluate_resume_returns_evaluation_data(service, sample_resume):
+    """Test evaluate_resume returns EvaluationData when LLM call succeeds."""
+    with patch("app.hiring_agent.service.get_completion_llm") as mock_get_llm:
+        mock_llm = AsyncMock()
+        from langchain_core.messages import HumanMessage
+
+        mock_llm.ainvoke.return_value = HumanMessage(
+            content=json.dumps(
+                {
+                    "scores": {
+                        "open_source": {"score": 3, "max": 5, "evidence": "some oss work"},
+                        "self_projects": {"score": 2, "max": 5, "evidence": "side projects"},
+                        "production": {"score": 4, "max": 5, "evidence": "prod exp"},
+                        "technical_skills": {"score": 4, "max": 10, "evidence": "strong tech stack"},
+                    },
+                    "bonus_points": {"total": 2.0, "breakdown": "demos + oss"},
+                    "deductions": {"total": 1.0, "reasons": "no live demos"},
+                    "key_strengths": ["Full-stack dev", "Cloud exp"],
+                    "areas_for_improvement": ["Add portfolio"],
+                }
+            )
+        )
+        mock_get_llm.return_value = mock_llm
+
+        result = await service.evaluate_resume("test resume text")
+
+        assert result is not None
+        assert isinstance(result, EvaluationData)
+        assert result.scores.open_source.score == 3
+        assert result.key_strengths == ["Full-stack dev", "Cloud exp"]
+
+
+@pytest.mark.asyncio
+async def test_compute_ats_analysis(service):
+    """Test ATS analysis matches keywords between resume and JD."""
+    resume_text = "I know Python, Docker, and AWS"
+    jd_text = "Looking for Python developer with Docker and Kubernetes experience"
+
+    result = await service.compute_ats_analysis(resume_text, jd_text)
+
+    assert isinstance(result, ATSScore)
+    assert "python" in result.matched_keywords
+    assert "docker" in result.matched_keywords
+    assert "kubernetes" in result.missing_keywords
+    assert result.matched_count >= 2
+    assert result.missing_count >= 1
+    assert isinstance(result.keyword_coverage_pct, float)
+
+
+@pytest.mark.asyncio
+async def test_compute_ats_analysis_no_match(service):
+    """Test ATS analysis with completely different texts."""
+    resume_text = "I like cooking and baking"
+    jd_text = "Kubernetes, Terraform, Go, Rust"
+
+    result = await service.compute_ats_analysis(resume_text, jd_text)
+
+    assert isinstance(result, ATSScore)
+    assert result.matched_count == 0
+    assert result.missing_count > 0
+    assert result.keyword_coverage_pct == 0.0
+
+
+@pytest.mark.asyncio
+async def test_enrich_github_invalid_url(service):
+    """Test github enrichment with invalid URL."""
+    result = await service.enrich_github("not-a-url")
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_enrich_portfolio_invalid_url(service):
+    """Test portfolio enrichment with invalid URL."""
+    result = await service.enrich_portfolio("not-a-url")
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_enrich_portfolio_empty_url(service):
+    """Test portfolio enrichment with empty URL."""
+    result = await service.enrich_portfolio("")
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_generate_improvements_returns_list(service, sample_evaluation):
+    """Test generate_improvements returns a list of ImprovementItem."""
+    with patch.object(service, "_llm_call", new_callable=AsyncMock) as mock_llm:
+        mock_llm.return_value = None  # Force fallback
+
+        result = await service.generate_improvements(sample_evaluation)
+
+        assert isinstance(result, list)
+        # Fallback should generate items for low-scoring categories
+        assert len(result) >= 1
+        assert all(isinstance(item, ImprovementItem) for item in result)
+
+
+@pytest.mark.asyncio
+async def test_extract_github_username(service):
+    """Test GitHub username extraction from URLs."""
+    # Private method via name mangling — access through the class method
+    result = service._extract_github_username("https://github.com/johndoe")
+    assert result == "johndoe"
+
+    result = service._extract_github_username("https://github.com/johndoe/repo")
+    assert result == "johndoe"
+
+    result = service._extract_github_username("")
+    assert result is None
+
+    result = service._extract_github_username(None)
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_run_pipeline_no_resume(service):
+    """Test pipeline returns None when resume extraction fails."""
+    with patch.object(service, "extract_resume", new_callable=AsyncMock) as mock_extract:
+        mock_extract.return_value = None
+
+        result = await service.run_pipeline(b"fake pdf")
+        assert result is None

@@ -175,7 +175,7 @@ export default function Register() {
               )}
             </div>
             {error && <p className="text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2 border border-destructive/20">{error}</p>}
-            <Button type="submit" className="w-full bg-gradient-1 shadow-glow hover:shadow-glow-lg transition-all duration-300 gap-2" disabled={isSubmitting || isLoading || !isFirebaseConfigured}>
+            <Button type="submit" className="w-full bg-gradient-1 shadow-glow hover:shadow-glow-lg transition-all duration-300 gap-2" disabled={isSubmitting || isLoading}>
               {isSubmitting ? (
                 <><Loader2 className="h-4 w-4 animate-spin" />Creating account...</>
               ) : (

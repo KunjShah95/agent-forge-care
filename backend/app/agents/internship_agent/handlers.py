@@ -4,8 +4,8 @@ import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.opportunity_agent.service import OpportunityAgentService
 from app.opportunity_agent.schemas import OpportunityResult
+from app.opportunity_agent.service import OpportunityAgentService
 
 logger = logging.getLogger("agentforge.agents.internship.handlers")
 

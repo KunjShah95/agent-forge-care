@@ -1,6 +1,7 @@
 """Monitor Agent handlers — opportunity scanning and alerts."""
 
 import logging
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger("agentforge.agents.monitor.handlers")
@@ -21,8 +22,10 @@ async def run_daily_scan(
         result = await service.run_scan(search_query=search_query)
         return {
             "items": [i.model_dump() for i in result.items],
-            "total": result.total, "scored": result.scored,
-            "alerts": result.alerts, "message": result.message,
+            "total": result.total,
+            "scored": result.scored,
+            "alerts": result.alerts,
+            "message": result.message,
             "analysis": result.analysis.model_dump() if result.analysis else None,
             "feedback": result.feedback.model_dump() if result.feedback else None,
         }

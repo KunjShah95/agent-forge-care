@@ -1,7 +1,9 @@
 import logging
 from typing import Any
-from sqlalchemy.ext.asyncio import AsyncSession
+
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.models.user import MemoryEntry
 
 logger = logging.getLogger("agentforge.services.memory")
@@ -14,9 +16,7 @@ class MemoryService:
     async def get_user_context(self, user_id: str) -> dict:
         """Get all memory entries for a user as a plain dict."""
         try:
-            result = await self.db.execute(
-                select(MemoryEntry).where(MemoryEntry.user_id == user_id)
-            )
+            result = await self.db.execute(select(MemoryEntry).where(MemoryEntry.user_id == user_id))
             entries = result.scalars().all()
             context = {}
             for entry in entries:

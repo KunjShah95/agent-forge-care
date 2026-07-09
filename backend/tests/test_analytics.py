@@ -1,5 +1,6 @@
-import pytest
 from unittest.mock import AsyncMock
+
+import pytest
 
 from tests.conftest import MockResult
 
@@ -11,9 +12,7 @@ async def test_analytics_summary(auth_client, mock_db):
     interviews_result = MockResult(scalar_value=4)
     deadlines_result = MockResult(scalar_value=3)
 
-    mock_db.execute = AsyncMock(
-        side_effect=[matches_result, apps_result, interviews_result, deadlines_result]
-    )
+    mock_db.execute = AsyncMock(side_effect=[matches_result, apps_result, interviews_result, deadlines_result])
 
     response = await auth_client.get("/api/v1/analytics/summary")
     assert response.status_code == 200
@@ -127,9 +126,7 @@ async def test_analytics_skills_demand_no_auth(async_client):
 
 @pytest.mark.asyncio
 async def test_analytics_activity(auth_client, mock_db):
-    mock_db.execute = AsyncMock(
-        side_effect=[MockResult(scalar_value=i % 7) for i in range(14)]
-    )
+    mock_db.execute = AsyncMock(side_effect=[MockResult(scalar_value=i % 7) for i in range(14)])
 
     response = await auth_client.get("/api/v1/analytics/activity")
     assert response.status_code == 200

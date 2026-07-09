@@ -1,6 +1,6 @@
-from typing import Optional
-from pydantic import BaseModel, Field
 from datetime import datetime
+
+from pydantic import BaseModel, Field
 
 
 class TaskDef(BaseModel):
@@ -17,9 +17,9 @@ class OrchestratorResult(BaseModel):
     status: str = "pending"
     tasks: list[TaskDef] = Field(default_factory=list)
     results: dict = Field(default_factory=dict)
-    error: Optional[str] = None
+    error: str | None = None
     created_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
-    completed_at: Optional[str] = None
+    completed_at: str | None = None
 
 
 class OrchestratorRequest(BaseModel):
@@ -30,4 +30,4 @@ class OrchestratorStatus(BaseModel):
     run_id: str
     status: str
     results: dict = Field(default_factory=dict)
-    error: Optional[str] = None
+    error: str | None = None

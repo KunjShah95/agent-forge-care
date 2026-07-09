@@ -1,24 +1,38 @@
 import { Outlet } from "react-router-dom";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
-import { ThemeToggle } from "./ThemeToggle";
 import { CommandPalette } from "./CommandPalette";
 import { NotificationCenter } from "./NotificationCenter";
-import { Button } from "@/components/ui/button";
-import { Search, LogOut, Settings } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/api/hooks";
 import { useAuthContext } from "@/lib/auth-context";
 import { Link } from "react-router-dom";
+import { Settings, LogOut, Search } from "lucide-react";
+
+const BORDER = "rgba(255,255,255,0.08)";
+const MUTED = "hsl(240, 4%, 60%)";
 
 export default function AppLayout() {
   const [cmdOpen, setCmdOpen] = useState(false);
   const { data: user } = useAuth();
   const { logout } = useAuthContext();
+
   const initials = user?.full_name
-    ? user.full_name.split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase()
+    ? user.full_name
+        .split(" ")
+        .map((w: string) => w[0])
+        .filter(Boolean)
+        .slice(0, 2)
+        .join("")
+        .toUpperCase()
     : "?";
 
   useEffect(() => {
@@ -34,53 +48,114 @@ export default function AppLayout() {
 
   return (
     <SidebarProvider>
-      <div className="min-h-screen flex w-full mesh-bg">
+      <div
+        className="dark min-h-screen flex w-full"
+        style={{ background: "hsl(210, 25%, 6%)", color: "white" }}
+      >
         <AppSidebar />
+
         <div className="flex-1 flex flex-col min-w-0">
-          <header className="h-14 flex items-center gap-3 border-b border-border/40 px-4 backdrop-blur-xl bg-background/70 sticky top-0 z-30">
-            <SidebarTrigger />
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-2 text-muted-foreground w-72 justify-start glass"
+          {/* Header */}
+          <header
+            className="h-12 flex items-center gap-3 px-5 sticky top-0 z-30"
+            style={{
+              background: "hsl(210, 25%, 6%)",
+              borderBottom: `1px solid ${BORDER}`,
+            }}
+          >
+            <SidebarTrigger
+              className="text-white/40 hover:text-white transition-colors"
+              style={{ color: MUTED }}
+            />
+
+            {/* Search trigger */}
+            <button
               onClick={() => setCmdOpen(true)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-md text-xs transition-colors"
+              style={{
+                color: MUTED,
+                background: "rgba(255,255,255,0.04)",
+                border: `1px solid ${BORDER}`,
+              }}
             >
-              <Search className="h-4 w-4" />
-              <span className="text-xs">Search opportunities, contacts, actions…</span>
-              <kbd className="ml-auto pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium">
+              <Search className="h-3.5 w-3.5" />
+              <span>Search…</span>
+              <kbd
+                className="ml-6 font-mono text-[10px] px-1.5 py-0.5 rounded"
+                style={{
+                  background: "rgba(255,255,255,0.06)",
+                  color: MUTED,
+                  border: `1px solid ${BORDER}`,
+                }}
+              >
                 ⌘K
               </kbd>
-            </Button>
-            <div className="ml-auto flex items-center gap-1">
+            </button>
+
+            <div className="ml-auto flex items-center gap-2">
               <NotificationCenter />
-              <ThemeToggle />
+
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Avatar className="h-8 w-8 ml-2 border-2 border-primary/30 cursor-pointer hover:ring-2 hover:ring-primary/20 transition-all">
-                    <AvatarFallback className="bg-gradient-1 text-primary-foreground text-xs font-semibold">{initials}</AvatarFallback>
+                  <Avatar
+                    className="h-7 w-7 cursor-pointer"
+                    style={{ border: `1px solid ${BORDER}` }}
+                  >
+                    <AvatarFallback
+                      className="text-[11px] font-medium"
+                      style={{
+                        background: "rgba(255,255,255,0.08)",
+                        color: "white",
+                      }}
+                    >
+                      {initials}
+                    </AvatarFallback>
                   </Avatar>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-48">
-                  <div className="px-2 py-1.5 text-sm font-medium">{user?.full_name || user?.email || "User"}</div>
-                  <div className="px-2 pb-1.5 text-xs text-muted-foreground">{user?.email}</div>
-                  <DropdownMenuSeparator />
+                <DropdownMenuContent
+                  align="end"
+                  className="w-48 dark"
+                  style={{
+                    background: "hsl(210, 22%, 8%)",
+                    border: `1px solid ${BORDER}`,
+                  }}
+                >
+                  <div className="px-3 py-2 text-sm font-medium text-white">
+                    {user?.full_name || user?.email || "User"}
+                  </div>
+                  <div className="px-3 pb-2 text-xs" style={{ color: MUTED }}>
+                    {user?.email}
+                  </div>
+                  <DropdownMenuSeparator style={{ background: BORDER }} />
                   <DropdownMenuItem asChild>
-                    <Link to="/app/settings" className="gap-2 cursor-pointer">
-                      <Settings className="h-4 w-4" /> Settings
+                    <Link
+                      to="/app/settings"
+                      className="flex items-center gap-2 text-sm cursor-pointer"
+                      style={{ color: MUTED }}
+                    >
+                      <Settings className="h-3.5 w-3.5" />
+                      Settings
                     </Link>
                   </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => logout()} className="gap-2 cursor-pointer text-destructive focus:text-destructive">
-                    <LogOut className="h-4 w-4" /> Sign out
+                  <DropdownMenuSeparator style={{ background: BORDER }} />
+                  <DropdownMenuItem
+                    onClick={() => logout()}
+                    className="flex items-center gap-2 text-sm cursor-pointer text-red-400"
+                  >
+                    <LogOut className="h-3.5 w-3.5" />
+                    Sign out
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
           </header>
-          <main className="flex-1 p-6 animate-fade-in overflow-x-hidden">
+
+          {/* Page content */}
+          <main className="flex-1 overflow-x-hidden">
             <Outlet />
           </main>
         </div>
+
         <CommandPalette open={cmdOpen} setOpen={setCmdOpen} />
       </div>
     </SidebarProvider>

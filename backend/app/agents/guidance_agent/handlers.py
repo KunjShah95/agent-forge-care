@@ -1,13 +1,14 @@
 """Guidance Agent handlers — career guidance and planning."""
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.profile_service import ProfileService
-from app.memory.memory_layer import AgentMemory
-from app.utils.embedding import get_text_embedding
 from app.agents.constants import COLLECTION_MEMORY_NOTES
+from app.memory.memory_layer import AgentMemory
+from app.services.profile_service import ProfileService
+from app.utils.embedding import get_text_embedding
 
 logger = logging.getLogger("agentforge.agents.guidance.handlers")
 
@@ -26,7 +27,8 @@ async def get_career_guidance(
 
     guidance = {
         "profile_summary": {
-            "name": profile.school or "Student", "skills": profile_skills,
+            "name": profile.school or "Student",
+            "skills": profile_skills,
             "target_locations": profile.target_locations or ["Remote"],
             "career_goal": profile.career_goal or "Not yet defined",
         },
@@ -53,10 +55,16 @@ async def get_career_guidance(
     try:
         agent_memory = AgentMemory(user_id)
         vector = await get_text_embedding(result["message"])
-        agent_memory.store_vector(collection=COLLECTION_MEMORY_NOTES, text=result["message"], vector=vector, metadata={
-            "agent_type": "guidance", "key": params.get("query", ""),
-            "timestamp": str(datetime.now(timezone.utc)),
-        })
+        agent_memory.store_vector(
+            collection=COLLECTION_MEMORY_NOTES,
+            text=result["message"],
+            vector=vector,
+            metadata={
+                "agent_type": "guidance",
+                "key": params.get("query", ""),
+                "timestamp": str(datetime.now(UTC)),
+            },
+        )
     except Exception as e:
         logger.debug("Failed to store memory vector: %s", e)
 

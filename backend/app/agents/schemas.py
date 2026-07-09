@@ -1,6 +1,6 @@
-from typing import Optional
-from pydantic import BaseModel, Field
 from datetime import datetime
+
+from pydantic import BaseModel, Field
 
 
 class AgentStatus(str):
@@ -21,12 +21,12 @@ class AgentTask(BaseModel):
 class AgentResult(BaseModel):
     agent_type: str
     status: str = AgentStatus.PENDING
-    output: Optional[dict] = None
-    error: Optional[str] = None
-    started_at: Optional[str] = None
-    completed_at: Optional[str] = None
-    duration_ms: Optional[float] = None
-    task_id: Optional[str] = None
+    output: dict | None = None
+    error: str | None = None
+    started_at: str | None = None
+    completed_at: str | None = None
+    duration_ms: float | None = None
+    task_id: str | None = None
 
 
 class OrchestratorRun(BaseModel):
@@ -37,5 +37,5 @@ class OrchestratorRun(BaseModel):
     tasks: list[AgentTask] = Field(default_factory=list)
     results: dict[str, AgentResult] = Field(default_factory=dict)
     created_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
-    completed_at: Optional[str] = None
-    error: Optional[str] = None
+    completed_at: str | None = None
+    error: str | None = None

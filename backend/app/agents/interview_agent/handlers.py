@@ -2,28 +2,29 @@
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.memory_service import MemoryService
-from app.services.profile_service import ProfileService
-from app.services.model_manager import get_completion_llm
-from app.memory.memory_layer import AgentMemory
-from app.utils.embedding import get_text_embedding
-from app.agents.enrichment import build_enrichment_context
 from app.agents.base import strip_json_fences
 from app.agents.constants import (
+    COLLECTION_MEMORY_NOTES,
+    DEFAULT_ROLE_TYPE,
+    LLM_PROVIDER_INTERVIEW,
     LLM_TEMPERATURE_CREATIVE,
     LLM_TEMPERATURE_PRECISE,
-    LLM_PREFERRED_PROVIDER,
-    MEMORY_WEIGHT_MEDIUM,
-    MEMORY_KEY_INTERVIEW,
-    COLLECTION_MEMORY_NOTES,
-    MAX_INTERVIEW_SKILLS,
     MAX_INTERVIEW_PREP_TIPS,
-    DEFAULT_ROLE_TYPE,
+    MAX_INTERVIEW_SKILLS,
+    MEMORY_KEY_INTERVIEW,
+    MEMORY_WEIGHT_MEDIUM,
 )
+from app.agents.enrichment import build_enrichment_context
 from app.agents.prompts.interview import prepare_interview_prompt, review_answer_prompt
+from app.memory.memory_layer import AgentMemory
+from app.services.memory_service import MemoryService
+from app.services.model_manager import get_completion_llm
+from app.services.profile_service import ProfileService
+from app.utils.embedding import get_text_embedding
 
 logger = logging.getLogger("agentforge.agents.interview.handlers")
 
@@ -47,7 +48,7 @@ async def prepare_interview(
 
     ctx = await build_enrichment_context(db, user_id, all_skills)
 
-    llm = get_completion_llm(temperature=LLM_TEMPERATURE_CREATIVE, preferred_provider=LLM_PREFERRED_PROVIDER)
+    llm = get_completion_llm(temperature=LLM_TEMPERATURE_CREATIVE, preferred_provider=LLM_PROVIDER_INTERVIEW)
     questions = None
     prep_tips = None
 
@@ -73,10 +74,17 @@ async def prepare_interview(
         prep_tips = _fallback_interview_tips(all_skills, company, ctx)
 
     try:
-        await memory_service.set_memory(user_id, MEMORY_KEY_INTERVIEW, {
-            "role_type": role_type, "skills": all_skills, "company": company,
-            "prepared_at": datetime.now(timezone.utc).isoformat(),
-        }, weight=MEMORY_WEIGHT_MEDIUM)
+        await memory_service.set_memory(
+            user_id,
+            MEMORY_KEY_INTERVIEW,
+            {
+                "role_type": role_type,
+                "skills": all_skills,
+                "company": company,
+                "prepared_at": datetime.now(UTC).isoformat(),
+            },
+            weight=MEMORY_WEIGHT_MEDIUM,
+        )
     except Exception as e:
         logger.debug("Failed to store interview prep memory: %s", e)
 
@@ -91,10 +99,16 @@ async def prepare_interview(
     try:
         agent_memory = AgentMemory(user_id)
         vector = await get_text_embedding(result["message"])
-        agent_memory.store_vector(collection=COLLECTION_MEMORY_NOTES, text=result["message"], vector=vector, metadata={
-            "agent_type": "interview", "key": params.get("role_type", ""),
-            "timestamp": str(datetime.now(timezone.utc)),
-        })
+        agent_memory.store_vector(
+            collection=COLLECTION_MEMORY_NOTES,
+            text=result["message"],
+            vector=vector,
+            metadata={
+                "agent_type": "interview",
+                "key": params.get("role_type", ""),
+                "timestamp": str(datetime.now(UTC)),
+            },
+        )
     except Exception as e:
         logger.debug("Failed to store memory vector: %s", e)
 
@@ -112,10 +126,15 @@ async def review_interview_answer(
     company = params.get("company")
     role = params.get("role")
 
-    llm = get_completion_llm(temperature=LLM_TEMPERATURE_PRECISE, preferred_provider=LLM_PREFERRED_PROVIDER)
+    llm = get_completion_llm(temperature=LLM_TEMPERATURE_PRECISE, preferred_provider=LLM_PROVIDER_INTERVIEW)
 
     if not llm:
-        return {"feedback": "AI review is unavailable. Your answer was recorded.", "score": None, "strengths": [], "improvements": []}
+        return {
+            "feedback": "AI review is unavailable. Your answer was recorded.",
+            "score": None,
+            "strengths": [],
+            "improvements": [],
+        }
 
     try:
         from langchain_core.messages import HumanMessage
@@ -132,7 +151,12 @@ async def review_interview_answer(
         }
     except Exception as e:
         logger.warning("LLM review_interview_answer failed: %s", e)
-        return {"feedback": "Could not generate AI feedback at this time.", "score": None, "strengths": [], "improvements": []}
+        return {
+            "feedback": "Could not generate AI feedback at this time.",
+            "score": None,
+            "strengths": [],
+            "improvements": [],
+        }
 
 
 # ── Fallback Templates ──────────────────────────────────────
@@ -146,13 +170,44 @@ def _fallback_interview_questions(all_skills: list[str], ctx) -> list[dict]:
     questions = []
     for idx, skill in enumerate(all_skills[:MAX_INTERVIEW_SKILLS]):
         project_suffix = f" — specifically in {_project_ref}" if _project_ref and idx < 2 else ""
-        questions.append({"skill": skill, "question": f"Describe your experience with {skill} and a project where you used it effectively.{project_suffix}", "type": "behavioral", "tips": f"Use STAR format. Highlight a specific project where {skill} was critical."})
-        questions.append({"skill": skill, "question": f"What are the trade-offs and challenges when working with {skill} at scale?", "type": "technical", "tips": "Discuss performance, maintainability, and real-world constraints."})
-    questions.extend([
-        {"skill": "general", "question": "Tell me about yourself and your background.", "type": "behavioral", "tips": "Structure it: present → past → future. Keep it under 2 minutes."},
-        {"skill": "general", "question": "Why are you interested in this role/company?", "type": "behavioral", "tips": "Show you've done your research. Mention specific products or initiatives."},
-        {"skill": "general", "question": "Describe a time you resolved a conflict or disagreement in a team.", "type": "behavioral", "tips": "Focus on communication and compromise. Show growth."},
-    ])
+        questions.append(
+            {
+                "skill": skill,
+                "question": f"Describe your experience with {skill} and a project where you used it effectively.{project_suffix}",
+                "type": "behavioral",
+                "tips": f"Use STAR format. Highlight a specific project where {skill} was critical.",
+            }
+        )
+        questions.append(
+            {
+                "skill": skill,
+                "question": f"What are the trade-offs and challenges when working with {skill} at scale?",
+                "type": "technical",
+                "tips": "Discuss performance, maintainability, and real-world constraints.",
+            }
+        )
+    questions.extend(
+        [
+            {
+                "skill": "general",
+                "question": "Tell me about yourself and your background.",
+                "type": "behavioral",
+                "tips": "Structure it: present → past → future. Keep it under 2 minutes.",
+            },
+            {
+                "skill": "general",
+                "question": "Why are you interested in this role/company?",
+                "type": "behavioral",
+                "tips": "Show you've done your research. Mention specific products or initiatives.",
+            },
+            {
+                "skill": "general",
+                "question": "Describe a time you resolved a conflict or disagreement in a team.",
+                "type": "behavioral",
+                "tips": "Focus on communication and compromise. Show growth.",
+            },
+        ]
+    )
     return questions
 
 

@@ -1,15 +1,17 @@
-from decimal import Decimal
 import logging
-from sqlalchemy.ext.asyncio import AsyncSession
+from decimal import Decimal
+
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.config import settings
 from app.models.user import (
-    Opportunity,
     MatchScore,
     MemoryEntry,
+    Opportunity,
 )
 from app.services.profile_service import ProfileService
 from app.services.rerank_service import get_reranker
-from app.config import settings
 
 logger = logging.getLogger("agentforge.match")
 
@@ -61,8 +63,7 @@ class MatchService:
                 pf_skills_raw = pf_entry.value.get("skills", [])
                 pf_techs_raw = pf_entry.value.get("technologies_detected", [])
                 portfolio_skills = set(
-                    s.lower() for s in (pf_skills_raw or []) + (pf_techs_raw or [])
-                    if isinstance(s, str) and s
+                    s.lower() for s in (pf_skills_raw or []) + (pf_techs_raw or []) if isinstance(s, str) and s
                 )
                 pf_projects_raw = pf_entry.value.get("projects", [])
                 portfolio_projects = [str(p) for p in (pf_projects_raw or []) if p]
@@ -75,9 +76,7 @@ class MatchService:
         required_skills = set(s.lower() for s in (opportunity.skills_required or []))
 
         # Base skill match uses profile skills only (official/declared)
-        skill_match = (
-            len(profile_skills & required_skills) / max(len(required_skills), 1) * 100
-        )
+        skill_match = len(profile_skills & required_skills) / max(len(required_skills), 1) * 100
 
         # GitHub boost: count additional matches from GitHub-inferred skills
         gh_only_matches = (github_skills - profile_skills) & required_skills
@@ -89,9 +88,7 @@ class MatchService:
 
         if has_github_boost or has_portfolio_boost:
             # Compute what the match would be with all combined skills
-            boosted_match = (
-                len(combined_skills & required_skills) / max(len(required_skills), 1) * 100
-            )
+            boosted_match = len(combined_skills & required_skills) / max(len(required_skills), 1) * 100
             # Blend: configurable weights with runtime normalization (always sums to 1.0)
             pw = settings.match_profile_weight
             ew = settings.match_external_weight
@@ -104,11 +101,7 @@ class MatchService:
         if opportunity.location:
             preferred = [loc.lower() for loc in (profile.target_locations or [])]
             opp_loc = opportunity.location.lower()
-            if (
-                "remote" not in opp_loc
-                and opp_loc not in preferred
-                and "remote" not in preferred
-            ):
+            if "remote" not in opp_loc and opp_loc not in preferred and "remote" not in preferred:
                 location_match = 40.0
 
         # Company size match
@@ -120,8 +113,7 @@ class MatchService:
 
         # Experience score
         experience_match = (
-            skill_match * 0.6
-            + (len(profile_skills & required_skills) / max(len(profile_skills), 1)) * 40
+            skill_match * 0.6 + (len(profile_skills & required_skills) / max(len(profile_skills), 1)) * 40
         )
 
         # Calculate weighted score
@@ -145,13 +137,9 @@ class MatchService:
             matched = profile_skills & required_skills
             reasons.append(f"Skills match: {', '.join(matched)[:60]}")
             if has_github_boost:
-                reasons.append(
-                    f"+ GitHub-proven: {', '.join(sorted(gh_only_matches))[:50]}"
-                )
+                reasons.append(f"+ GitHub-proven: {', '.join(sorted(gh_only_matches))[:50]}")
             if has_portfolio_boost:
-                reasons.append(
-                    f"+ Portfolio-detected: {', '.join(sorted(pf_only_matches))[:50]}"
-                )
+                reasons.append(f"+ Portfolio-detected: {', '.join(sorted(pf_only_matches))[:50]}")
         else:
             if has_github_boost:
                 reasons.append(
@@ -208,9 +196,7 @@ class MatchService:
                 ms.skill_score = Decimal(str(match_data["breakdown"]["skills"]))
                 ms.location_score = Decimal(str(match_data["breakdown"]["location"]))
                 ms.company_score = Decimal(str(match_data["breakdown"]["company"]))
-                ms.experience_score = Decimal(
-                    str(match_data["breakdown"]["experience"])
-                )
+                ms.experience_score = Decimal(str(match_data["breakdown"]["experience"]))
                 ms.reasons = match_data["reasons"]
             else:
                 ms = MatchScore(
@@ -220,9 +206,7 @@ class MatchService:
                     skill_score=Decimal(str(match_data["breakdown"]["skills"])),
                     location_score=Decimal(str(match_data["breakdown"]["location"])),
                     company_score=Decimal(str(match_data["breakdown"]["company"])),
-                    experience_score=Decimal(
-                        str(match_data["breakdown"]["experience"])
-                    ),
+                    experience_score=Decimal(str(match_data["breakdown"]["experience"])),
                     reasons=match_data["reasons"],
                 )
                 self.db.add(ms)
@@ -271,9 +255,7 @@ class MatchService:
         for item in reranked:
             orig_score = item.get("match_score", 0) or 0
             rerank_score = item.get("rerank_score")
-            item["final_score"] = self.reranker.blend_scores(
-                orig_score, rerank_score, blend_weight
-            )
+            item["final_score"] = self.reranker.blend_scores(orig_score, rerank_score, blend_weight)
 
         # Sort by final score descending
         reranked.sort(key=lambda d: d.get("final_score", 0), reverse=True)

@@ -545,12 +545,15 @@ export default function ResumeStudio() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="internship">Internship</SelectItem>
                   <SelectItem value="software_engineering">Software Engineering</SelectItem>
-                  <SelectItem value="ml_research">ML Research</SelectItem>
+                  <SelectItem value="ml_research">ML / AI Research</SelectItem>
+                  <SelectItem value="data_science">Data Science</SelectItem>
                   <SelectItem value="frontend">Frontend / Design Eng</SelectItem>
                   <SelectItem value="backend">Backend</SelectItem>
                   <SelectItem value="fullstack">Full Stack</SelectItem>
                   <SelectItem value="devops">DevOps / SRE</SelectItem>
+                  <SelectItem value="product">Product Management</SelectItem>
                 </SelectContent>
               </Select>
             </div>

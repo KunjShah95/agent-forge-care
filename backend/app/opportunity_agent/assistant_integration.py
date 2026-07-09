@@ -4,12 +4,11 @@ Mirrors hiring_agent/assistant_integration.py pattern.
 """
 
 import logging
-from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.opportunity_agent.schemas import OpportunityResult, OpportunityScanResult
 from app.opportunity_agent.service import OpportunityAgentService
-from app.opportunity_agent.schemas import OpportunityResult, OpportunityScanResult, OpportunityFeedback
 
 logger = logging.getLogger("agentforge.opportunity_agent.integration")
 
@@ -17,9 +16,9 @@ logger = logging.getLogger("agentforge.opportunity_agent.integration")
 async def enrich_with_opportunity_agent(
     user_id: str,
     db: AsyncSession,
-    query: Optional[str] = None,
-    location: Optional[str] = None,
-    skills: Optional[list[str]] = None,
+    query: str | None = None,
+    location: str | None = None,
+    skills: list[str] | None = None,
     source_filter: str = "job",
     opp_type: str = "Full-time",
 ) -> OpportunityResult:
@@ -37,7 +36,7 @@ async def enrich_with_opportunity_agent(
 async def enrich_with_opportunity_scan(
     user_id: str,
     db: AsyncSession,
-    search_query: Optional[str] = None,
+    search_query: str | None = None,
 ) -> OpportunityScanResult:
     """Run daily scan and return structured results with feedback."""
     service = OpportunityAgentService(db, user_id)

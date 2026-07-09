@@ -58,11 +58,14 @@ export const firebaseConfigError = isFirebaseConfigured
   ? null
   : `Missing Firebase env vars: ${missingFirebaseKeys.join(", ")}`;
 
-const app =
-  getApps().length === 0
+// Only initialize Firebase if fully configured — prevents noise from bad/missing API keys
+const app = isFirebaseConfigured
+  ? getApps().length === 0
     ? initializeApp(firebaseConfig)
-    : getApps()[0];
-export const auth = getAuth(app);
+    : getApps()[0]
+  : null;
+
+export const auth = app ? getAuth(app) : ({} as ReturnType<typeof getAuth>);
 
 // Analytics is lazily initialized only after user consent
 let analyticsInstance: ReturnType<typeof getAnalytics> | null = null;
@@ -81,6 +84,7 @@ export async function initAnalytics(): Promise<void> {
   if (!import.meta.env.VITE_FIREBASE_MEASUREMENT_ID) return;
   
   try {
+    if (!app) return;
     const supported = await isSupported();
     if (!supported) return;
     analyticsInstance = getAnalytics(app);
@@ -107,6 +111,6 @@ if (hasAnalyticsConsent()) {
   initAnalytics();
 }
 
-if (import.meta.env.VITE_FIREBASE_EMULATOR_HOST) {
+if (app && import.meta.env.VITE_FIREBASE_EMULATOR_HOST) {
   connectAuthEmulator(auth, import.meta.env.VITE_FIREBASE_EMULATOR_HOST);
 }

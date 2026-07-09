@@ -1,20 +1,21 @@
 import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc, func
 
 from app.database import get_db
 from app.dependencies import get_current_user
-from app.models.user import User, AlertConfig
-
-logger = logging.getLogger("agentforge.monitor")
+from app.models.user import AlertConfig, User
 from app.schemas.user import (
     AlertConfigCreate,
-    AlertConfigUpdate,
-    AlertConfigOut,
     AlertConfigList,
+    AlertConfigOut,
+    AlertConfigUpdate,
     MonitorSettingsUpdate,
 )
+
+logger = logging.getLogger("agentforge.monitor")
 
 router = APIRouter()
 
@@ -29,9 +30,7 @@ async def list_alert_configs(
     """List all alert configurations."""
     try:
         count_result = await db.execute(
-            select(func.count())
-            .select_from(AlertConfig)
-            .where(AlertConfig.user_id == user.id)
+            select(func.count()).select_from(AlertConfig).where(AlertConfig.user_id == user.id)
         )
         total = count_result.scalar()
 
@@ -79,9 +78,7 @@ async def update_alert_config(
 ):
     """Update an alert configuration."""
     try:
-        result = await db.execute(
-            select(AlertConfig).where(AlertConfig.id == id, AlertConfig.user_id == user.id)
-        )
+        result = await db.execute(select(AlertConfig).where(AlertConfig.id == id, AlertConfig.user_id == user.id))
         config = result.scalar_one_or_none()
         if not config:
             raise HTTPException(status_code=404, detail="Alert config not found")
@@ -105,9 +102,7 @@ async def delete_alert_config(
 ):
     """Delete an alert configuration."""
     try:
-        result = await db.execute(
-            select(AlertConfig).where(AlertConfig.id == id, AlertConfig.user_id == user.id)
-        )
+        result = await db.execute(select(AlertConfig).where(AlertConfig.id == id, AlertConfig.user_id == user.id))
         config = result.scalar_one_or_none()
         if not config:
             raise HTTPException(status_code=404, detail="Alert config not found")

@@ -11,13 +11,15 @@ def outreach_prompt(
     """Build the LLM prompt for generating outreach messages."""
     companies_str = ", ".join(target_companies) if target_companies else "target companies"
     github_block = (
-        "GITHUB EVIDENCE (reference these real projects as proof of skill):\n"
-        f"{github_context}\n"
-    ) if github_context else ""
+        (f"GITHUB EVIDENCE (reference these real projects as proof of skill):\n{github_context}\n")
+        if github_context
+        else ""
+    )
     portfolio_block = (
-        "PORTFOLIO EVIDENCE (reference these real projects and experience):\n"
-        f"{portfolio_context}\n"
-    ) if portfolio_context else ""
+        (f"PORTFOLIO EVIDENCE (reference these real projects and experience):\n{portfolio_context}\n")
+        if portfolio_context
+        else ""
+    )
     skills_str = ", ".join(all_skills) if all_skills else "not specified"
     role_str = role or "not specified"
 

@@ -1,7 +1,9 @@
-import uuid
 import logging
+import uuid
 from typing import Literal
+
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.services.memory_service import MemoryService
 
 logger = logging.getLogger("agentforge.notifications")
@@ -35,4 +37,5 @@ async def create_notification(
 
     if to_email:
         from app.services.email_service import send_email
+
         await send_email(to_email=to_email, subject=title, body=body)

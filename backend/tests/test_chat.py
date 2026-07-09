@@ -1,8 +1,7 @@
 import json
-import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from tests.conftest import TEST_USER_ID
+import pytest
 
 
 def _parse_sse_events(text: str):
@@ -90,20 +89,26 @@ async def test_chat_stream_valid_goal(
     ]
 
     mock_orch = AsyncMock()
-    mock_orch.run = AsyncMock(return_value=MagicMock(output={
-        "results": {
-            "job": {"message": "Found 1 opportunity"},
-        },
-        "detail": {
-            "job": {
-                "items": [{"title": "ML Intern", "company": "TestCorp", "match_score": 85.0}],
-            },
-        },
-    }))
+    mock_orch.run = AsyncMock(
+        return_value=MagicMock(
+            output={
+                "results": {
+                    "job": {"message": "Found 1 opportunity"},
+                },
+                "detail": {
+                    "job": {
+                        "items": [{"title": "ML Intern", "company": "TestCorp", "match_score": 85.0}],
+                    },
+                },
+            }
+        )
+    )
 
-    with patch("app.api.v1.chat.OrchestratorAgent", return_value=mock_orch), \
-         patch("app.api.v1.chat.ProfileService") as MockProfile, \
-         patch("app.api.v1.chat.MemoryService") as MockMemory:
+    with (
+        patch("app.api.v1.chat.OrchestratorAgent", return_value=mock_orch),
+        patch("app.api.v1.chat.ProfileService") as MockProfile,
+        patch("app.api.v1.chat.MemoryService") as MockMemory,
+    ):
         profile_inst = AsyncMock()
         profile_inst.get_or_create_profile = AsyncMock(return_value=None)
         profile_inst.get_skill_names = AsyncMock(return_value=[])
@@ -153,8 +158,7 @@ async def test_chat_stream_no_subtasks(mock_session_factory, mock_decompose, aut
 
     mock_decompose.return_value = []
 
-    with patch("app.api.v1.chat.ProfileService") as MockProfile, \
-         patch("app.api.v1.chat.MemoryService") as MockMemory:
+    with patch("app.api.v1.chat.ProfileService") as MockProfile, patch("app.api.v1.chat.MemoryService") as MockMemory:
         profile_inst = AsyncMock()
         profile_inst.get_or_create_profile = AsyncMock(return_value=None)
         profile_inst.get_skill_names = AsyncMock(return_value=[])
@@ -196,9 +200,11 @@ async def test_chat_stream_agent_error(
     mock_orch = AsyncMock()
     mock_orch.run = AsyncMock(side_effect=RuntimeError("Agent crashed"))
 
-    with patch("app.api.v1.chat.OrchestratorAgent", return_value=mock_orch), \
-         patch("app.api.v1.chat.ProfileService") as MockProfile, \
-         patch("app.api.v1.chat.MemoryService") as MockMemory:
+    with (
+        patch("app.api.v1.chat.OrchestratorAgent", return_value=mock_orch),
+        patch("app.api.v1.chat.ProfileService") as MockProfile,
+        patch("app.api.v1.chat.MemoryService") as MockMemory,
+    ):
         profile_inst = AsyncMock()
         profile_inst.get_or_create_profile = AsyncMock(return_value=None)
         profile_inst.get_skill_names = AsyncMock(return_value=[])
@@ -232,5 +238,5 @@ async def test_chat_stream_sse_headers(async_client):
         "/api/v1/chat/stream",
         json={"messages": []},
     )
-    assert response.headers["x-vercel-ai-data-stream"] == "v1"
+    assert response.headers["content-type"].startswith("text/event-stream")
     assert "no-cache" in response.headers["cache-control"]

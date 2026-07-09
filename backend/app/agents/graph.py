@@ -10,38 +10,32 @@ Architecture:
           → reflect_on_results → generate_final_response → END
 """
 
-import uuid
 import logging
-from datetime import datetime, timezone
-from typing import TypedDict, Optional, Any
+import uuid
+from datetime import UTC, datetime
+from typing import Any, TypedDict
 
-from langgraph.graph import StateGraph, START, END
-
+from langgraph.graph import END, START, StateGraph
 from sqlalchemy import select
 
+from app.agents.orchestrator.service import (
+    OrchestratorAgent,
+    _filter_tasks_by_context,
+    _score_agent_output,
+)
+from app.agents.planner import decompose_goal_with_llm, format_planner_response
+from app.agents.schemas import AgentStatus
 from app.config import settings
 from app.database import async_session_factory
 from app.models.user import (
     AgentTask,
     AgentType,
-    TaskStatus,
     PlannerGoal,
-    Opportunity,
-    Application,
+    TaskStatus,
 )
-from app.agents.planner import decompose_goal_with_llm, format_planner_response
-from app.agents.orchestrator.service import (
-    OrchestratorAgent,
-    _filter_tasks_by_context,
-    _score_agent_output,
-    run_opportunity_scan,
-    run_resume_tailoring,
-    dispatch_agent,
-)
-from app.agents.schemas import AgentStatus
-from app.services.profile_service import ProfileService
 from app.services.memory_service import MemoryService
 from app.services.notification_service import create_notification
+from app.services.profile_service import ProfileService
 
 logger = logging.getLogger("agentforge.graph")
 
@@ -49,10 +43,9 @@ logger = logging.getLogger("agentforge.graph")
 def configure_langsmith() -> None:
     if settings.langchain_api_key:
         import os
+
         os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
-        os.environ.setdefault(
-            "LANGCHAIN_PROJECT", settings.app_name.replace(" ", "-").lower()
-        )
+        os.environ.setdefault("LANGCHAIN_PROJECT", settings.app_name.replace(" ", "-").lower())
         os.environ["LANGCHAIN_API_KEY"] = settings.langchain_api_key
         logger.info("LangSmith tracing enabled (project=%s)", os.environ["LANGCHAIN_PROJECT"])
 
@@ -72,9 +65,9 @@ class PlannerGraphState(TypedDict):
     tasks: list[dict]
     results: dict[str, Any]
     final_response: str
-    error: Optional[str]
-    planner_goal_id: Optional[str]
-    planner_task_id: Optional[str]
+    error: str | None
+    planner_goal_id: str | None
+    planner_task_id: str | None
     reflection_scores: dict[str, dict]
     reflection_iterations: int
     needs_regeneration: bool
@@ -84,24 +77,27 @@ class PlannerGraphState(TypedDict):
 
 
 async def decompose_goal_node(state: PlannerGraphState) -> dict:
-    subtasks = await decompose_goal_with_llm(
-        state["goal"], state["profile"], state["memory_context"]
-    )
+    subtasks = await decompose_goal_with_llm(state["goal"], state["profile"], state["memory_context"])
     task_list = [dict(t) for t in subtasks]
 
     planner_task_id = gen_id()
     async with async_session_factory() as db:
         planner_goal = PlannerGoal(
-            user_id=state["user_id"], goal_text=state["goal"],
-            status="running", plan=task_list,
+            user_id=state["user_id"],
+            goal_text=state["goal"],
+            status="running",
+            plan=task_list,
         )
         db.add(planner_goal)
 
         planner_task = AgentTask(
-            id=planner_task_id, user_id=state["user_id"],
-            agent_type=AgentType.planner, goal_id=planner_goal.id,
+            id=planner_task_id,
+            user_id=state["user_id"],
+            agent_type=AgentType.planner,
+            goal_id=planner_goal.id,
             input={"goal": state["goal"], "tasks": task_list},
-            status=TaskStatus.running, started_at=datetime.now(timezone.utc),
+            status=TaskStatus.running,
+            started_at=datetime.now(UTC),
         )
         db.add(planner_task)
         await db.commit()
@@ -199,25 +195,23 @@ async def generate_final_response_node(state: PlannerGraphState) -> dict:
     final_response = format_planner_response(state["goal"], state.get("results", {}))
     async with async_session_factory() as db:
         if state.get("planner_goal_id"):
-            result = await db.execute(
-                select(PlannerGoal).where(PlannerGoal.id == state["planner_goal_id"])
-            )
+            result = await db.execute(select(PlannerGoal).where(PlannerGoal.id == state["planner_goal_id"]))
             pg = result.scalar_one_or_none()
             if pg:
                 pg.status = "completed"
-                pg.completed_at = datetime.now(timezone.utc)
+                pg.completed_at = datetime.now(UTC)
         if state.get("planner_task_id"):
-            result = await db.execute(
-                select(AgentTask).where(AgentTask.id == state["planner_task_id"])
-            )
+            result = await db.execute(select(AgentTask).where(AgentTask.id == state["planner_task_id"]))
             pt = result.scalar_one_or_none()
             if pt:
                 pt.status = TaskStatus.completed
                 pt.output = {"results": state["results"], "final_response": final_response}
-                pt.completed_at = datetime.now(timezone.utc)
+                pt.completed_at = datetime.now(UTC)
                 await create_notification(
-                    db, state["user_id"],
-                    title="Goal completed", body="Your goal has been processed.",
+                    db,
+                    state["user_id"],
+                    title="Goal completed",
+                    body="Your goal has been processed.",
                     type="success",
                 )
         await db.commit()
@@ -270,18 +264,27 @@ async def run_planner_agent(user_id: str, goal: str) -> str:
         memory_service = MemoryService(db)
         memory_context = await memory_service.get_user_context(user_id)
         profile_dict = {
-            "id": str(profile.id), "skills": profile_skills,
+            "id": str(profile.id),
+            "skills": profile_skills,
             "target_locations": profile.target_locations or [],
             "role_types": profile.role_types or [],
             "career_goal": profile.career_goal or "",
         }
 
     initial_state: PlannerGraphState = {
-        "user_id": user_id, "goal": goal, "profile": profile_dict,
-        "memory_context": memory_context, "tasks": [], "results": {},
-        "final_response": "", "error": None, "planner_goal_id": None,
-        "planner_task_id": None, "reflection_scores": {},
-        "reflection_iterations": 0, "needs_regeneration": False,
+        "user_id": user_id,
+        "goal": goal,
+        "profile": profile_dict,
+        "memory_context": memory_context,
+        "tasks": [],
+        "results": {},
+        "final_response": "",
+        "error": None,
+        "planner_goal_id": None,
+        "planner_task_id": None,
+        "reflection_scores": {},
+        "reflection_iterations": 0,
+        "needs_regeneration": False,
     }
 
     graph = get_planner_graph()

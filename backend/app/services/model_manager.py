@@ -27,12 +27,26 @@ Supported Embedding Providers (in fallback order):
   5. Hash Fallback    (free, local)   — Deterministic fallback (dev/demo only)
 """
 
+import itertools
 import logging
-from typing import Optional
 
 from app.config import settings
 
 logger = logging.getLogger("agentforge.model_manager")
+
+# Round-robin cycle across available (non-Ollama) providers to spread rate-limit load
+_provider_cycle: itertools.cycle | None = None
+
+
+def get_next_provider() -> str | None:
+    """Return the next provider name in round-robin order across all available providers."""
+    global _provider_cycle
+    if _provider_cycle is None:
+        names = [p["name"] for p in get_available_llm_providers() if p["name"] != "ollama"]
+        if not names:
+            return None
+        _provider_cycle = itertools.cycle(names)
+    return next(_provider_cycle)  # type: ignore[arg-type]
 
 
 # ─── Provider Availability ──────────────────────────────────
@@ -44,103 +58,137 @@ def get_available_llm_providers() -> list[dict]:
 
     # 1. OpenAI (highest priority)
     if settings.openai_api_key:
-        providers.append({
-            "name": "openai",
-            "priority": 1,
-            "display": "OpenAI",
-            "api_key": settings.openai_api_key,
-            "models": ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "o3-mini", "o1-mini"],
-        })
+        providers.append(
+            {
+                "name": "openai",
+                "priority": 1,
+                "display": "OpenAI",
+                "api_key": settings.openai_api_key,
+                "models": ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "o3-mini", "o1-mini"],
+            }
+        )
 
     # 2. Anthropic
     if settings.anthropic_api_key:
-        providers.append({
-            "name": "anthropic",
-            "priority": 2,
-            "display": "Anthropic",
-            "api_key": settings.anthropic_api_key,
-            "models": ["claude-sonnet-4-20250514", "claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022"],
-        })
+        providers.append(
+            {
+                "name": "anthropic",
+                "priority": 2,
+                "display": "Anthropic",
+                "api_key": settings.anthropic_api_key,
+                "models": ["claude-sonnet-4-20250514", "claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022"],
+            }
+        )
 
     # 3. Google Gemini
     if settings.google_api_key:
-        providers.append({
-            "name": "gemini",
-            "priority": 3,
-            "display": "Google Gemini",
-            "api_key": settings.google_api_key,
-            "models": ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"],
-        })
+        providers.append(
+            {
+                "name": "gemini",
+                "priority": 3,
+                "display": "Google Gemini",
+                "api_key": settings.google_api_key,
+                "models": ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"],
+            }
+        )
 
     # 4. DeepSeek (very cheap, open-source reasoning)
     if settings.deepseek_api_key:
-        providers.append({
-            "name": "deepseek",
-            "priority": 4,
-            "display": "DeepSeek",
-            "api_key": settings.deepseek_api_key,
-            "models": ["deepseek-chat", "deepseek-reasoner"],
-        })
+        providers.append(
+            {
+                "name": "deepseek",
+                "priority": 4,
+                "display": "DeepSeek",
+                "api_key": settings.deepseek_api_key,
+                "models": ["deepseek-chat", "deepseek-reasoner"],
+            }
+        )
 
     # 5. Groq (free tier)
     if settings.groq_api_key:
-        providers.append({
-            "name": "groq",
-            "priority": 5,
-            "display": "Groq",
-            "api_key": settings.groq_api_key,
-            "models": ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"],
-        })
+        providers.append(
+            {
+                "name": "groq",
+                "priority": 5,
+                "display": "Groq",
+                "api_key": settings.groq_api_key,
+                "models": ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"],
+            }
+        )
 
     # 6. Mistral AI
     if settings.mistral_api_key:
-        providers.append({
-            "name": "mistral",
-            "priority": 6,
-            "display": "Mistral AI",
-            "api_key": settings.mistral_api_key,
-            "models": ["mistral-large-latest", "mistral-small-latest", "codestral-latest"],
-        })
+        providers.append(
+            {
+                "name": "mistral",
+                "priority": 6,
+                "display": "Mistral AI",
+                "api_key": settings.mistral_api_key,
+                "models": ["mistral-large-latest", "mistral-small-latest", "codestral-latest"],
+            }
+        )
 
     # 7. Together AI (OpenAI-compatible, wide open-source model catalog)
     if settings.together_api_key:
-        providers.append({
-            "name": "together",
-            "priority": 7,
-            "display": "Together AI",
-            "api_key": settings.together_api_key,
-            "models": ["meta-llama/Meta-Llama-3.1-8B-Instruct", "meta-llama/Llama-3.3-70B-Instruct-Turbo", "deepseek-ai/DeepSeek-V3", "Qwen/Qwen2.5-72B-Instruct-Turbo"],
-        })
+        providers.append(
+            {
+                "name": "together",
+                "priority": 7,
+                "display": "Together AI",
+                "api_key": settings.together_api_key,
+                "models": [
+                    "meta-llama/Meta-Llama-3.1-8B-Instruct",
+                    "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+                    "deepseek-ai/DeepSeek-V3",
+                    "Qwen/Qwen2.5-72B-Instruct-Turbo",
+                ],
+            }
+        )
 
     # 8. Fireworks AI (OpenAI-compatible, $1 free credits)
     if settings.fireworks_api_key:
-        providers.append({
-            "name": "fireworks",
-            "priority": 8,
-            "display": "Fireworks AI",
-            "api_key": settings.fireworks_api_key,
-            "models": ["accounts/fireworks/models/deepseek-v3p1", "accounts/fireworks/models/llama-v3p3-70b-instruct", "accounts/fireworks/models/qwen3-235b-a22b"],
-        })
+        providers.append(
+            {
+                "name": "fireworks",
+                "priority": 8,
+                "display": "Fireworks AI",
+                "api_key": settings.fireworks_api_key,
+                "models": [
+                    "accounts/fireworks/models/deepseek-v3p1",
+                    "accounts/fireworks/models/llama-v3p3-70b-instruct",
+                    "accounts/fireworks/models/qwen3-235b-a22b",
+                ],
+            }
+        )
 
     # 9. OpenRouter (gateway)
     if settings.openrouter_api_key:
-        providers.append({
-            "name": "openrouter",
-            "priority": 9,
-            "display": "OpenRouter",
-            "api_key": settings.openrouter_api_key,
-            "models": ["openai/gpt-4o-mini", "anthropic/claude-3.5-haiku", "google/gemini-2.0-flash-001", "meta-llama/llama-3.3-70b-instruct"],
-        })
+        providers.append(
+            {
+                "name": "openrouter",
+                "priority": 9,
+                "display": "OpenRouter",
+                "api_key": settings.openrouter_api_key,
+                "models": [
+                    "openai/gpt-4o-mini",
+                    "anthropic/claude-3.5-haiku",
+                    "google/gemini-2.0-flash-001",
+                    "meta-llama/llama-3.3-70b-instruct",
+                ],
+            }
+        )
 
     # 10. Ollama (free, local — always available if running)
-    providers.append({
-        "name": "ollama",
-        "priority": 10,
-        "display": "Ollama (Local)",
-        "base_url": settings.ollama_base_url,
-        "api_key": "",  # no key needed
-        "models": ["llama3.2", "llama3.1", "mistral", "qwen2.5", "deepseek-coder"],
-    })
+    providers.append(
+        {
+            "name": "ollama",
+            "priority": 10,
+            "display": "Ollama (Local)",
+            "base_url": settings.ollama_base_url,
+            "api_key": "",  # no key needed
+            "models": ["llama3.2", "llama3.1", "mistral", "qwen2.5", "deepseek-coder"],
+        }
+    )
 
     return providers
 
@@ -151,45 +199,53 @@ def get_available_embedding_providers() -> list[dict]:
 
     # 1. OpenAI (highest priority)
     if settings.openai_api_key:
-        providers.append({
-            "name": "openai",
-            "priority": 1,
-            "display": "OpenAI",
-            "api_key": settings.openai_api_key,
-            "models": ["text-embedding-3-small", "text-embedding-3-large"],
-            "dimensions": 1536,
-        })
+        providers.append(
+            {
+                "name": "openai",
+                "priority": 1,
+                "display": "OpenAI",
+                "api_key": settings.openai_api_key,
+                "models": ["text-embedding-3-small", "text-embedding-3-large"],
+                "dimensions": 1536,
+            }
+        )
 
     # 2. Google Gemini
     if settings.google_api_key:
-        providers.append({
-            "name": "gemini",
-            "priority": 2,
-            "display": "Google Gemini",
-            "api_key": settings.google_api_key,
-            "models": ["gemini-embedding-001"],
-            "dimensions": 768,
-        })
+        providers.append(
+            {
+                "name": "gemini",
+                "priority": 2,
+                "display": "Google Gemini",
+                "api_key": settings.google_api_key,
+                "models": ["gemini-embedding-001"],
+                "dimensions": 768,
+            }
+        )
 
     # 3. HuggingFace (free, local)
-    providers.append({
-        "name": "huggingface",
-        "priority": 3,
-        "display": "HuggingFace",
-        "api_key": settings.huggingface_api_key,
-        "models": ["sentence-transformers/all-mpnet-base-v2", "BAAI/bge-small-en-v1.5"],
-        "dimensions": 768,
-    })
+    providers.append(
+        {
+            "name": "huggingface",
+            "priority": 3,
+            "display": "HuggingFace",
+            "api_key": settings.huggingface_api_key,
+            "models": ["sentence-transformers/all-mpnet-base-v2", "BAAI/bge-small-en-v1.5"],
+            "dimensions": 768,
+        }
+    )
 
     # 4. Ollama (free, local)
-    providers.append({
-        "name": "ollama",
-        "priority": 4,
-        "display": "Ollama (Local)",
-        "base_url": settings.ollama_base_url,
-        "models": ["nomic-embed-text", "mxbai-embed-large"],
-        "dimensions": 768,
-    })
+    providers.append(
+        {
+            "name": "ollama",
+            "priority": 4,
+            "display": "Ollama (Local)",
+            "base_url": settings.ollama_base_url,
+            "models": ["nomic-embed-text", "mxbai-embed-large"],
+            "dimensions": 768,
+        }
+    )
 
     return providers
 
@@ -199,8 +255,8 @@ def log_available_providers():
     llm_providers = get_available_llm_providers()
     embedding_providers = get_available_embedding_providers()
 
-    available_llm = [p["display"] for p in llm_providers if p["name"] != "ollama" or True]
-    available_emb = [p["display"] for p in embedding_providers if p["name"] not in ("huggingface", "ollama")]
+    [p["display"] for p in llm_providers if p["name"] != "ollama" or True]
+    [p["display"] for p in embedding_providers if p["name"] not in ("huggingface", "ollama")]
 
     logger.info(
         "AI Model Manager initialized. LLM providers: %s | Embedding providers: %s",
@@ -229,6 +285,7 @@ def _build_llm_instance(provider: dict, model: str, temperature: float = 0.7):
     try:
         if name == "openai":
             from langchain_openai import ChatOpenAI
+
             return ChatOpenAI(
                 model=model,
                 temperature=temperature,
@@ -237,6 +294,7 @@ def _build_llm_instance(provider: dict, model: str, temperature: float = 0.7):
 
         elif name == "anthropic":
             from langchain_anthropic import ChatAnthropic
+
             return ChatAnthropic(
                 model=model,
                 temperature=temperature,
@@ -245,6 +303,7 @@ def _build_llm_instance(provider: dict, model: str, temperature: float = 0.7):
 
         elif name == "gemini":
             from langchain_google_genai import ChatGoogleGenerativeAI
+
             return ChatGoogleGenerativeAI(
                 model=model,
                 temperature=temperature,
@@ -253,6 +312,7 @@ def _build_llm_instance(provider: dict, model: str, temperature: float = 0.7):
 
         elif name == "groq":
             from langchain_groq import ChatGroq
+
             return ChatGroq(
                 model=model,
                 temperature=temperature,
@@ -261,6 +321,7 @@ def _build_llm_instance(provider: dict, model: str, temperature: float = 0.7):
 
         elif name == "mistral":
             from langchain_mistralai import ChatMistralAI
+
             return ChatMistralAI(
                 model=model,
                 temperature=temperature,
@@ -271,6 +332,7 @@ def _build_llm_instance(provider: dict, model: str, temperature: float = 0.7):
             # DeepSeek has official langchain-deepseek package
             try:
                 from langchain_deepseek import ChatDeepSeek
+
                 return ChatDeepSeek(
                     model=model,
                     temperature=temperature,
@@ -279,6 +341,7 @@ def _build_llm_instance(provider: dict, model: str, temperature: float = 0.7):
             except ImportError:
                 # Fallback: DeepSeek uses OpenAI-compatible API
                 from langchain_openai import ChatOpenAI
+
                 return ChatOpenAI(
                     model=model,
                     temperature=temperature,
@@ -289,6 +352,7 @@ def _build_llm_instance(provider: dict, model: str, temperature: float = 0.7):
         elif name == "together":
             # Together AI uses OpenAI-compatible API
             from langchain_openai import ChatOpenAI
+
             return ChatOpenAI(
                 model=model,
                 temperature=temperature,
@@ -299,6 +363,7 @@ def _build_llm_instance(provider: dict, model: str, temperature: float = 0.7):
         elif name == "fireworks":
             # Fireworks AI uses OpenAI-compatible API
             from langchain_openai import ChatOpenAI
+
             return ChatOpenAI(
                 model=model,
                 temperature=temperature,
@@ -309,6 +374,7 @@ def _build_llm_instance(provider: dict, model: str, temperature: float = 0.7):
         elif name == "openrouter":
             # OpenRouter uses OpenAI-compatible API
             from langchain_openai import ChatOpenAI
+
             return ChatOpenAI(
                 model=model,
                 temperature=temperature,
@@ -322,6 +388,7 @@ def _build_llm_instance(provider: dict, model: str, temperature: float = 0.7):
 
         elif name == "ollama":
             from langchain_ollama import ChatOllama
+
             return ChatOllama(
                 model=model,
                 temperature=temperature,
@@ -329,14 +396,10 @@ def _build_llm_instance(provider: dict, model: str, temperature: float = 0.7):
             )
 
     except ImportError as e:
-        logger.warning(
-            "Package not installed for provider '%s': %s. Skipping.", name, e
-        )
+        logger.warning("Package not installed for provider '%s': %s. Skipping.", name, e)
         return None
     except Exception as e:
-        logger.warning(
-            "Failed to initialize provider '%s' model '%s': %s", name, model, e
-        )
+        logger.warning("Failed to initialize provider '%s' model '%s': %s", name, model, e)
         return None
 
     return None
@@ -344,8 +407,8 @@ def _build_llm_instance(provider: dict, model: str, temperature: float = 0.7):
 
 def get_chat_model(
     temperature: float = 0.7,
-    preferred_provider: Optional[str] = None,
-) -> Optional[object]:
+    preferred_provider: str | None = None,
+) -> object | None:
     """
     Get the best available LangChain chat model with fallback chain.
 
@@ -415,7 +478,7 @@ def get_chat_model(
     return primary
 
 
-def get_completion_llm(temperature: float = 0.7, preferred_provider: Optional[str] = None):
+def get_completion_llm(temperature: float = 0.7, preferred_provider: str | None = None):
     """
     Convenience alias for get_chat_model().
     Used by agents to replace their old _get_llm() functions.
@@ -433,6 +496,7 @@ def _build_embedding_instance(provider: dict, model: str):
     try:
         if name == "openai":
             from langchain_openai import OpenAIEmbeddings
+
             return OpenAIEmbeddings(
                 model=model,
                 api_key=provider["api_key"],
@@ -440,6 +504,7 @@ def _build_embedding_instance(provider: dict, model: str):
 
         elif name == "gemini":
             from langchain_google_genai import GoogleGenerativeAIEmbeddings
+
             return GoogleGenerativeAIEmbeddings(
                 model=model,
                 google_api_key=provider["api_key"],
@@ -447,6 +512,7 @@ def _build_embedding_instance(provider: dict, model: str):
 
         elif name == "huggingface":
             from langchain_huggingface import HuggingFaceEmbeddings
+
             return HuggingFaceEmbeddings(
                 model_name=model,
                 encode_kwargs={"normalize_embeddings": True},
@@ -454,20 +520,17 @@ def _build_embedding_instance(provider: dict, model: str):
 
         elif name == "ollama":
             from langchain_ollama import OllamaEmbeddings
+
             return OllamaEmbeddings(
                 model=model,
                 base_url=provider.get("base_url", "http://localhost:11434"),
             )
 
     except ImportError as e:
-        logger.warning(
-            "Package not installed for embedding provider '%s': %s. Skipping.", name, e
-        )
+        logger.warning("Package not installed for embedding provider '%s': %s. Skipping.", name, e)
         return None
     except Exception as e:
-        logger.warning(
-            "Failed to initialize embedding provider '%s' model '%s': %s", name, model, e
-        )
+        logger.warning("Failed to initialize embedding provider '%s' model '%s': %s", name, model, e)
         return None
 
     return None
@@ -518,6 +581,7 @@ def get_embedding_dimensions() -> int:
     if providers:
         return providers[0].get("dimensions", 768)
     return 384  # Default fallback dimension
+
 
 # ─── Startup Logging ────────────────────────────────────────
 

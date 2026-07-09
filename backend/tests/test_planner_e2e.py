@@ -12,37 +12,28 @@ Exercises the entire flow:
 All agent handlers are mocked to test orchestration logic only.
 """
 
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch, ANY
-from datetime import datetime, timezone
 
-from httpx import AsyncClient, ASGITransport
-
-from app.main import app
-from app.database import get_db
-from app.dependencies import get_current_user
+from app.agents.graph import (
+    PlannerGraphState,
+    build_planner_graph,
+    should_regenerate,
+)
+from app.agents.orchestrator.service import (
+    MAX_RETRIES,
+    _filter_tasks_by_context,
+    _run_with_retry,
+    _score_agent_output,
+)
 from app.agents.planner import (
     _keyword_decompose,
     format_planner_response,
-    decompose_goal_with_llm,
 )
-from app.agents.graph import (
-    build_planner_graph,
-    PlannerGraphState,
-    gen_id,
-    should_regenerate,
-    get_planner_graph,
-)
-from app.agents.orchestrator.service import (
-    _filter_tasks_by_context,
-    _score_agent_output,
-    _run_with_retry,
-    MAX_RETRIES,
-)
-from app.utils.demo_data import generate_demo_opportunities
 from app.models.user import AgentType, TaskStatus
-from tests.conftest import TEST_USER_ID, make_user, MockResult
-
+from app.utils.demo_data import generate_demo_opportunities
+from tests.conftest import TEST_USER_ID, MockResult
 
 # =============================================================================
 # Part 1: Goal Decomposition (keyword fallback)
@@ -89,7 +80,7 @@ class TestGoalDecomposition:
     def test_vague_goal_defaults_to_monitor(self):
         profile = self.setup_profile()
         tasks = _keyword_decompose("Help me find something good", profile, {})
-        agents = [t["agent"] for t in tasks]
+        [t["agent"] for t in tasks]
         assert len(tasks) == 1
         assert tasks[0]["agent"] == "monitor"
 
@@ -113,9 +104,7 @@ class TestGoalDecomposition:
 
     def test_all_tasks_have_required_fields(self):
         profile = self.setup_profile()
-        tasks = _keyword_decompose(
-            "Find internships and jobs in AI and research Anthropic", profile, {}
-        )
+        tasks = _keyword_decompose("Find internships and jobs in AI and research Anthropic", profile, {})
         for t in tasks:
             assert "agent" in t
             assert "action" in t
@@ -324,11 +313,13 @@ class TestResponseFormatting:
         """Research results are nested under 'results' key but have 'message'."""
         result = format_planner_response(
             "Research Anthropic",
-            {"research": {
-                "results": {"company_info": {"name": "Anthropic"}},
-                "summary": "Anthropic is an AI safety company",
-                "message": "Research complete on 1 topics",
-            }},
+            {
+                "research": {
+                    "results": {"company_info": {"name": "Anthropic"}},
+                    "summary": "Anthropic is an AI safety company",
+                    "message": "Research complete on 1 topics",
+                }
+            },
         )
         assert "Research" in result
         assert "1 topics" in result  # Falls back to 'message'
@@ -336,10 +327,12 @@ class TestResponseFormatting:
     def test_format_guidance_result(self):
         result = format_planner_response(
             "Career advice",
-            {"planner": {
-                "guidance": {"next_steps": ["Apply to jobs"]},
-                "message": "Career guidance generated",
-            }},
+            {
+                "planner": {
+                    "guidance": {"next_steps": ["Apply to jobs"]},
+                    "message": "Career guidance generated",
+                }
+            },
         )
         assert "Planner" in result
 
@@ -349,6 +342,7 @@ class TestResponseFormatting:
 # =============================================================================
 
 
+@pytest.mark.timeout(15)
 @pytest.mark.asyncio
 @patch("app.search.adapters.SearchAdapter.search", new_callable=AsyncMock)
 @patch("app.agents.graph.async_session_factory")
@@ -417,6 +411,7 @@ async def test_full_planner_graph_pipeline(mock_session_factory, mock_search):
     assert len(final_state["reflection_scores"]) > 0
 
 
+@pytest.mark.timeout(10)
 @pytest.mark.asyncio
 @patch("app.agents.graph.async_session_factory")
 async def test_planner_graph_handles_empty_tasks(mock_session_factory):
@@ -521,6 +516,7 @@ async def test_api_internship_discover_flow(mock_discover, mock_db, auth_client)
 async def test_api_interview_prep_role_mapping(mock_prep, mock_db, auth_client):
     """Frontend sends 'role' but backend expects 'role_type' — ensure mapping works."""
     from app.agents.schemas import AgentResult, AgentStatus
+
     mock_prep.return_value = AgentResult(
         agent_type="interview",
         status=AgentStatus.COMPLETED,
@@ -565,7 +561,7 @@ async def test_api_research_company_query_mapping(mock_research, mock_db, auth_c
 @patch("app.agents.graph.run_planner_agent", new_callable=AsyncMock)
 async def test_api_retry_planner_task_updates_status(mock_run, mock_db, auth_client):
     """Retrying a planner task should set original task back to completed."""
-    from tests.conftest import make_agent_task, _uid, setup_mock_execute
+    from tests.conftest import _uid, make_agent_task, setup_mock_execute
 
     task = make_agent_task(
         agent_type=AgentType.planner,

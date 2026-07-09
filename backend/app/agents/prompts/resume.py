@@ -11,13 +11,15 @@ def tailor_resume_prompt(
 ) -> str:
     """Build the LLM prompt for resume tailoring."""
     github_block = (
-        "GITHUB EVIDENCE (use this to ground suggestions in real projects):\n"
-        f"{github_context}\n"
-    ) if github_context else ""
+        (f"GITHUB EVIDENCE (use this to ground suggestions in real projects):\n{github_context}\n")
+        if github_context
+        else ""
+    )
     portfolio_block = (
-        "PORTFOLIO EVIDENCE (use this to reference real projects and experience):\n"
-        f"{portfolio_context}\n"
-    ) if portfolio_context else ""
+        (f"PORTFOLIO EVIDENCE (use this to reference real projects and experience):\n{portfolio_context}\n")
+        if portfolio_context
+        else ""
+    )
     skills_str = ", ".join(all_skills) if all_skills else "not specified"
     company_str = target_company or "not specified"
 
@@ -49,13 +51,15 @@ def cover_letter_prompt(
 ) -> str:
     """Build the LLM prompt for cover letter generation."""
     portfolio_block = (
-        "PORTFOLIO EVIDENCE (reference these real projects and experience):\n"
-        f"{portfolio_context}\n"
-    ) if portfolio_context else ""
+        (f"PORTFOLIO EVIDENCE (reference these real projects and experience):\n{portfolio_context}\n")
+        if portfolio_context
+        else ""
+    )
     github_block = (
-        "GITHUB EVIDENCE (reference these real projects as proof of skill):\n"
-        f"{github_context}\n"
-    ) if github_context else ""
+        (f"GITHUB EVIDENCE (reference these real projects as proof of skill):\n{github_context}\n")
+        if github_context
+        else ""
+    )
     skills_str = ", ".join(all_skills) if all_skills else "not specified"
     school_str = school or "not specified"
 

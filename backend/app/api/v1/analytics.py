@@ -1,12 +1,13 @@
 import logging
+
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import Date, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, cast, Date
 
 from app.database import get_db
 from app.dependencies import get_current_user
-from app.models.user import User, Opportunity, Application, ApplicationStage, MatchScore
-from app.schemas.user import AnalyticsSummary, FunnelPoint, SkillDemand, ActivityPoint
+from app.models.user import Application, ApplicationStage, MatchScore, Opportunity, User
+from app.schemas.user import ActivityPoint, AnalyticsSummary, FunnelPoint, SkillDemand
 
 logger = logging.getLogger("agentforge.analytics")
 
@@ -35,9 +36,7 @@ async def get_analytics_summary(
 
         # Applications count
         apps_result = await db.execute(
-            select(func.count()).select_from(
-                select(Application).where(Application.user_id == user.id).subquery()
-            )
+            select(func.count()).select_from(select(Application).where(Application.user_id == user.id).subquery())
         )
         total_apps = apps_result.scalar() or 0
 

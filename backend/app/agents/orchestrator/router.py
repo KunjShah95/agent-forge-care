@@ -3,11 +3,11 @@ import logging
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agents.orchestrator.schemas import OrchestratorRequest
+from app.agents.orchestrator.service import OrchestratorAgent
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User
-from app.agents.orchestrator.service import OrchestratorAgent
-from app.agents.orchestrator.schemas import OrchestratorRequest, OrchestratorResult
 
 logger = logging.getLogger("agentforge.api.orchestrator")
 router = APIRouter()
@@ -27,6 +27,7 @@ async def run_orchestrator(
 @router.get("/agents")
 async def list_agents():
     from app.agents.orchestrator.service import AGENT_REGISTRY
+
     agents = sorted(AGENT_REGISTRY.keys())
     return {
         "agents": agents,

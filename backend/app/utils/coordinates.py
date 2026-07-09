@@ -15,15 +15,14 @@ Nominatim usage:
 
 import asyncio
 import logging
-from typing import Optional
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 logger = logging.getLogger("agentforge.coordinates")
 
 # ─── In-memory geocode cache ───────────────────────────────
 # Key: normalized "city|state|country" string
 # Value: (lat, lng) or None if not found
-_geocode_cache: dict[str, Optional[tuple[float, float]]] = {}
+_geocode_cache: dict[str, tuple[float, float] | None] = {}
 _last_nominatim_call: float = 0  # timestamp of last Nominatim request
 
 # ─── City → (latitude, longitude) mapping ──────────────────
@@ -79,7 +78,6 @@ CITY_COORDS: dict[str, tuple[float, float]] = {
     "columbus": (39.9612, -82.9988),
     "madison": (43.0731, -89.4012),
     "ann arbor": (42.2808, -83.7430),
-
     # ── Canada ──
     "toronto": (43.6532, -79.3832),
     "vancouver": (49.2827, -123.1207),
@@ -87,14 +85,12 @@ CITY_COORDS: dict[str, tuple[float, float]] = {
     "ottawa": (45.4215, -75.6972),
     "waterloo": (43.4643, -80.5204),
     "calgary": (51.0447, -114.0719),
-
     # ── United Kingdom ──
     "london": (51.5074, -0.1278),
     "cambridge uk": (52.2053, 0.1218),
     "oxford": (51.7520, -1.2577),
     "manchester": (53.4808, -2.2426),
     "edinburgh": (55.9533, -3.1883),
-
     # ── Europe ──
     "berlin": (52.5200, 13.4050),
     "munich": (48.1351, 11.5820),
@@ -116,7 +112,6 @@ CITY_COORDS: dict[str, tuple[float, float]] = {
     "budapest": (47.4979, 19.0402),
     "brussels": (50.8503, 4.3517),
     "lisbon": (38.7223, -9.1393),
-
     # ── Asia ──
     "tokyo": (35.6762, 139.6503),
     "singapore": (1.3521, 103.8198),
@@ -140,14 +135,12 @@ CITY_COORDS: dict[str, tuple[float, float]] = {
     "ho chi minh city": (10.8231, 106.6297),
     "manila": (14.5995, 120.9842),
     "taipei": (25.0330, 121.5654),
-
     # ── Oceania ──
     "sydney": (-33.8688, 151.2093),
     "melbourne": (-37.8136, 144.9631),
     "brisbane": (-27.4698, 153.0251),
     "auckland": (-36.8485, 174.7633),
     "wellington": (-41.2865, 174.7762),
-
     # ── Middle East / Africa ──
     "tel aviv": (32.0853, 34.7818),
     "johannesburg": (-26.2041, 28.0473),
@@ -155,7 +148,6 @@ CITY_COORDS: dict[str, tuple[float, float]] = {
     "nairobi": (-1.2921, 36.8219),
     "lagos": (6.5244, 3.3792),
     "cairo": (30.0444, 31.2357),
-
     # ── South America ──
     "são paulo": (-23.5505, -46.6333),
     "rio de janeiro": (-22.9068, -43.1729),
@@ -228,22 +220,22 @@ COUNTRY_CENTROIDS: dict[str, tuple[float, float]] = {
 }
 
 
-def _build_cache_key(city: Optional[str], state: Optional[str], country: Optional[str]) -> str:
+def _build_cache_key(city: str | None, state: str | None, country: str | None) -> str:
     """Build a normalized cache key from location parts."""
     return f"{city or ''}|{state or ''}|{country or ''}"
 
 
-def _build_nominatim_query(city: Optional[str], state: Optional[str], country: Optional[str]) -> str:
+def _build_nominatim_query(city: str | None, state: str | None, country: str | None) -> str:
     """Build a Nominatim search query string from location parts."""
     parts = [p for p in [city, state, country] if p]
     return ", ".join(parts) if parts else ""
 
 
 async def _geocode_with_nominatim(
-    city: Optional[str],
-    state: Optional[str],
-    country: Optional[str],
-) -> Optional[tuple[float, float]]:
+    city: str | None,
+    state: str | None,
+    country: str | None,
+) -> tuple[float, float] | None:
     """
     Geocode a location using the Nominatim (OpenStreetMap) free API.
 
@@ -264,7 +256,7 @@ async def _geocode_with_nominatim(
         return _geocode_cache[cache_key]
 
     # Rate limit: ensure at least 1.1 seconds between requests
-    now = datetime.now(timezone.utc).timestamp()
+    now = datetime.now(UTC).timestamp()
     elapsed = now - _last_nominatim_call
     if elapsed < 1.1:
         await asyncio.sleep(1.1 - elapsed)
@@ -286,7 +278,7 @@ async def _geocode_with_nominatim(
                     "Accept": "application/json",
                 },
             )
-            _last_nominatim_call = datetime.now(timezone.utc).timestamp()
+            _last_nominatim_call = datetime.now(UTC).timestamp()
 
             if response.status_code == 200:
                 data = response.json()
@@ -308,10 +300,10 @@ async def _geocode_with_nominatim(
 
 
 def get_coordinates(
-    city: Optional[str],
-    state: Optional[str],
-    country: Optional[str],
-) -> Optional[tuple[float, float]]:
+    city: str | None,
+    state: str | None,
+    country: str | None,
+) -> tuple[float, float] | None:
     """
     Get approximate coordinates for a location (synchronous, predefined list only).
 
@@ -326,25 +318,25 @@ def get_coordinates(
         city_lower = city.strip().lower()
         if city_lower in CITY_COORDS:
             return CITY_COORDS[city_lower]
-    
+
     if state:
         state_lower = state.strip().lower()
         if state_lower in STATE_COORDS:
             return STATE_COORDS[state_lower]
-    
+
     if country:
         country_lower = country.strip().lower()
         if country_lower in COUNTRY_CENTROIDS:
             return COUNTRY_CENTROIDS[country_lower]
-    
+
     return None
 
 
 async def get_coordinates_async(
-    city: Optional[str],
-    state: Optional[str],
-    country: Optional[str],
-) -> Optional[tuple[float, float]]:
+    city: str | None,
+    state: str | None,
+    country: str | None,
+) -> tuple[float, float] | None:
     """
     Get coordinates for a location with Nominatim fallback.
 

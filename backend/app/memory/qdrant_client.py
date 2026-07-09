@@ -13,8 +13,8 @@ import uuid
 
 from qdrant_client import QdrantClient as QdrantRawClient
 from qdrant_client.models import (
-    VectorParams,
     Distance,
+    VectorParams,
 )
 
 from app.config import settings
@@ -29,19 +29,11 @@ logger = logging.getLogger("agentforge.qdrant")
 DEFAULT_EMBEDDING_SIZE = 768
 
 COLLECTIONS = {
-    "resume_embeddings": VectorParams(
-        size=DEFAULT_EMBEDDING_SIZE, distance=Distance.COSINE
-    ),
-    "opportunity_embeddings": VectorParams(
-        size=DEFAULT_EMBEDDING_SIZE, distance=Distance.COSINE
-    ),
-    "skill_embeddings": VectorParams(
-        size=DEFAULT_EMBEDDING_SIZE, distance=Distance.COSINE
-    ),
+    "resume_embeddings": VectorParams(size=DEFAULT_EMBEDDING_SIZE, distance=Distance.COSINE),
+    "opportunity_embeddings": VectorParams(size=DEFAULT_EMBEDDING_SIZE, distance=Distance.COSINE),
+    "skill_embeddings": VectorParams(size=DEFAULT_EMBEDDING_SIZE, distance=Distance.COSINE),
     "memory_notes": VectorParams(size=DEFAULT_EMBEDDING_SIZE, distance=Distance.COSINE),
-    "research_notes": VectorParams(
-        size=DEFAULT_EMBEDDING_SIZE, distance=Distance.COSINE
-    ),
+    "research_notes": VectorParams(size=DEFAULT_EMBEDDING_SIZE, distance=Distance.COSINE),
 }
 
 

@@ -2,32 +2,33 @@
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.memory_service import MemoryService
-from app.services.profile_service import ProfileService
-from app.services.model_manager import get_completion_llm
-from app.memory.memory_layer import AgentMemory
-from app.utils.embedding import get_text_embedding
-from app.agents.enrichment import build_enrichment_context
-from app.hiring_agent.assistant_integration import enrich_with_hiring_agent
 from app.agents.base import strip_json_fences
 from app.agents.constants import (
-    LLM_TEMPERATURE_CREATIVE,
-    LLM_PREFERRED_PROVIDER,
-    MEMORY_WEIGHT_HIGH,
-    MEMORY_KEY_RESUME,
     COLLECTION_RESUME,
-    MAX_RESUME_SUGGESTIONS,
+    DEFAULT_COMPANY,
+    DEFAULT_ROLE,
+    DEFAULT_ROLE_TYPE,
+    LLM_PROVIDER_RESUME,
+    LLM_TEMPERATURE_CREATIVE,
     MAX_RESUME_ACTION_ITEMS,
     MAX_RESUME_ATS_KEYWORDS,
     MAX_RESUME_PROJECTS,
-    DEFAULT_ROLE_TYPE,
-    DEFAULT_COMPANY,
-    DEFAULT_ROLE,
+    MAX_RESUME_SUGGESTIONS,
+    MEMORY_KEY_RESUME,
+    MEMORY_WEIGHT_HIGH,
 )
-from app.agents.prompts.resume import tailor_resume_prompt, cover_letter_prompt
+from app.agents.enrichment import build_enrichment_context
+from app.agents.prompts.resume import cover_letter_prompt, tailor_resume_prompt
+from app.hiring_agent.assistant_integration import enrich_with_hiring_agent
+from app.memory.memory_layer import AgentMemory
+from app.services.memory_service import MemoryService
+from app.services.model_manager import get_completion_llm
+from app.services.profile_service import ProfileService
+from app.utils.embedding import get_text_embedding
 
 logger = logging.getLogger("agentforge.agents.resume.handlers")
 
@@ -52,12 +53,15 @@ async def tailor_resume(
     ctx = await build_enrichment_context(db, user_id, all_skills, include_raw_repos=True)
 
     ha_result = await enrich_with_hiring_agent(
-        user_id=user_id, db=db, resume_text=None,
-        target_role=role_type, target_company=target_company,
+        user_id=user_id,
+        db=db,
+        resume_text=None,
+        target_role=role_type,
+        target_company=target_company,
         job_description=None,
     )
 
-    llm = get_completion_llm(temperature=LLM_TEMPERATURE_CREATIVE, preferred_provider=LLM_PREFERRED_PROVIDER)
+    llm = get_completion_llm(temperature=LLM_TEMPERATURE_CREATIVE, preferred_provider=LLM_PROVIDER_RESUME)
     suggestions = None
     action_items = None
 
@@ -67,7 +71,9 @@ async def tailor_resume(
 
             ha_block = _build_ha_block(ha_result)
 
-            prompt = tailor_resume_prompt(all_skills, role_type, target_company, ctx.github_context, ctx.portfolio_context, ha_block)
+            prompt = tailor_resume_prompt(
+                all_skills, role_type, target_company, ctx.github_context, ctx.portfolio_context, ha_block
+            )
             response = await llm.ainvoke([HumanMessage(content=prompt)])
             parsed = json.loads(strip_json_fences(response.content))
 
@@ -85,11 +91,17 @@ async def tailor_resume(
         action_items = _fallback_resume_action_items(all_skills, ha_result)
 
     try:
-        await memory_service.set_memory(user_id, MEMORY_KEY_RESUME, {
-            "role_type": role_type, "skills": all_skills,
-            "target_company": target_company,
-            "last_tailored": datetime.now(timezone.utc).isoformat(),
-        }, weight=MEMORY_WEIGHT_HIGH)
+        await memory_service.set_memory(
+            user_id,
+            MEMORY_KEY_RESUME,
+            {
+                "role_type": role_type,
+                "skills": all_skills,
+                "target_company": target_company,
+                "last_tailored": datetime.now(UTC).isoformat(),
+            },
+            weight=MEMORY_WEIGHT_HIGH,
+        )
     except Exception as e:
         logger.debug("Failed to store resume tailoring memory: %s", e)
 
@@ -104,10 +116,16 @@ async def tailor_resume(
     try:
         agent_memory = AgentMemory(user_id)
         vector = await get_text_embedding(result["message"])
-        agent_memory.store_vector(collection=COLLECTION_RESUME, text=result["message"], vector=vector, metadata={
-            "agent_type": "resume", "key": params.get("role_type", ""),
-            "timestamp": str(datetime.now(timezone.utc)),
-        })
+        agent_memory.store_vector(
+            collection=COLLECTION_RESUME,
+            text=result["message"],
+            vector=vector,
+            metadata={
+                "agent_type": "resume",
+                "key": params.get("role_type", ""),
+                "timestamp": str(datetime.now(UTC)),
+            },
+        )
     except Exception as e:
         logger.debug("Failed to store memory vector: %s", e)
 
@@ -131,19 +149,26 @@ async def generate_cover_letter(
 
     ctx = await build_enrichment_context(db, user_id, all_skills)
     ha_result = await enrich_with_hiring_agent(
-        user_id=user_id, db=db, resume_text=None,
-        target_role=role, target_company=company,
+        user_id=user_id,
+        db=db,
+        resume_text=None,
+        target_role=role,
+        target_company=company,
         job_description=params.get("job_description"),
     )
 
-    llm = get_completion_llm(temperature=LLM_TEMPERATURE_CREATIVE, preferred_provider=LLM_PREFERRED_PROVIDER)
+    llm = get_completion_llm(temperature=LLM_TEMPERATURE_CREATIVE, preferred_provider=LLM_PROVIDER_RESUME)
     cover_letter = None
     customization_tips = None
 
     ha_cl = ha_result.get("cover_letter")
     if ha_cl:
         cover_letter = ha_cl
-        customization_tips = ["Tailor the first paragraph to the specific role", "Add metrics and concrete project details", "Research the company's recent work and mention it"]
+        customization_tips = [
+            "Tailor the first paragraph to the specific role",
+            "Add metrics and concrete project details",
+            "Research the company's recent work and mention it",
+        ]
 
     if llm and not cover_letter:
         try:
@@ -151,13 +176,19 @@ async def generate_cover_letter(
 
             ha_block = _build_ha_block(ha_result, include_jd_match=True)
 
-            prompt = cover_letter_prompt(all_skills, role, company, profile.school, ctx.github_context, ctx.portfolio_context, ha_block)
+            prompt = cover_letter_prompt(
+                all_skills, role, company, profile.school, ctx.github_context, ctx.portfolio_context, ha_block
+            )
             response = await llm.ainvoke([HumanMessage(content=prompt)])
             parsed = json.loads(strip_json_fences(response.content))
 
             if isinstance(parsed, dict) and "cover_letter" in parsed and isinstance(parsed["cover_letter"], str):
                 cover_letter = parsed["cover_letter"]
-            if isinstance(parsed, dict) and "customization_tips" in parsed and isinstance(parsed["customization_tips"], list):
+            if (
+                isinstance(parsed, dict)
+                and "customization_tips" in parsed
+                and isinstance(parsed["customization_tips"], list)
+            ):
                 customization_tips = parsed["customization_tips"][:3]
         except Exception as e:
             logger.warning("LLM generate_cover_letter failed, falling back to template: %s", e)
@@ -166,9 +197,17 @@ async def generate_cover_letter(
         cover_letter = _fallback_cover_letter(all_skills, role, company, profile.school, ctx)
 
     if customization_tips is None:
-        customization_tips = ["Add specific projects relevant to the role", "Mention any mutual connections or referrals", "Reference a recent company achievement or product launch"]
+        customization_tips = [
+            "Add specific projects relevant to the role",
+            "Mention any mutual connections or referrals",
+            "Reference a recent company achievement or product launch",
+        ]
 
-    return {"cover_letter": cover_letter, "message": f"Cover letter template generated for {role} at {company}", "customization_tips": customization_tips}
+    return {
+        "cover_letter": cover_letter,
+        "message": f"Cover letter template generated for {role} at {company}",
+        "customization_tips": customization_tips,
+    }
 
 
 # ── Shared Helpers ──────────────────────────────────────────
@@ -180,7 +219,7 @@ def _build_ha_block(ha_result: dict, include_jd_match: bool = False) -> str:
 
     ats = ha_result.get("ats")
     if ats:
-        missing_sample = ', '.join(ats.missing_keywords[:8])
+        missing_sample = ", ".join(ats.missing_keywords[:8])
         lines.append(
             f"ATS ANALYSIS — keyword coverage: {ats.keyword_coverage_pct}%, "
             f"matched: {ats.matched_count}, missing: {ats.missing_count}\
@@ -200,13 +239,10 @@ def _build_ha_block(ha_result: dict, include_jd_match: bool = False) -> str:
     if include_jd_match:
         jd = ha_result.get("jd_match")
         if jd:
-            lines.append(
-                f"JD MATCH — overall score: {jd.overall_score}/100, "
-                f"assessment: {jd.overall_assessment}"
-            )
+            lines.append(f"JD MATCH — overall score: {jd.overall_score}/100, assessment: {jd.overall_assessment}")
 
     if lines:
-        return f"HIRING AGENT INSIGHTS:\n" + "\n\n".join(lines) + "\n\n"
+        return "HIRING AGENT INSIGHTS:\n" + "\n\n".join(lines) + "\n\n"
     return ""
 
 
@@ -220,7 +256,9 @@ def _fallback_resume_suggestions(
     ha_result: dict,
 ) -> list[str]:
     """Generate fallback resume suggestions when LLM is unavailable."""
-    suggestions = [f"Lead with your strongest {'skills' if role_type == 'internship' else 'experience'}: {', '.join(all_skills[:3])}"]
+    suggestions = [
+        f"Lead with your strongest {'skills' if role_type == 'internship' else 'experience'}: {', '.join(all_skills[:3])}"
+    ]
     if target_company:
         suggestions.append(f"Research {target_company}'s products and mention relevant experience")
         suggestions.append("Use keywords from the job description throughout your resume")
@@ -230,13 +268,15 @@ def _fallback_resume_suggestions(
     if ha_ats and ha_ats.suggestions:
         for s in ha_ats.suggestions[:2]:
             suggestions.append(s)
-    suggestions.extend([
-        f"Include metrics and impact for each {role_type} experience",
-        "Optimize for ATS by matching keywords from the job posting",
-        "Keep format clean and consistent — one page maximum",
-        f"Highlight projects relevant to {', '.join(all_skills[:2])}",
-        "Add a technical skills section at the top or bottom",
-    ])
+    suggestions.extend(
+        [
+            f"Include metrics and impact for each {role_type} experience",
+            "Optimize for ATS by matching keywords from the job posting",
+            "Keep format clean and consistent — one page maximum",
+            f"Highlight projects relevant to {', '.join(all_skills[:2])}",
+            "Add a technical skills section at the top or bottom",
+        ]
+    )
     return suggestions
 
 

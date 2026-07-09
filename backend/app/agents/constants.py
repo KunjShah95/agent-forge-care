@@ -8,7 +8,18 @@ that were previously hardcoded across agent handler files.
 
 LLM_TEMPERATURE_CREATIVE = 0.7
 LLM_TEMPERATURE_PRECISE = 0.5
-LLM_PREFERRED_PROVIDER = "openai"
+
+# Task-to-provider routing: assign different providers to different agent tasks
+# to spread rate-limit pressure across keys.
+# "auto" = let model_manager pick best available via fallback chain.
+LLM_PROVIDER_RESEARCH   = "groq"     # fast, free tier — good for research synthesis
+LLM_PROVIDER_RESUME     = "mistral"  # strong instruction-following for doc generation
+LLM_PROVIDER_INTERVIEW  = "groq"     # low-latency for interactive coaching
+LLM_PROVIDER_NETWORKING = "mistral"  # nuanced tone for outreach writing
+LLM_PROVIDER_DEFAULT    = "auto"     # fallback for anything else
+
+# Legacy alias kept so old imports don't break — resolves to auto
+LLM_PREFERRED_PROVIDER = "auto"
 
 # ── Memory Weights ─────────────────────────────────────────
 

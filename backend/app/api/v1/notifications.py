@@ -1,12 +1,13 @@
 import logging
+
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import get_current_user
-from app.models.user import User, MemoryEntry
-from app.schemas.user import NotificationOut, NotificationList
+from app.models.user import MemoryEntry, User
+from app.schemas.user import NotificationList, NotificationOut
 
 logger = logging.getLogger("agentforge.notifications")
 

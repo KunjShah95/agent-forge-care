@@ -1,44 +1,147 @@
 import json
 import logging
 import re
-from typing import Optional
+from datetime import UTC
 
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.services.model_manager import get_completion_llm
-from app.services.memory_service import MemoryService
-from app.models.user import MemoryEntry
-
-from app.hiring_agent.schemas import (
-    ExtractedResume, EvaluationData,
-    ATSScore, JDMatchResult,
-    ImprovementItem, PipelineResult,
-)
 from app.hiring_agent.pdf_extractor import (
-    extract_pdf_text, parse_resume_sections, convert_resume_to_evaluation_text,
+    convert_resume_to_evaluation_text,
+    extract_pdf_text,
+    parse_resume_sections,
 )
+from app.hiring_agent.schemas import (
+    ATSScore,
+    EvaluationData,
+    ExtractedResume,
+    ImprovementItem,
+    JDMatchResult,
+    PipelineResult,
+)
+from app.models.user import MemoryEntry
+from app.services.memory_service import MemoryService
+from app.services.model_manager import get_completion_llm
 
 logger = logging.getLogger("agentforge.hiring_agent.service")
 
 TECH_KEYWORDS = [
-    "python", "javascript", "typescript", "java", "go", "golang", "rust", "c++", "c#", "ruby",
-    "swift", "kotlin", "scala", "php", "perl", "r", "matlab", "sql", "bash", "shell",
-    "react", "angular", "vue", "next.js", "node.js", "express", "django", "flask", "spring",
-    "fastapi", "graphql", "rest", "api", "docker", "kubernetes", "k8s", "aws", "azure", "gcp",
-    "terraform", "ansible", "jenkins", "ci/cd", "git", "linux", "nginx", "redis", "mongodb",
-    "postgresql", "mysql", "elasticsearch", "kafka", "rabbitmq", "grpc", "websocket",
-    "machine learning", "deep learning", "ai", "llm", "nlp", "computer vision", "tensorflow",
-    "pytorch", "scikit-learn", "langchain", "rag", "vector database", "openai", "hugging face",
-    "llama", "gpt", "bert", "transformer", "agent", "autogen", "crewai",
-    "tailwind", "sass", "redux", "webpack", "vite", "jest", "cypress",
-    "pandas", "numpy", "jupyter", "spark", "hadoop", "airflow", "dbt",
-    "microservices", "serverless", "lambda", "containers", "orchestration",
-    "oauth", "jwt", "saml", "ldap", "ssl", "tls", "https",
-    "agile", "scrum", "kanban", "jira", "confluence",
-    "tableau", "power bi", "looker", "datadog", "grafana", "prometheus",
+    "python",
+    "javascript",
+    "typescript",
+    "java",
+    "go",
+    "golang",
+    "rust",
+    "c++",
+    "c#",
+    "ruby",
+    "swift",
+    "kotlin",
+    "scala",
+    "php",
+    "perl",
+    "r",
+    "matlab",
+    "sql",
+    "bash",
+    "shell",
+    "react",
+    "angular",
+    "vue",
+    "next.js",
+    "node.js",
+    "express",
+    "django",
+    "flask",
+    "spring",
+    "fastapi",
+    "graphql",
+    "rest",
+    "api",
+    "docker",
+    "kubernetes",
+    "k8s",
+    "aws",
+    "azure",
+    "gcp",
+    "terraform",
+    "ansible",
+    "jenkins",
+    "ci/cd",
+    "git",
+    "linux",
+    "nginx",
+    "redis",
+    "mongodb",
+    "postgresql",
+    "mysql",
+    "elasticsearch",
+    "kafka",
+    "rabbitmq",
+    "grpc",
+    "websocket",
+    "machine learning",
+    "deep learning",
+    "ai",
+    "llm",
+    "nlp",
+    "computer vision",
+    "tensorflow",
+    "pytorch",
+    "scikit-learn",
+    "langchain",
+    "rag",
+    "vector database",
+    "openai",
+    "hugging face",
+    "llama",
+    "gpt",
+    "bert",
+    "transformer",
+    "agent",
+    "autogen",
+    "crewai",
+    "tailwind",
+    "sass",
+    "redux",
+    "webpack",
+    "vite",
+    "jest",
+    "cypress",
+    "pandas",
+    "numpy",
+    "jupyter",
+    "spark",
+    "hadoop",
+    "airflow",
+    "dbt",
+    "microservices",
+    "serverless",
+    "lambda",
+    "containers",
+    "orchestration",
+    "oauth",
+    "jwt",
+    "saml",
+    "ldap",
+    "ssl",
+    "tls",
+    "https",
+    "agile",
+    "scrum",
+    "kanban",
+    "jira",
+    "confluence",
+    "tableau",
+    "power bi",
+    "looker",
+    "datadog",
+    "grafana",
+    "prometheus",
 ]
+
 
 class HiringAgentService:
     def __init__(self, db: AsyncSession, user_id: str):
@@ -46,26 +149,30 @@ class HiringAgentService:
         self.user_id = user_id
         self.memory = MemoryService(db)
 
-    async def _llm_call(self, section_name: str, prompt: str, return_model_cls=None) -> Optional[dict]:
+    async def _llm_call(self, section_name: str, prompt: str, return_model_cls=None) -> dict | None:
         llm = get_completion_llm(temperature=0.1, preferred_provider="openai")
         if not llm:
             return None
         try:
             from langchain_core.messages import HumanMessage, SystemMessage
+
             system = f"You are an expert resume parser. Extract {section_name} from the resume text. Return ONLY valid JSON. No markdown, no explanations."
-            response = await llm.ainvoke([
-                SystemMessage(content=system),
-                HumanMessage(content=prompt),
-            ])
+            response = await llm.ainvoke(
+                [
+                    SystemMessage(content=system),
+                    HumanMessage(content=prompt),
+                ]
+            )
             text = response.content.strip()
-            text = re.sub(r'^```(?:json)?\s*', '', text)
-            text = re.sub(r'\s*```$', '', text)
+            text = re.sub(r"^```(?:json)?\s*", "", text)
+            text = re.sub(r"\s*```$", "", text)
             json_start = text.find("{")
             json_end = text.rfind("}")
             if json_start != -1 and json_end != -1:
-                text = text[json_start:json_end + 1]
+                text = text[json_start : json_end + 1]
             data = json.loads(text)
             from app.hiring_agent.transform import transform_parsed_data
+
             return transform_parsed_data(data)
         except Exception as e:
             logger.warning("LLM section extraction failed for %s: %s", section_name, e)
@@ -90,11 +197,16 @@ class HiringAgentService:
                 if user_resp.status_code == 200:
                     u = user_resp.json()
                     result["profile"] = {
-                        "name": u.get("name"), "bio": u.get("bio"),
-                        "location": u.get("location"), "company": u.get("company"),
-                        "followers": u.get("followers", 0), "public_repos": u.get("public_repos", 0),
-                        "created_at": u.get("created_at"), "blog": u.get("blog"),
-                        "html_url": u.get("html_url"), "hireable": u.get("hireable"),
+                        "name": u.get("name"),
+                        "bio": u.get("bio"),
+                        "location": u.get("location"),
+                        "company": u.get("company"),
+                        "followers": u.get("followers", 0),
+                        "public_repos": u.get("public_repos", 0),
+                        "created_at": u.get("created_at"),
+                        "blog": u.get("blog"),
+                        "html_url": u.get("html_url"),
+                        "hireable": u.get("hireable"),
                     }
 
                 repos_resp = await client.get(
@@ -106,12 +218,16 @@ class HiringAgentService:
                     repos_raw = repos_resp.json()
                     result["repositories"] = [
                         {
-                            "name": r.get("name"), "full_name": r.get("full_name"),
+                            "name": r.get("name"),
+                            "full_name": r.get("full_name"),
                             "description": r.get("description"),
-                            "language": r.get("language"), "stars": r.get("stargazers_count", 0),
-                            "forks": r.get("forks_count", 0), "topics": r.get("topics", []),
+                            "language": r.get("language"),
+                            "stars": r.get("stargazers_count", 0),
+                            "forks": r.get("forks_count", 0),
+                            "topics": r.get("topics", []),
                             "is_fork": r.get("fork", False),
-                            "html_url": r.get("html_url"), "homepage": r.get("homepage"),
+                            "html_url": r.get("html_url"),
+                            "homepage": r.get("homepage"),
                         }
                         for r in repos_raw
                     ]
@@ -125,12 +241,13 @@ class HiringAgentService:
                     items = search_resp.json().get("items", [])
                     result["contributions"] = {
                         "total_prs": len(items),
-                        "merged": sum(1 for i in items if any(
-                            l.get("name") == "merged" for l in i.get("labels", [])
-                        ) or i.get("pull_request", {}).get("merged_at")),
-                        "repos_contributed": len(set(
-                            i.get("repository_url", "") for i in items
-                        )),
+                        "merged": sum(
+                            1
+                            for i in items
+                            if any(label.get("name") == "merged" for label in i.get("labels", []))
+                            or i.get("pull_request", {}).get("merged_at")
+                        ),
+                        "repos_contributed": len(set(i.get("repository_url", "") for i in items)),
                     }
         except Exception as e:
             logger.warning("GitHub enrichment failed: %s", e)
@@ -142,12 +259,13 @@ class HiringAgentService:
             return {"error": "Invalid URL"}
         try:
             async with httpx.AsyncClient(follow_redirects=True, timeout=15.0) as client:
-                resp = await client.get(portfolio_url, headers={
-                    "User-Agent": "Mozilla/5.0 (compatible; AgentForge/1.0)"
-                })
+                resp = await client.get(
+                    portfolio_url, headers={"User-Agent": "Mozilla/5.0 (compatible; AgentForge/1.0)"}
+                )
                 if resp.status_code != 200:
                     return {"error": f"HTTP {resp.status_code}"}
                 from bs4 import BeautifulSoup
+
                 soup = BeautifulSoup(resp.text, "html.parser")
                 for tag in soup(["script", "style", "nav", "footer", "header"]):
                     tag.decompose()
@@ -157,11 +275,15 @@ class HiringAgentService:
                 if mt and mt.get("content"):
                     meta_desc = mt["content"].strip()
                 body = soup.get_text(separator="\n", strip=True)[:8000]
-                headings = [h.get_text(strip=True) for h in soup.find_all(["h1", "h2", "h3"]) if h.get_text(strip=True)][:15]
+                headings = [
+                    h.get_text(strip=True) for h in soup.find_all(["h1", "h2", "h3"]) if h.get_text(strip=True)
+                ][:15]
                 detected = [kw for kw in TECH_KEYWORDS if kw.lower() in body.lower()]
                 return {
-                    "title": title, "meta_description": meta_desc,
-                    "headings": headings, "technologies_detected": list(set(detected))[:20],
+                    "title": title,
+                    "meta_description": meta_desc,
+                    "headings": headings,
+                    "technologies_detected": list(set(detected))[:20],
                     "text_snippet": body[:2000],
                 }
         except httpx.TimeoutException:
@@ -175,7 +297,9 @@ class HiringAgentService:
             for url in urls:
                 try:
                     resp = await client.get(url, headers={"User-Agent": "AgentForge/1.0"})
-                    results.append({"url": url, "status": "ok" if resp.status_code == 200 else "broken", "code": resp.status_code})
+                    results.append(
+                        {"url": url, "status": "ok" if resp.status_code == 200 else "broken", "code": resp.status_code}
+                    )
                 except httpx.TimeoutError:
                     results.append({"url": url, "status": "timeout", "code": None})
                 except Exception as e:
@@ -183,12 +307,15 @@ class HiringAgentService:
         results.sort(key=lambda x: ("ok" != x["status"], x["url"]))
         return results
 
-    async def evaluate_resume(self, resume_text: str, position_type: str = None, live_demo_text: str = "") -> Optional[EvaluationData]:
+    async def evaluate_resume(
+        self, resume_text: str, position_type: str = None, live_demo_text: str = ""
+    ) -> EvaluationData | None:
         llm = get_completion_llm(temperature=0.3, preferred_provider="openai")
         if not llm:
             return None
         try:
             from langchain_core.messages import HumanMessage, SystemMessage
+
             system = """You are an expert technical recruiter evaluating resumes. You must be fair and unbiased.
 IMPORTANT: Scores must NOT be influenced by the candidate's name, gender, institution name, grades, or location.
 Focus ONLY on demonstrated skills, project complexity, and real achievements.
@@ -232,17 +359,19 @@ SCORING GUIDELINES:
 - Deductions: Simple tutorial projects, missing links, projects without substance
 
 Be specific in your evidence. Reference actual project names, technologies, and achievements from the resume."""
-            response = await llm.ainvoke([
-                SystemMessage(content=system),
-                HumanMessage(content=prompt),
-            ])
+            response = await llm.ainvoke(
+                [
+                    SystemMessage(content=system),
+                    HumanMessage(content=prompt),
+                ]
+            )
             text = response.content.strip()
-            text = re.sub(r'^```(?:json)?\s*', '', text)
-            text = re.sub(r'\s*```$', '', text)
+            text = re.sub(r"^```(?:json)?\s*", "", text)
+            text = re.sub(r"\s*```$", "", text)
             json_start = text.find("{")
             json_end = text.rfind("}")
             if json_start != -1 and json_end != -1:
-                text = text[json_start:json_end + 1]
+                text = text[json_start : json_end + 1]
             data = json.loads(text)
             return EvaluationData(**data)
         except Exception as e:
@@ -281,12 +410,15 @@ Be specific in your evidence. Reference actual project names, technologies, and 
             resume_experience_years=resume_years,
         )
 
-    async def match_jd(self, resume_text: str, jd_text: str, github_text: str = "", portfolio_text: str = "") -> Optional[JDMatchResult]:
+    async def match_jd(
+        self, resume_text: str, jd_text: str, github_text: str = "", portfolio_text: str = ""
+    ) -> JDMatchResult | None:
         llm = get_completion_llm(temperature=0.2, preferred_provider="openai")
         if not llm:
             return None
         try:
             from langchain_core.messages import HumanMessage, SystemMessage
+
             context = ""
             if github_text:
                 context += f"\nGITHUB DATA:\n{github_text}\n"
@@ -312,26 +444,35 @@ Return a JSON object with EXACTLY this structure:
 
 Scoring: Skill Match 0-40, Experience Match 0-25, Education Match 0-15, Project Relevance 0-20.
 Return ONLY valid JSON."""
-            response = await llm.ainvoke([
-                SystemMessage(content="You are a precise resume-job matching evaluator. Return ONLY valid JSON."),
-                HumanMessage(content=prompt),
-            ])
+            response = await llm.ainvoke(
+                [
+                    SystemMessage(content="You are a precise resume-job matching evaluator. Return ONLY valid JSON."),
+                    HumanMessage(content=prompt),
+                ]
+            )
             text = response.content.strip()
-            text = re.sub(r'^```(?:json)?\s*', '', text)
-            text = re.sub(r'\s*```$', '', text)
+            text = re.sub(r"^```(?:json)?\s*", "", text)
+            text = re.sub(r"\s*```$", "", text)
             json_start = text.find("{")
             json_end = text.rfind("}")
             if json_start != -1 and json_end != -1:
-                text = text[json_start:json_end + 1]
+                text = text[json_start : json_end + 1]
             data = json.loads(text)
             sm = data.get("skill_match", {})
             em = data.get("experience_match", {})
             edm = data.get("education_match", {})
             pr = data.get("project_relevance", {})
-            overall = min(sm.get("score", 0), 40) + min(em.get("score", 0), 25) + min(edm.get("score", 0), 15) + min(pr.get("score", 0), 20)
+            overall = (
+                min(sm.get("score", 0), 40)
+                + min(em.get("score", 0), 25)
+                + min(edm.get("score", 0), 15)
+                + min(pr.get("score", 0), 20)
+            )
             return JDMatchResult(
-                skill_match=sm, experience_match=em,
-                education_match=edm, project_relevance=pr,
+                skill_match=sm,
+                experience_match=em,
+                education_match=edm,
+                project_relevance=pr,
                 overall_score=overall,
                 overall_assessment=data.get("overall_assessment", ""),
                 gap_analysis=data.get("gap_analysis", []),
@@ -340,13 +481,26 @@ Return ONLY valid JSON."""
             logger.error("JD matching failed: %s", e)
             return None
 
-    async def generate_cover_letter(self, resume_text: str, jd_text: str, candidate_name: str = None, company_name: str = None, tone: str = "professional", length: str = "medium") -> Optional[str]:
+    async def generate_cover_letter(
+        self,
+        resume_text: str,
+        jd_text: str,
+        candidate_name: str = None,
+        company_name: str = None,
+        tone: str = "professional",
+        length: str = "medium",
+    ) -> str | None:
         llm = get_completion_llm(temperature=0.7, preferred_provider="openai")
         if not llm:
             return None
         try:
             from langchain_core.messages import HumanMessage, SystemMessage
-            length_guide = {"short": "3-4 sentences, very concise", "medium": "3-4 paragraphs", "long": "5-6 paragraphs"}.get(length, "3-4 paragraphs")
+
+            length_guide = {
+                "short": "3-4 sentences, very concise",
+                "medium": "3-4 paragraphs",
+                "long": "5-6 paragraphs",
+            }.get(length, "3-4 paragraphs")
             system = f"You are an expert career coach. Generate a {tone} cover letter that is {length_guide}. Be specific, use concrete examples from the resume, and avoid generic phrases. Return ONLY the letter text."
             company_str = f"\nCOMPANY: {company_name}" if company_name else ""
             prompt = f"""Generate a tailored cover letter.
@@ -361,10 +515,12 @@ JOB DESCRIPTION:
 {jd_text}
 
 Highlight specific skills and experiences that make this candidate a strong fit. Use project names and technologies from the resume."""
-            response = await llm.ainvoke([
-                SystemMessage(content=system),
-                HumanMessage(content=prompt),
-            ])
+            response = await llm.ainvoke(
+                [
+                    SystemMessage(content=system),
+                    HumanMessage(content=prompt),
+                ]
+            )
             letter = response.content.strip().strip('"').strip("'")
             return letter
         except Exception as e:
@@ -377,6 +533,7 @@ Highlight specific skills and experiences that make this candidate a strong fit.
             return self._fallback_improvements(evaluation)
         try:
             from langchain_core.messages import HumanMessage, SystemMessage
+
             scores_text = "\n".join(
                 f"- {cat}: {getattr(evaluation.scores, cat).score}/{getattr(evaluation.scores, cat).max} - {getattr(evaluation.scores, cat).evidence}"
                 for cat in ["open_source", "self_projects", "production", "technical_skills"]
@@ -388,10 +545,10 @@ SCORES:
 {scores_text}
 
 AREAS FOR IMPROVEMENT:
-{chr(10).join(f'- {a}' for a in evaluation.areas_for_improvement)}
+{chr(10).join(f"- {a}" for a in evaluation.areas_for_improvement)}
 
 KEY STRENGTHS:
-{chr(10).join(f'- {s}' for s in evaluation.key_strengths)}
+{chr(10).join(f"- {s}" for s in evaluation.key_strengths)}
 
 Return a JSON array of improvement objects. Each object has:
 - "category": "open_source" | "self_projects" | "production" | "technical_skills"
@@ -402,13 +559,15 @@ Return a JSON array of improvement objects. Each object has:
 
 Generate 2-4 suggestions per category. Prioritize suggestions that address low scores.
 Return ONLY valid JSON array."""
-            response = await llm.ainvoke([
-                SystemMessage(content="You are an expert resume improvement advisor. Return ONLY valid JSON."),
-                HumanMessage(content=prompt),
-            ])
+            response = await llm.ainvoke(
+                [
+                    SystemMessage(content="You are an expert resume improvement advisor. Return ONLY valid JSON."),
+                    HumanMessage(content=prompt),
+                ]
+            )
             text = response.content.strip()
-            text = re.sub(r'^```(?:json)?\s*', '', text)
-            text = re.sub(r'\s*```$', '', text)
+            text = re.sub(r"^```(?:json)?\s*", "", text)
+            text = re.sub(r"\s*```$", "", text)
             data = json.loads(text)
             if isinstance(data, dict):
                 items = []
@@ -428,20 +587,31 @@ Return ONLY valid JSON array."""
         for cat in ["open_source", "self_projects", "production", "technical_skills"]:
             cs = getattr(evaluation.scores, cat, None)
             if cs and cs.score / max(cs.max, 1) < 0.7:
-                items.append(ImprovementItem(
-                    category=cat,
-                    suggestion=f"Improve your {cat.replace('_', ' ')} score by working on more substantial projects in this area.",
-                    impact="medium", effort="medium", priority_score=5,
-                ))
+                items.append(
+                    ImprovementItem(
+                        category=cat,
+                        suggestion=f"Improve your {cat.replace('_', ' ')} score by working on more substantial projects in this area.",
+                        impact="medium",
+                        effort="medium",
+                        priority_score=5,
+                    )
+                )
         return items
 
-    def _extract_github_username(self, url: str) -> Optional[str]:
+    def _extract_github_username(self, url: str) -> str | None:
         if not url:
             return None
         m = re.search(r"github\.com/([A-Za-z0-9_.-]+)", url)
         return m.group(1) if m else None
 
-    async def run_pipeline(self, pdf_content: bytes, jd_text: str = None, position_type: str = None, github_url: str = None, portfolio_url: str = None) -> Optional[PipelineResult]:
+    async def run_pipeline(
+        self,
+        pdf_content: bytes,
+        jd_text: str = None,
+        position_type: str = None,
+        github_url: str = None,
+        portfolio_url: str = None,
+    ) -> PipelineResult | None:
         resume = await self.extract_resume(pdf_content)
         if not resume or not resume.raw_text:
             return None
@@ -457,10 +627,16 @@ Return ONLY valid JSON array."""
         if github_data.get("profile"):
             p = github_data["profile"]
             repos = github_data.get("repositories", [])
-            top_repos = sorted([r for r in repos if not r.get("is_fork")], key=lambda r: r.get("stars", 0), reverse=True)[:5]
-            github_text = f"\nGitHub: {p.get('name', '')} - {p.get('followers', 0)} followers, {p.get('public_repos', 0)} repos"
+            top_repos = sorted(
+                [r for r in repos if not r.get("is_fork")], key=lambda r: r.get("stars", 0), reverse=True
+            )[:5]
+            github_text = (
+                f"\nGitHub: {p.get('name', '')} - {p.get('followers', 0)} followers, {p.get('public_repos', 0)} repos"
+            )
             if top_repos:
-                github_text += "\nTop repos:\n" + "\n".join(f"- {r['name']} (⭐{r['stars']}) - {r.get('description', '')}" for r in top_repos)
+                github_text += "\nTop repos:\n" + "\n".join(
+                    f"- {r['name']} (⭐{r['stars']}) - {r.get('description', '')}" for r in top_repos
+                )
             contribs = github_data.get("contributions", {})
             if contribs:
                 github_text += f"\nPRs: {contribs.get('total_prs', 0)} total, {contribs.get('merged', 0)} merged"
@@ -491,15 +667,12 @@ Return ONLY valid JSON array."""
         if evaluation:
             improvements = await self.generate_improvements(evaluation)
 
-        ats = None
-        jd_match = None
-        cover_letter = None
         name = resume.basics.name if resume.basics else "Candidate"
 
         if jd_text:
-            ats = await self.compute_ats_analysis(eval_text, jd_text)
-            jd_match = await self.match_jd(eval_text, jd_text, github_text, portfolio_text)
-            cover_letter = await self.generate_cover_letter(eval_text, jd_text, name)
+            await self.compute_ats_analysis(eval_text, jd_text)
+            await self.match_jd(eval_text, jd_text, github_text, portfolio_text)
+            await self.generate_cover_letter(eval_text, jd_text, name)
 
         total_score = 0
         max_score = 0
@@ -517,33 +690,44 @@ Return ONLY valid JSON array."""
 
         # Store results in memory
         try:
-            from datetime import datetime, timezone
+            from datetime import datetime
+
             await self.memory.set_memory(
-                self.user_id, "hiring_agent_last_eval",
+                self.user_id,
+                "hiring_agent_last_eval",
                 {
-                    "name": name, "overall_score": total_score,
-                    "max_score": max_score, "timestamp": datetime.now(timezone.utc).isoformat(),
-                }, weight=0.9,
+                    "name": name,
+                    "overall_score": total_score,
+                    "max_score": max_score,
+                    "timestamp": datetime.now(UTC).isoformat(),
+                },
+                weight=0.9,
             )
         except Exception as e:
             logger.debug("Failed to store evaluation memory: %s", e)
 
         return PipelineResult(
-            name=name, resume=resume,
-            overall_score=total_score, max_score=max_score,
-            evaluation=evaluation, improvements=improvements,
+            name=name,
+            resume=resume,
+            overall_score=total_score,
+            max_score=max_score,
+            evaluation=evaluation,
+            improvements=improvements,
             live_demo_status=live_demos,
             github_summary={
                 "repos": len(github_data.get("repositories", [])),
                 "total_stars": sum(r.get("stars", 0) for r in github_data.get("repositories", [])),
                 "contributions": github_data.get("contributions", {}),
-            } if github_data.get("profile") else None,
+            }
+            if github_data.get("profile")
+            else None,
             portfolio_summary=portfolio_data if portfolio_data.get("title") else None,
         )
 
     async def get_history(self, limit: int = 10) -> list[dict]:
         try:
-            from sqlalchemy import desc
+            from sqlalchemy import desc, select
+
             result = await self.db.execute(
                 select(MemoryEntry)
                 .where(
@@ -554,9 +738,7 @@ Return ONLY valid JSON array."""
                 .limit(limit)
             )
             entries = result.scalars().all()
-            return [
-                {"id": str(e.id), **e.value} for e in entries if e.value
-            ]
+            return [{"id": str(e.id), **e.value} for e in entries if e.value]
         except Exception as e:
             logger.warning("Failed to load history: %s", e)
             return []
@@ -582,7 +764,7 @@ Return ONLY valid JSON array."""
         demos = ""
         for d in result.live_demo_status[:10]:
             icon = {"ok": "✅", "broken": "❌", "timeout": "⏰"}.get(d["status"], "⚠️")
-            demos += f"<div style=\"font-size:12px;margin:2px 0;\">{icon} {d['url']}</div>"
+            demos += f'<div style="font-size:12px;margin:2px 0;">{icon} {d["url"]}</div>'
         return f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>Resume Evaluation - {result.name}</title></head>
 <body style="background:#0f172a;color:#e2e8f0;font-family:system-ui,sans-serif;padding:20px;">
@@ -595,16 +777,22 @@ Return ONLY valid JSON array."""
     <div style="font-size:13px;color:#64748b;">{result.overall_score}/{result.max_score} + bonuses</div>
 </div>
 <div style="flex:1;">
-{"".join(f'''
+{
+            "".join(
+                f'''
 <div style="margin-bottom:12px;">
     <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;">
-        <span>{cat.replace("_"," ").title()}</span>
-        <span>{min(getattr(eval.scores,cat).score, getattr(eval.scores,cat).max)}/{getattr(eval.scores,cat).max}</span>
+        <span>{cat.replace("_", " ").title()}</span>
+        <span>{min(getattr(eval.scores, cat).score, getattr(eval.scores, cat).max)}/{getattr(eval.scores, cat).max}</span>
     </div>
     <div style="height:8px;background:#334155;border-radius:4px;overflow:hidden;">
-        <div style="height:100%;width:{min(getattr(eval.scores,cat).score/getattr(eval.scores,cat).max*100,100)}%;background:linear-gradient(90deg,#3b82f6,#8b5cf6);border-radius:4px;"></div>
+        <div style="height:100%;width:{min(getattr(eval.scores, cat).score / getattr(eval.scores, cat).max * 100, 100)}%;background:linear-gradient(90deg,#3b82f6,#8b5cf6);border-radius:4px;"></div>
     </div>
-</div>''' for cat in ["open_source","self_projects","production","technical_skills"] if hasattr(eval.scores,cat))}
+</div>'''
+                for cat in ["open_source", "self_projects", "production", "technical_skills"]
+                if hasattr(eval.scores, cat)
+            )
+        }
 </div>
 </div>
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px;">
@@ -620,9 +808,19 @@ Return ONLY valid JSON array."""
 <div style="background:#1e293b;border-radius:12px;padding:16px;margin-bottom:24px;">
     <h3 style="margin:0 0 12px 0;font-size:15px;">⭐ Bonus & Deductions</h3>
     <div style="font-size:13px;color:#94a3b8;">Bonus: +{eval.bonus_points.total} — {eval.bonus_points.breakdown}</div>
-    <div style="font-size:13px;color:#94a3b8;margin-top:4px;">Deductions: -{eval.deductions.total} — {eval.deductions.reasons}</div>
+    <div style="font-size:13px;color:#94a3b8;margin-top:4px;">Deductions: -{eval.deductions.total} — {
+            eval.deductions.reasons
+        }</div>
 </div>
-{f'<div style="background:#1e293b;border-radius:12px;padding:16px;margin-bottom:24px;"><h3 style="margin:0 0 12px 0;font-size:15px;">📡 Live Demos</h3>{demos}</div>' if demos else ''}
-{f'<div style="background:#1e293b;border-radius:12px;padding:16px;"><h3 style="margin:0 0 12px 0;font-size:15px;">💡 Improvement Recommendations</h3>{improvs}</div>' if improvs else ''}
+{
+            f'<div style="background:#1e293b;border-radius:12px;padding:16px;margin-bottom:24px;"><h3 style="margin:0 0 12px 0;font-size:15px;">📡 Live Demos</h3>{demos}</div>'
+            if demos
+            else ""
+        }
+{
+            f'<div style="background:#1e293b;border-radius:12px;padding:16px;"><h3 style="margin:0 0 12px 0;font-size:15px;">💡 Improvement Recommendations</h3>{improvs}</div>'
+            if improvs
+            else ""
+        }
 </div>
 </body></html>"""

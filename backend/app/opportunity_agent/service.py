@@ -8,37 +8,35 @@ Follows the same pattern as HiringAgentService for consistency.
 import json
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Optional
 
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.user import (
-    Opportunity,
-    MatchScore,
-    AlertConfig,
-    AgentType,
-)
-from app.services.profile_service import ProfileService
-from app.services.memory_service import MemoryService
-from app.services.match_service import MatchService
-from app.services.model_manager import get_completion_llm
-from app.search.adapters import SearchAdapter
 from app.memory.memory_layer import AgentMemory
-from app.utils.embedding import get_text_embedding
-from app.utils.location import parse_location
-from app.utils.industry import detect_industry
-from app.utils.work_mode import infer_work_type, categorize_search_keyword
-from app.opportunity_agent.schemas import (
-    ScoredOpportunityItem,
-    OpportunityFeedback,
-    OpportunityAnalysis,
-    OpportunityResult,
-    OpportunityScanResult,
+from app.models.user import (
+    AlertConfig,
+    MatchScore,
+    Opportunity,
 )
 from app.opportunity_agent.prompts.template_manager import load_template, render_template
+from app.opportunity_agent.schemas import (
+    OpportunityAnalysis,
+    OpportunityFeedback,
+    OpportunityResult,
+    OpportunityScanResult,
+    ScoredOpportunityItem,
+)
+from app.search.adapters import SearchAdapter
+from app.services.match_service import MatchService
+from app.services.memory_service import MemoryService
+from app.services.model_manager import get_completion_llm
+from app.services.profile_service import ProfileService
+from app.utils.embedding import get_text_embedding
+from app.utils.industry import detect_industry
+from app.utils.location import parse_location
+from app.utils.work_mode import categorize_search_keyword, infer_work_type
 
 logger = logging.getLogger("agentforge.opportunity_agent.service")
 
@@ -57,8 +55,8 @@ class OpportunityAgentService:
     async def discover(
         self,
         query: str,
-        location: Optional[str] = None,
-        skills: Optional[list[str]] = None,
+        location: str | None = None,
+        skills: list[str] | None = None,
         limit: int = 20,
         source_filter: str = "job",
         opp_type: str = "Full-time",
@@ -72,15 +70,11 @@ class OpportunityAgentService:
         items = await self._process_results(raw_results, limit, all_skills, opp_type, source_filter)
 
         if items and query:
-            reranked = await self.match_service.rerank_and_blend(
-                self.user_id, query, items, blend_weight=0.4
-            )
+            reranked = await self.match_service.rerank_and_blend(self.user_id, query, items, blend_weight=0.4)
             items = reranked
 
         analysis = self._compute_analysis(items)
-        feedback = await self._generate_feedback(
-            items, query, source_filter, all_skills, profile
-        )
+        feedback = await self._generate_feedback(items, query, source_filter, all_skills, profile)
 
         await self._store_memory(query, location, items, source_filter)
 
@@ -104,8 +98,8 @@ class OpportunityAgentService:
 
     async def run_scan(
         self,
-        search_query: Optional[str] = None,
-        keywords: Optional[list[str]] = None,
+        search_query: str | None = None,
+        keywords: list[str] | None = None,
     ) -> OpportunityScanResult:
         if not keywords:
             result = await self.db.execute(
@@ -133,9 +127,7 @@ class OpportunityAgentService:
                 continue
             category = categorize_search_keyword(kw)
             try:
-                results = await self.search_adapter.search(
-                    query=kw, limit=8, source_filter=category
-                )
+                results = await self.search_adapter.search(query=kw, limit=8, source_filter=category)
                 for r in results:
                     r.setdefault("_category", category)
                 all_new_items.extend(results)
@@ -169,17 +161,19 @@ class OpportunityAgentService:
             match_data = await self.match_service.calculate_match(self.user_id, opp)
             await self._store_match_score(opp, match_data)
 
-            stored_items.append({
-                "id": str(opp.id),
-                "title": opp.title,
-                "company": opp.company,
-                "location": opp.location,
-                "description": opp.description or "",
-                "skills_required": opp.skills_required or [],
-                "match_score": match_data["overall"],
-                "reason": match_data["reasons"][0] if match_data["reasons"] else "",
-                "type": opp.type,
-            })
+            stored_items.append(
+                {
+                    "id": str(opp.id),
+                    "title": opp.title,
+                    "company": opp.company,
+                    "location": opp.location,
+                    "description": opp.description or "",
+                    "skills_required": opp.skills_required or [],
+                    "match_score": match_data["overall"],
+                    "reason": match_data["reasons"][0] if match_data["reasons"] else "",
+                    "type": opp.type,
+                }
+            )
 
         scored_count = await self.match_service.score_all_active(self.user_id)
 
@@ -210,13 +204,20 @@ class OpportunityAgentService:
     # ─── Internal: Search ────────────────────────────────────
 
     async def _search_external(
-        self, query: str, location: Optional[str],
-        skills: list[str], limit: int, source_filter: str,
+        self,
+        query: str,
+        location: str | None,
+        skills: list[str],
+        limit: int,
+        source_filter: str,
     ) -> list[dict]:
         try:
             raw = await self.search_adapter.search(
-                query=query, location=location, skills=skills,
-                limit=limit, source_filter=source_filter,
+                query=query,
+                location=location,
+                skills=skills,
+                limit=limit,
+                source_filter=source_filter,
             )
             if raw:
                 return raw
@@ -228,18 +229,17 @@ class OpportunityAgentService:
 
     async def _get_existing_keys(self) -> set:
         result = await self.db.execute(
-            select(Opportunity.title, Opportunity.company).where(
-                Opportunity.user_id == self.user_id
-            )
+            select(Opportunity.title, Opportunity.company).where(Opportunity.user_id == self.user_id)
         )
-        return {
-            (t.lower().strip(), (c or "").lower().strip())
-            for t, c in result.all() if t
-        }
+        return {(t.lower().strip(), (c or "").lower().strip()) for t, c in result.all() if t}
 
     async def _process_results(
-        self, raw_results: list[dict], limit: int,
-        all_skills: list[str], opp_type: str, source_filter: str,
+        self,
+        raw_results: list[dict],
+        limit: int,
+        all_skills: list[str],
+        opp_type: str,
+        source_filter: str,
     ) -> list[dict]:
         profile = await self.profile_service.get_or_create_profile(self.user_id)
         salary_min = profile.salary_min
@@ -267,30 +267,32 @@ class OpportunityAgentService:
             await self._store_match_score(opp, match_data)
             await self._store_opportunity_embedding(self.user_id, opp, match_data)
 
-            items.append({
-                "id": str(opp.id),
-                "title": opp.title,
-                "company": opp.company,
-                "location": opp.location,
-                "description": opp.description or "",
-                "skills_required": opp.skills_required or [],
-                "match_score": match_data["overall"],
-                "reason": match_data["reasons"][0] if match_data["reasons"] else "",
-                "industry": opp.industry,
-                "work_type": opp.work_type,
-                "salary_min": opp.salary_min,
-                "salary_max": opp.salary_max,
-                "apply_url": opp.apply_url,
-                "company_size": opp.company_size,
-                "source": opp.source,
-            })
+            items.append(
+                {
+                    "id": str(opp.id),
+                    "title": opp.title,
+                    "company": opp.company,
+                    "location": opp.location,
+                    "description": opp.description or "",
+                    "skills_required": opp.skills_required or [],
+                    "match_score": match_data["overall"],
+                    "reason": match_data["reasons"][0] if match_data["reasons"] else "",
+                    "industry": opp.industry,
+                    "work_type": opp.work_type,
+                    "salary_min": opp.salary_min,
+                    "salary_max": opp.salary_max,
+                    "apply_url": opp.apply_url,
+                    "company_size": opp.company_size,
+                    "source": opp.source,
+                }
+            )
 
         await self.db.flush()
         return items
 
     async def _create_opportunity(
-        self, r: dict, all_skills: list[str], opp_type: Optional[str] = None
-    ) -> Optional[Opportunity]:
+        self, r: dict, all_skills: list[str], opp_type: str | None = None
+    ) -> Opportunity | None:
         title = r.get("title", "Untitled Position") if not r.get("title") else r.get("title")
         company = r.get("company", "Unknown")
         loc_raw = r.get("location")
@@ -302,13 +304,9 @@ class OpportunityAgentService:
             description=r.get("description", ""),
         )
         remote = r.get("remote", False)
-        work_type = r.get("work_type") or infer_work_type(
-            remote, title, r.get("description"), loc_raw
-        )
+        work_type = r.get("work_type") or infer_work_type(remote, title, r.get("description"), loc_raw)
 
-        actual_type = opp_type or r.get("type") or (
-            "Internship" if r.get("_category") == "internship" else "Full-time"
-        )
+        actual_type = opp_type or r.get("type") or ("Internship" if r.get("_category") == "internship" else "Full-time")
 
         opp = Opportunity(
             user_id=self.user_id,
@@ -353,8 +351,12 @@ class OpportunityAgentService:
     # ─── LLM Feedback ────────────────────────────────────────
 
     async def _generate_feedback(
-        self, items: list[dict], query: str, agent_type: str,
-        all_skills: list[str], profile,
+        self,
+        items: list[dict],
+        query: str,
+        agent_type: str,
+        all_skills: list[str],
+        profile,
     ) -> OpportunityFeedback:
         llm = get_completion_llm(temperature=0.3, preferred_provider="openai")
         if not llm or not items:
@@ -376,17 +378,20 @@ class OpportunityAgentService:
 
         try:
             from langchain_core.messages import HumanMessage, SystemMessage
-            response = await llm.ainvoke([
-                SystemMessage(content="You are an expert career opportunity analyst. Return ONLY valid JSON."),
-                HumanMessage(content=prompt),
-            ])
+
+            response = await llm.ainvoke(
+                [
+                    SystemMessage(content="You are an expert career opportunity analyst. Return ONLY valid JSON."),
+                    HumanMessage(content=prompt),
+                ]
+            )
             text = response.content.strip()
-            text = re.sub(r'^```(?:json)?\s*', '', text)
-            text = re.sub(r'\s*```$', '', text)
+            text = re.sub(r"^```(?:json)?\s*", "", text)
+            text = re.sub(r"\s*```$", "", text)
             json_start = text.find("{")
             json_end = text.rfind("}")
             if json_start != -1 and json_end != -1:
-                text = text[json_start:json_end + 1]
+                text = text[json_start : json_end + 1]
             data = json.loads(text)
             return OpportunityFeedback(**data)
         except Exception as e:
@@ -394,8 +399,11 @@ class OpportunityAgentService:
             return self._fallback_feedback(items, query)
 
     async def _generate_scan_feedback(
-        self, items: list[dict], all_skills: list[str], profile,
-    ) -> Optional[OpportunityFeedback]:
+        self,
+        items: list[dict],
+        all_skills: list[str],
+        profile,
+    ) -> OpportunityFeedback | None:
         llm = get_completion_llm(temperature=0.3, preferred_provider="openai")
         if not llm or not items:
             return None
@@ -415,17 +423,20 @@ class OpportunityAgentService:
 
         try:
             from langchain_core.messages import HumanMessage, SystemMessage
-            response = await llm.ainvoke([
-                SystemMessage(content="You are an expert career monitor analyst. Return ONLY valid JSON."),
-                HumanMessage(content=prompt),
-            ])
+
+            response = await llm.ainvoke(
+                [
+                    SystemMessage(content="You are an expert career monitor analyst. Return ONLY valid JSON."),
+                    HumanMessage(content=prompt),
+                ]
+            )
             text = response.content.strip()
-            text = re.sub(r'^```(?:json)?\s*', '', text)
-            text = re.sub(r'\s*```$', '', text)
+            text = re.sub(r"^```(?:json)?\s*", "", text)
+            text = re.sub(r"\s*```$", "", text)
             json_start = text.find("{")
             json_end = text.rfind("}")
             if json_start != -1 and json_end != -1:
-                text = text[json_start:json_end + 1]
+                text = text[json_start : json_end + 1]
             data = json.loads(text)
             return OpportunityFeedback(**data)
         except Exception as e:
@@ -436,7 +447,9 @@ class OpportunityAgentService:
         high_match = [i for i in items if i.get("match_score", 0) >= 80]
         return OpportunityFeedback(
             overall_assessment=f"Found {len(items)} opportunities matching your search.",
-            top_matches_summary=f"{len(high_match)} high-match opportunities identified." if high_match else "No high-match opportunities found.",
+            top_matches_summary=f"{len(high_match)} high-match opportunities identified."
+            if high_match
+            else "No high-match opportunities found.",
             skill_gaps=[],
             improvement_suggestions=[
                 "Try broadening your search keywords",
@@ -462,6 +475,7 @@ class OpportunityAgentService:
         for i in items:
             skills.extend(i.get("skills_required", []) or [])
         from collections import Counter
+
         top_industries = [ind for ind, _ in Counter(industries).most_common(5)] if industries else []
         common_skills = [s for s, _ in Counter(s.lower() for s in skills).most_common(10)] if skills else []
         remote_ratio = sum(1 for i in items if i.get("work_type") == "remote" or i.get("remote")) / max(len(items), 1)
@@ -478,26 +492,29 @@ class OpportunityAgentService:
     # ─── Alerts ──────────────────────────────────────────────
 
     async def _generate_alerts(self, items: list[dict]) -> list[dict]:
-        from app.services.notification_service import create_notification
         from app.models.user import User
+        from app.services.notification_service import create_notification
 
         alerts = []
         for item in items:
             if item.get("match_score", 0) >= 80:
-                alerts.append({
-                    "opportunity_id": item["id"],
-                    "title": item["title"],
-                    "company": item["company"],
-                    "match_score": item["match_score"],
-                    "message": f"High match: {item['title']} @ {item['company']} ({item['match_score']:.0f}%)",
-                })
+                alerts.append(
+                    {
+                        "opportunity_id": item["id"],
+                        "title": item["title"],
+                        "company": item["company"],
+                        "match_score": item["match_score"],
+                        "message": f"High match: {item['title']} @ {item['company']} ({item['match_score']:.0f}%)",
+                    }
+                )
 
         user_result = await self.db.execute(select(User).where(User.id == self.user_id))
         user = user_result.scalar_one_or_none()
 
         for alert in alerts[:10]:
             await create_notification(
-                self.db, self.user_id,
+                self.db,
+                self.user_id,
                 title=f"High match: {alert['title']} @ {alert['company']}",
                 body=alert["message"],
                 type="success",
@@ -507,24 +524,26 @@ class OpportunityAgentService:
 
     # ─── Memory ──────────────────────────────────────────────
 
-    async def _store_memory(self, query: str, location: Optional[str], items: list[dict], agent_type: str):
+    async def _store_memory(self, query: str, location: str | None, items: list[dict], agent_type: str):
         key = f"last_{agent_type}_search"
         await self.memory_service.set_memory(
-            self.user_id, key,
+            self.user_id,
+            key,
             {
                 "query": query,
                 "location": location,
                 "results_count": len(items),
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             },
             weight=0.8,
         )
 
     async def _store_scan_memory(self, items: list[dict], scored_count: int, alert_count: int):
         await self.memory_service.set_memory(
-            self.user_id, "last_daily_scan",
+            self.user_id,
+            "last_daily_scan",
             {
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "new_items": len(items),
                 "scored": scored_count,
                 "alerts": alert_count,
@@ -616,20 +635,21 @@ class OpportunityAgentService:
 
         try:
             from langchain_core.messages import HumanMessage, SystemMessage
+
             prompt = f"""Analyze the fit between this candidate and the opportunity.
 
-CANDIDATE SKILLS: {', '.join(all_skills)}
-CAREER GOAL: {profile.career_goal or 'Not defined'}
+CANDIDATE SKILLS: {", ".join(all_skills)}
+CAREER GOAL: {profile.career_goal or "Not defined"}
 
 OPPORTUNITY: {opp.title} @ {opp.company}
-DESCRIPTION: {opp.description or 'N/A'}
-REQUIRED SKILLS: {', '.join(opp.skills_required or [])}
-INDUSTRY: {opp.industry or 'N/A'}
-LOCATION: {opp.location or 'Remote'}
-WORK TYPE: {opp.work_type or 'N/A'}
+DESCRIPTION: {opp.description or "N/A"}
+REQUIRED SKILLS: {", ".join(opp.skills_required or [])}
+INDUSTRY: {opp.industry or "N/A"}
+LOCATION: {opp.location or "Remote"}
+WORK TYPE: {opp.work_type or "N/A"}
 
 MATCH SCORE: {float(ms.overall_score)}/100
-MATCH REASONS: {'; '.join(ms.reasons or [])}
+MATCH REASONS: {"; ".join(ms.reasons or [])}
 
 Return a JSON object with:
 {{
@@ -642,17 +662,19 @@ Return a JSON object with:
 
 Be specific — reference actual skills, technologies, and job requirements.
 Return ONLY valid JSON. No markdown."""
-            response = await llm.ainvoke([
-                SystemMessage(content="You are an expert career fit analyst. Return ONLY valid JSON."),
-                HumanMessage(content=prompt),
-            ])
+            response = await llm.ainvoke(
+                [
+                    SystemMessage(content="You are an expert career fit analyst. Return ONLY valid JSON."),
+                    HumanMessage(content=prompt),
+                ]
+            )
             text = response.content.strip()
-            text = re.sub(r'^```(?:json)?\s*', '', text)
-            text = re.sub(r'\s*```$', '', text)
+            text = re.sub(r"^```(?:json)?\s*", "", text)
+            text = re.sub(r"\s*```$", "", text)
             json_start = text.find("{")
             json_end = text.rfind("}")
             if json_start != -1 and json_end != -1:
-                text = text[json_start:json_end + 1]
+                text = text[json_start : json_end + 1]
             data = json.loads(text)
 
             return {

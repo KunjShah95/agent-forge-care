@@ -83,11 +83,31 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
 // Auth
 export const auth = {
   me: () => request<{ id: string; email: string; full_name: string }>("/auth/me"),
+  login: (email: string, password: string) =>
+    request<{ access_token: string; token_type: string; user: { id: string; email: string; full_name: string } }>(
+      "/auth/login", { method: "POST", body: { email, password } }
+    ),
+  register: (email: string, password: string, full_name: string) =>
+    request<{ access_token: string; token_type: string; user: { id: string; email: string; full_name: string } }>(
+      "/auth/register", { method: "POST", body: { email, password, full_name } }
+    ),
 };
 
 // Profile
 export const profile = {
   get: () => request<Profile>("/profile"),
+  enrich: (data: { github_url?: string; portfolio_url?: string; linkedin_url?: string }) =>
+    request<{
+      github_profile: Record<string, unknown>;
+      github_analysis: Record<string, unknown>;
+      portfolio_data: Record<string, unknown>;
+      social_links: { blog_url?: string; twitter_handle?: string; linkedin_url?: string; portfolio_url?: string; email?: string; company?: string; location?: string };
+      discovered_skills: string[];
+      status: string;
+      message: string;
+    }>("/profile/enrich", { method: "POST", body: data }),
+  developerProfile: () =>
+    request<DeveloperProfile>("/profile/developer"),
   update: (data: Partial<Profile>) =>
     request<Profile>("/profile", { method: "PUT", body: data }),
   uploadAvatar: async (file: File) => {
@@ -401,6 +421,83 @@ export const monitor = {
   // updateSettings returns the full merged settings object on success
   updateSettings: (data: Partial<MonitorSettings>) =>
     request<MonitorSettings>("/monitor/settings", { method: "PATCH", body: data }),
+};
+
+export type DeveloperProfile = {
+  username: string;
+  profile_url: string;
+  avatar_url: string | null;
+  name: string | null;
+  bio: string | null;
+  location: string | null;
+  company: string | null;
+  email: string | null;
+  twitter_handle: string | null;
+  blog_url: string | null;
+  followers: number;
+  following: number;
+  public_repos: number;
+  total_stars: number;
+  languages: Record<string, number>;
+  repositories: {
+    name: string;
+    full_name: string;
+    description: string | null;
+    language: string | null;
+    stars: number;
+    forks: number;
+    topics: string[];
+    html_url: string;
+    homepage: string | null;
+    updated_at: string | null;
+  }[];
+  skills: {
+    skills: string[];
+    primary_languages: string[];
+    project_highlights: string[];
+    experience_level: string;
+    interests: string[];
+    professional_summary: string;
+  };
+  commit_history: {
+    total_commits: number;
+    total_unique_commits: number;
+    commits_by_repo: Record<string, string[]>;
+    commit_languages: Record<string, number>;
+    commit_frequency: {
+      by_day: Record<string, number>;
+      by_hour: Record<string, number>;
+      by_day_of_week: Record<string, number>;
+    };
+    average_commits_per_day: number;
+    recent_events: Record<string, unknown>[];
+  } | null;
+  contributions: {
+    total_contributions: number;
+    current_streak: number;
+    longest_streak: number;
+    top_contribution_months: { month: string; count: number }[];
+    contribution_calendar: { date: string; count: number }[];
+  } | null;
+  oss_contributions: {
+    total_prs: number;
+    total_issues: number;
+    pull_requests: Record<string, unknown>[];
+    repos_contributed_to: string[];
+    summary: string;
+  } | null;
+  commit_analysis: {
+    coding_frequency: string;
+    preferred_work_days: string[];
+    commit_quality: string;
+    project_focus: string;
+    oss_participation: string;
+    consistency_score: number;
+    experience_indicators: string[];
+    summary: string;
+  } | null;
+  data_completeness: number;
+  errors: string[];
 };
 
 export type AtsAnalysis = {

@@ -10,13 +10,15 @@ def prepare_interview_prompt(
 ) -> str:
     """Build the LLM prompt for interview preparation."""
     github_block = (
-        "GITHUB EVIDENCE (use these real projects for technical skill questions):\n"
-        f"{github_context}\n"
-    ) if github_context else ""
+        (f"GITHUB EVIDENCE (use these real projects for technical skill questions):\n{github_context}\n")
+        if github_context
+        else ""
+    )
     portfolio_block = (
-        "PORTFOLIO EVIDENCE (use these real projects for behavioral questions):\n"
-        f"{portfolio_context}\n"
-    ) if portfolio_context else ""
+        (f"PORTFOLIO EVIDENCE (use these real projects for behavioral questions):\n{portfolio_context}\n")
+        if portfolio_context
+        else ""
+    )
     skills_str = ", ".join(all_skills) if all_skills else "not specified"
     company_str = company or "not specified"
 

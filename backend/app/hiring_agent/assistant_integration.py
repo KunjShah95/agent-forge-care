@@ -1,10 +1,9 @@
 import logging
 
-from sqlalchemy import select, desc
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.hiring_agent.service import HiringAgentService
-from app.hiring_agent.schemas import ExtractedResume
 from app.models.user import MemoryEntry
 
 logger = logging.getLogger("agentforge.hiring_agent.integration")
@@ -64,9 +63,7 @@ async def enrich_with_hiring_agent(
             result["jd_match"] = jd_match
 
     if target_role and target_company:
-        cover = await service._generate_cover_letter(
-            resume, target_role, target_company, job_description or ""
-        )
+        cover = await service._generate_cover_letter(resume, target_role, target_company, job_description or "")
         if cover:
             result["cover_letter"] = cover
 

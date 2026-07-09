@@ -1,14 +1,13 @@
-import pytest
-import uuid
 from unittest.mock import AsyncMock
+
+import pytest
 
 from tests.conftest import (
     MockResult,
+    _uid,
     make_alert_config,
     make_memory_entry,
     setup_mock_execute,
-    TEST_USER_ID,
-    _uid,
 )
 
 

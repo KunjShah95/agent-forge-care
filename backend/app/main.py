@@ -4,34 +4,36 @@ import logging
 import re
 import time
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
-
+from datetime import UTC, datetime
 from pathlib import Path
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
+
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from starlette.middleware.httpsredirect import HTTPSRedirectMiddleware
+from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
+from starlette.middleware.httpsredirect import HTTPSRedirectMiddleware
 
-from app.config import settings
-from app.database import init_db, close_db, get_db
 from app.api.router import router as api_router
+from app.config import settings
+from app.database import close_db, get_db, init_db
+from app.dependencies import _get_rate_limit_config, _get_rate_limit_key, rate_limiter
+from app.memory.qdrant_client import get_qdrant_client, init_collections
 from app.middleware.auth import RequestLogMiddleware
-from app.memory.qdrant_client import init_collections, get_qdrant_client
-from app.dependencies import rate_limiter, _get_rate_limit_key, _get_rate_limit_config
-from app.tasks.memory_cleanup import cleanup_expired_memory
 from app.tasks.hackathon_scanner import run_scheduled_hackathon_scan
-
+from app.tasks.memory_cleanup import cleanup_expired_memory
 
 # ─── Log Sanitization ──────────────────────────────────────
 # Patterns that match sensitive data in log messages
 _SENSITIVE_PATTERNS = [
-    (re.compile(r'(?i)(password|secret|token|key|authorization|bearer\s+)[=:\s]*[\w\-._~+/]{8,}'), r'\1=***REDACTED***'),
-    (re.compile(r'(?i)(api[_-]?key)[=:\s]*[\w\-._~+/]{8,}'), r'\1=***REDACTED***'),
-    (re.compile(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b'), '***EMAIL***'),
+    (
+        re.compile(r"(?i)(password|secret|token|key|authorization|bearer\s+)[=:\s]*[\w\-._~+/]{8,}"),
+        r"\1=***REDACTED***",
+    ),
+    (re.compile(r"(?i)(api[_-]?key)[=:\s]*[\w\-._~+/]{8,}"), r"\1=***REDACTED***"),
+    (re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"), "***EMAIL***"),
 ]
 
 
@@ -45,12 +47,13 @@ def sanitize_log_message(msg: str) -> str:
 
 class SanitizedLogger:
     """Logger wrapper that auto-sanitizes sensitive data from all log messages."""
+
     def __init__(self, logger):
         self._logger = logger
 
     def _sanitize(self, args, kwargs):
         sanitized_args = [sanitize_log_message(str(a)) if isinstance(a, str) else a for a in args]
-        if 'exc_info' in kwargs and kwargs['exc_info']:
+        if "exc_info" in kwargs and kwargs["exc_info"]:
             # Don't sanitize exc_info — it's formatted separately and we never
             # log raw exception messages that contain user data
             pass
@@ -80,10 +83,11 @@ class SanitizedLogger:
         a, k = self._sanitize(args, kwargs)
         self._logger.critical(*a, **k)
 
+
 class JSONFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         log_entry = {
-            "ts": datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
+            "ts": datetime.fromtimestamp(record.created, tz=UTC).isoformat(),
             "level": record.levelname,
             "logger": record.name,
             "msg": record.getMessage(),
@@ -92,8 +96,13 @@ class JSONFormatter(logging.Formatter):
             log_entry["exc"] = self.formatException(record.exc_info)
         return json.dumps(log_entry)
 
+
 handler = logging.StreamHandler()
-handler.setFormatter(JSONFormatter() if not settings.debug else logging.Formatter("%(asctime)s | %(name)-12s | %(levelname)-5s | %(message)s"))
+handler.setFormatter(
+    JSONFormatter()
+    if not settings.debug
+    else logging.Formatter("%(asctime)s | %(name)-12s | %(levelname)-5s | %(message)s")
+)
 logging.basicConfig(
     level=logging.INFO if settings.debug else logging.WARNING,
     handlers=[handler],
@@ -156,6 +165,7 @@ app = FastAPI(
 
 class AppError(Exception):
     """Base application error with sanitized message."""
+
     def __init__(self, message: str, status_code: int = 500, detail: str = ""):
         self.status_code = status_code
         self.detail = detail or message
@@ -172,7 +182,7 @@ async def global_exception_handler(request: Request, exc: Exception):
             status_code=exc.status_code,
             content={"error": exc.detail, "status_code": exc.status_code},
         )
-    
+
     # Log the sanitized error
     logger.error(
         "Unhandled error: %s %s -> %s",
@@ -181,7 +191,7 @@ async def global_exception_handler(request: Request, exc: Exception):
         sanitize_log_message(str(exc)),
         exc_info=True,
     )
-    
+
     return JSONResponse(
         status_code=500,
         content={
@@ -194,9 +204,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 # Security middleware
 if not settings.debug:
-    app.add_middleware(
-        TrustedHostMiddleware, allowed_hosts=["agentforge.ai", "www.agentforge.ai"]
-    )
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=["agentforge.ai", "www.agentforge.ai"])
     app.add_middleware(HTTPSRedirectMiddleware)
 
 # CORS middleware with stricter settings
@@ -234,11 +242,12 @@ async def security_headers_middleware(request: Request, call_next):
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
-    
+
     max_req, window_sec = _get_rate_limit_config(request)
     response.headers["X-RateLimit-Limit"] = str(max_req)
     try:
         from app.dependencies import _get_rate_limit_key, rate_limiter
+
         limiter = await rate_limiter()
         key = _get_rate_limit_key(request)
         remaining = await limiter.get_remaining(key, max_req, window_sec)
@@ -246,7 +255,7 @@ async def security_headers_middleware(request: Request, call_next):
     except Exception:
         response.headers["X-RateLimit-Remaining"] = str(max_req)
     response.headers["X-RateLimit-Reset"] = str(int(time.time()) + window_sec)
-    
+
     return response
 
 
@@ -271,6 +280,7 @@ async def rate_limit_middleware(request: Request, call_next):
     except Exception as e:
         # Fall back to in-memory rate limiter when Redis is unavailable
         from app.dependencies import _in_memory_is_rate_limited
+
         logger.warning(f"Redis rate limiter unavailable ({e}) — falling back to in-memory limiter")
         key = _get_rate_limit_key(request)
         if _in_memory_is_rate_limited(key, max_requests=max_req, window_seconds=window_sec):
@@ -329,4 +339,9 @@ async def health_check():
         checks["redis"] = f"unavailable: {e}"
 
     status = "healthy" if healthy else "degraded"
-    return {"status": status, "service": settings.app_name, "checks": checks, "timestamp": datetime.now(timezone.utc).isoformat()}
+    return {
+        "status": status,
+        "service": settings.app_name,
+        "checks": checks,
+        "timestamp": datetime.now(UTC).isoformat(),
+    }

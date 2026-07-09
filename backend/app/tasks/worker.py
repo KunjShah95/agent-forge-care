@@ -2,10 +2,11 @@
 
 Run as: python -m app.tasks.worker
 """
+
 import logging
 
 from redis import Redis
-from rq import Worker, Queue, Connection
+from rq import Connection, Queue, Worker
 
 from app.config import settings
 
