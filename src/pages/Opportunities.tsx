@@ -179,7 +179,7 @@ export default function Opportunities() {
       const matchesQ = !q || (() => {
         const tokens = q.split(/\s+/).filter(Boolean);
         const raw = `${o.title} ${o.company} ${(o.skills_required || []).join(" ")}`.toLowerCase();
-        const normalized = raw.replace(/[\\\/.,-]+/g, "");
+        const normalized = raw.replace(/[/.,-]+/g, "");
         return tokens.every((t) => raw.includes(t) || normalized.includes(t));
       })();
       const matchesT = type === "All" || o.type === type;

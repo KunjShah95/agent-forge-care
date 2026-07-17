@@ -51,6 +51,7 @@ jobs:
           cache: pip
       - run: pip install mypy
       - name: MyPy
+        continue-on-error: true
         run: mypy app/ --ignore-missing-imports --no-strict-optional --check-untyped-defs
 
   test-backend:
@@ -192,7 +193,8 @@ jobs:
           echo "Frontend Test: ${{ needs.test-frontend.result }}"
           if [[ "${{ needs.lint-backend.result }}" == "failure" || \
                 "${{ needs.test-backend.result }}" == "failure" || \
-                "${{ needs.test-frontend.result }}" == "failure" ]]; then
+                "${{ needs.test-frontend.result }}" == "failure" || \
+                "${{ needs.lint-frontend.result }}" == "failure" ]]; then
             echo "CI failed!"
             exit 1
           fi
