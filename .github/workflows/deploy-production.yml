@@ -1,0 +1,213 @@
+name: Deploy Production
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "deploy production" to confirm'
+        required: true
+
+env:
+  REGISTRY: ghcr.io
+  BACKEND_IMAGE: ${{ github.repository }}-backend
+  FRONTEND_IMAGE: ${{ github.repository }}-frontend
+
+jobs:
+  # ═══════════════════════════════════════════════════════════════
+  # SAFETY CHECK
+  # ═══════════════════════════════════════════════════════════════
+
+  safety-check:
+    name: "Safety Check"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify manual confirmation
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          if [ "${{ github.event.inputs.confirm }}" != "deploy production" ]; then
+            echo "❌ Deployment not confirmed. Aborting."
+            exit 1
+          fi
+          echo "✅ Deployment confirmed."
+
+      - name: Verify tag format
+        if: github.ref_type == 'tag'
+        run: |
+          TAG="${{ github.ref_name }}"
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "❌ Invalid tag format: $TAG (expected v1.2.3)"
+            exit 1
+          fi
+          echo "✅ Valid tag: $TAG"
+
+  # ═══════════════════════════════════════════════════════════════
+  # BUILD & PUSH DOCKER IMAGES
+  # ═══════════════════════════════════════════════════════════════
+
+  build-backend:
+    name: "Build Backend"
+    runs-on: ubuntu-latest
+    needs: [safety-check]
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tags }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix=prod-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            PYTHON_VERSION=3.13
+
+  build-frontend:
+    name: "Build Frontend"
+    runs-on: ubuntu-latest
+    needs: [safety-check]
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tags }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix=prod-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.frontend
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ═══════════════════════════════════════════════════════════════
+  # DEPLOY TO PRODUCTION
+  # ═══════════════════════════════════════════════════════════════
+
+  deploy-backend:
+    name: "Deploy Backend (Production)"
+    runs-on: ubuntu-latest
+    needs: [build-backend]
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to Railway
+        uses: bervProject/railway-deploy@main
+        with:
+          railway_token: ${{ secrets.RAILWAY_TOKEN }}
+          service: agent-forge-care-backend
+          environment: production
+
+  deploy-frontend:
+    name: "Deploy Frontend (Production)"
+    runs-on: ubuntu-latest
+    needs: [build-frontend]
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to Vercel
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          working-directory: .
+          vercel-args: "--prod"
+
+  # ═══════════════════════════════════════════════════════════════
+  # POST-DEPLOY VALIDATION
+  # ═══════════════════════════════════════════════════════════════
+
+  validate-production:
+    name: "Validate Production"
+    runs-on: ubuntu-latest
+    needs: [deploy-backend, deploy-frontend]
+    steps:
+      - name: Wait for deployment
+        run: sleep 60
+
+      - name: Check backend health
+        run: |
+          for i in {1..10}; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${{ secrets.PRODUCTION_BACKEND_URL }}/health" || echo "000")
+            if [ "$STATUS" = "200" ]; then
+              echo "✅ Backend is healthy!"
+              exit 0
+            fi
+            echo "⏳ Attempt $i: Status $STATUS, retrying in 15s..."
+            sleep 15
+          done
+          echo "❌ Backend health check failed!"
+          exit 1
+
+      - name: Check frontend
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${{ secrets.PRODUCTION_FRONTEND_URL }}")
+          if [ "$STATUS" = "200" ]; then
+            echo "✅ Frontend is accessible!"
+          else
+            echo "❌ Frontend check failed with status: $STATUS"
+            exit 1
+          fi
+
+      - name: Notify deployment
+        if: success()
+        run: |
+          echo "🎉 Production deployment successful!"
+          echo "Backend: ${{ secrets.PRODUCTION_BACKEND_URL }}"
+          echo "Frontend: ${{ secrets.PRODUCTION_FRONTEND_URL }}"
