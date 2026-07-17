@@ -1,0 +1,151 @@
+# ═══════════════════════════════════════════════════════════════════════
+# docker-compose.staging.yml
+#
+# Staging environment for AgentForge Career OS.
+# Bridges "development" and "production":
+#   - DEBUG=false (same as prod) — tests production-like behavior
+#   - Frontend built from source (same as prod)
+#   - Backend with source mounts (same as dev) — hot-reload for staging fixes
+#   - Staging-specific DB/Redis/Qdrant data volumes (isolated from dev)
+#   - Stricter rate limits to simulate production traffic patterns
+#   - Data retention policies enforced (staging mimics prod cleanup cycles)
+# ═══════════════════════════════════════════════════════════════════════
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      # ── Staging mode ────────────────────────────────────
+      - APP_ENV=staging
+      - DEBUG=false          # Production-like error handling
+      - PORT=8000
+
+      # ── Database ───────────────────────────────────────
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/careeros_staging
+      - QDRANT_URL=http://qdrant:6333
+      - REDIS_URL=redis://redis:6379
+
+      # ── Auth — required for staging (same validation as prod) ──
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required for staging}
+      - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID:?FIREBASE_PROJECT_ID is required for staging}
+
+      # ── CORS — allow dev + staging frontend URLs ─────
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:5173,http://localhost:8080,http://localhost:3000}
+
+      # ── AI Model Providers (optional, same as prod) ──
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY:-}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - TOGETHER_API_KEY=${TOGETHER_API_KEY:-}
+      - FIREWORKS_API_KEY=${FIREWORKS_API_KEY:-}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+
+      # ── Search APIs ───────────────────────────────────
+      - TAVILY_API_KEY=${TAVILY_API_KEY:-}
+      - SERPAPI_KEY=${SERPAPI_KEY:-}
+      - BRAVE_API_KEY=${BRAVE_API_KEY:-}
+      - EXA_API_KEY=${EXA_API_KEY:-}
+      - MOJEEK_API_KEY=${MOJEEK_API_KEY:-}
+      - SEARXNG_BASE_URL=${SEARXNG_BASE_URL:-}
+
+      # ── Other Services ────────────────────────────────
+      - COHERE_API_KEY=${COHERE_API_KEY:-}
+      - SENDGRID_API_KEY=${SENDGRID_API_KEY:-}
+      - FROM_EMAIL=${FROM_EMAIL:-staging@agentforge.ai}
+      - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY:-}
+      - LANGCHAIN_TRACING_V2=${LANGCHAIN_TRACING_V2:-true}
+      - LANGCHAIN_PROJECT=${LANGCHAIN_PROJECT:-careeros-staging}
+
+      # ── Staging-specific overrides ────────────────────
+      - RATE_LIMIT_PER_MINUTE=200       # Higher than prod for testing
+      - AUTH_RATE_LIMIT_PER_MINUTE=10   # Higher than prod for testing
+      - DATA_RETENTION_OPPORTUNITY_DAYS=${DATA_RETENTION_OPPORTUNITY_DAYS:-30}   # Short retention for staging
+      - DATA_RETENTION_AGENT_TASK_DAYS=${DATA_RETENTION_AGENT_TASK_DAYS:-14}     # Short retention for staging
+      - DATA_RETENTION_NOTIFICATION_DAYS=${DATA_RETENTION_NOTIFICATION_DAYS:-7}  # Short retention for staging
+      - DATA_RETENTION_MEMORY_DAYS=${DATA_RETENTION_MEMORY_DAYS:-30}             # Short retention for staging
+
+    depends_on:
+      db:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      redis:
+        condition: service_started
+    volumes:
+      # Source mounts enable hot-reload during staging testing
+      - ./backend/app:/app/app
+    restart: unless-stopped
+    # Staging health check — more lenient than prod
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "80:80"
+    environment:
+      # Staging overrides for the build step
+      - VITE_API_URL=${VITE_API_URL:-http://localhost:8000/api/v1}
+      - VITE_FIREBASE_API_KEY=${VITE_FIREBASE_API_KEY:?Required for staging}
+      - VITE_FIREBASE_AUTH_DOMAIN=${VITE_FIREBASE_AUTH_DOMAIN:?Required for staging}
+      - VITE_FIREBASE_PROJECT_ID=${VITE_FIREBASE_PROJECT_ID:?Required for staging}
+      - VITE_FIREBASE_STORAGE_BUCKET=${VITE_FIREBASE_STORAGE_BUCKET:-}
+      - VITE_FIREBASE_MESSAGING_SENDER_ID=${VITE_FIREBASE_MESSAGING_SENDER_ID:-}
+      - VITE_FIREBASE_APP_ID=${VITE_FIREBASE_APP_ID:-}
+      - VITE_FIREBASE_MEASUREMENT_ID=${VITE_FIREBASE_MEASUREMENT_ID:-}
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: careeros_staging
+    ports:
+      # Staging DB exposed on a different port to avoid conflicting with dev
+      - "5433:5432"
+    volumes:
+      - pgdata_staging:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6335:6333"  # Different port from dev (6333) and prod (6334)
+    volumes:
+      - qdrant_data_staging:/qdrant/storage
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"  # Different port from dev (6379)
+    volumes:
+      - redis_data_staging:/data
+    restart: unless-stopped
+
+volumes:
+  pgdata_staging:
+  qdrant_data_staging:
+  redis_data_staging:

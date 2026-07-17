@@ -16,8 +16,9 @@ openai>=1.54.0
 redis>=5.2.0
 python-multipart>=0.0.12
 cohere>=5.0.0
-langsmith>=0.4.0
 langgraph>=1.0.0
+langgraph-checkpoint-postgres>=2.0.0
+langsmith>=0.4.0
 # Pinned versions for production stability
 langchain-openai>=1.1.0,<2.0.0
 langchain-core>=1.4.0,<2.0.0
@@ -43,8 +44,12 @@ pypdf>=5.0.0
 PyMuPDF>=1.26.0
 pymupdf4llm>=0.0.27
 rq>=1.9.0
+prometheus-client>=0.21.0
+sentry-sdk[fastapi]>=2.19.0
 pytest>=8.0.0
 pytest-asyncio>=0.24.0
+pytest-timeout>=2.3.0
+pytest-cov>=5.0.0
 reportlab>=4.2.0
 sendgrid>=6.11.0
 

@@ -16,7 +16,7 @@ services:
       - COHERE_API_KEY=${COHERE_API_KEY:-}
       - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY:-}
       - LANGCHAIN_TRACING_V2=${LANGCHAIN_TRACING_V2:-true}
-      - LANGCHAIN_PROJECT=${LANGCHAIN_PROJECT:-agentforge-career-os}
+      - LANGCHAIN_PROJECT=${LANGCHAIN_PROJECT:-careeros}
       - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID:?FIREBASE_PROJECT_ID is required}
       - DEBUG=false
       - CORS_ORIGINS=${CORS_ORIGINS:-https://your-domain.com}
@@ -44,7 +44,7 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
-      POSTGRES_DB: agentforge
+      POSTGRES_DB: careeros
     ports:
       - "5432:5432"
     volumes:

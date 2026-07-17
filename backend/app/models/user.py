@@ -103,6 +103,7 @@ class User(Base):
     memory_entries = relationship("MemoryEntry", back_populates="user", cascade="all, delete-orphan")
     planner_goals = relationship("PlannerGoal", back_populates="user", cascade="all, delete-orphan")
     match_scores = relationship("MatchScore", back_populates="user", cascade="all, delete-orphan")
+    notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")
     alert_configs = relationship("AlertConfig", back_populates="user", cascade="all, delete-orphan")
 
 
@@ -377,6 +378,28 @@ class MemoryEntry(Base):
     )
 
     user = relationship("User", back_populates="memory_entries")
+
+
+# ─── Notifications ──────────────────────────────────────────
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=gen_uuid)
+    user_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    title = Column(String(255), nullable=False)
+    body = Column(Text, nullable=True, default="")
+    type = Column(String(20), default="info", nullable=False)  # success, error, info
+    read = Column(Boolean, default=False, nullable=False, server_default="false")
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+
+    user = relationship("User", back_populates="notifications")
 
 
 # ─── Alert Configs ──────────────────────────────────────────

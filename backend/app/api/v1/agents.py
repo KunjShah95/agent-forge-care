@@ -5,10 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.guidance_agent import GuidanceAgent
-from app.agents.interview_agent import InterviewAgent
-from app.agents.networking_agent import NetworkingAgent
-from app.agents.resume_agent import ResumeAgent
+from app.agents.orchestrator.service import dispatch_agent
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import AgentTask, AgentType, TaskStatus, User
@@ -40,24 +37,15 @@ router = APIRouter()
 @router.get("/health")
 async def agent_health():
     """Check if the agent system is healthy and report available agents."""
-    from app.agents.graph import get_planner_graph
+    from app.agents.orchestrator.service import AGENT_REGISTRY
 
     try:
-        graph = get_planner_graph()
+        agents = sorted(AGENT_REGISTRY.keys())
         return {
             "status": "healthy",
-            "agent_count": 8,
-            "agents": [
-                "planner",
-                "internship",
-                "job",
-                "research",
-                "resume",
-                "interview",
-                "networking",
-                "monitor",
-            ],
-            "graph_compiled": graph is not None,
+            "agent_count": len(agents),
+            "agents": agents,
+            "registry_ready": len(agents) > 0,
         }
     except Exception as e:
         return {
@@ -73,15 +61,15 @@ async def run_planner(
     db: AsyncSession = Depends(get_db),
 ):
     """Submit a goal to the planner agent for execution."""
-    from app.agents.graph import run_planner_agent
+    from app.agents.orchestrator.service import run_planner_agent
 
     # Input validation
     if not data.goal or not isinstance(data.goal, str) or len(data.goal.strip()) < 3:
         raise HTTPException(status_code=422, detail="Goal must be a non-empty string with at least 3 characters")
 
     try:
-        task_id = await run_planner_agent(str(user.id), data.goal.strip())
-        return PlannerRunResponse(task_id=task_id)
+        task_id, trace_url = await run_planner_agent(str(user.id), data.goal.strip())
+        return PlannerRunResponse(task_id=task_id, trace_url=trace_url)
     except Exception as e:
         logger.error("Planner agent failed for user %s: %s", user.id, str(e))
         raise HTTPException(status_code=500, detail=f"Planner agent failed: {str(e)}")
@@ -211,7 +199,7 @@ async def retry_task(
 
     try:
         if task.agent_type == AgentType.planner:
-            from app.agents.graph import run_planner_agent
+            from app.agents.orchestrator.service import run_planner_agent
 
             goal = task.input.get("goal") or task.input.get("goal_text") or ""
             await run_planner_agent(str(user.id), goal)
@@ -232,14 +220,13 @@ async def retry_task(
             if app_id:
                 await run_resume_tailoring(str(user.id), app_id)
             else:
-                agent = ResumeAgent(db, str(user.id))
-                res = await agent.run(task.input)
-                task.status = TaskStatus.completed
-                task.completed_at = datetime.now(UTC)
+                res = await dispatch_agent("resume", str(user.id), task.input, db)
+                task.output = res
                 await db.commit()
+            task.status = TaskStatus.completed
+            task.completed_at = datetime.now(UTC)
+            await db.commit()
         else:
-            from app.agents.orchestrator.service import dispatch_agent
-
             agent_str = task.agent_type.value if hasattr(task.agent_type, "value") else str(task.agent_type)
             res = await dispatch_agent(agent_str, str(user.id), task.input, db)
             task.output = res
@@ -354,9 +341,9 @@ async def interview_prep(
         db.add(task)
         await db.commit()
 
-        result = await InterviewAgent(db, str(user.id)).run(params)
+        result = await dispatch_agent("interview", str(user.id), params, db)
         task.status = TaskStatus.completed
-        task.output = result.output
+        task.output = result
         await db.commit()
         await create_notification(
             db,
@@ -365,7 +352,7 @@ async def interview_prep(
             body=f"Questions prepared for {data.company} ({data.role})",
             type="success",
         )
-        return result.output
+        return result
     except Exception as e:
         logger.error("Interview prep failed for user %s: %s", user.id, str(e))
         # Clean up task if it was created
@@ -454,9 +441,9 @@ async def cover_letter(
         db.add(task)
         await db.commit()
 
-        result = await ResumeAgent(db, str(user.id)).run({"action": "cover_letter", **data.model_dump()})
+        result = await dispatch_agent("resume", str(user.id), {"action": "cover_letter", **data.model_dump()}, db)
         task.status = TaskStatus.completed
-        task.output = result.output
+        task.output = result
         await db.commit()
         await create_notification(
             db,
@@ -465,7 +452,7 @@ async def cover_letter(
             body=f"Cover letter for {data.company} ({data.role}) has been generated",
             type="success",
         )
-        return result.output
+        return result
     except Exception as e:
         logger.error("Cover letter generation failed for user %s: %s", user.id, str(e))
         # Clean up task if it was created
@@ -506,9 +493,9 @@ async def resume_tailor(
         db.add(task)
         await db.commit()
 
-        result = await ResumeAgent(db, str(user.id)).run(data.model_dump())
+        result = await dispatch_agent("resume", str(user.id), data.model_dump(), db)
         task.status = TaskStatus.completed
-        task.output = result.output
+        task.output = result
         await db.commit()
         await create_notification(
             db,
@@ -517,7 +504,7 @@ async def resume_tailor(
             body=f"Resume optimized for {data.target_company or 'target role'}",
             type="success",
         )
-        return result.output
+        return result
     except Exception as e:
         logger.error("Resume tailoring failed for user %s: %s", user.id, str(e))
         # Clean up task if it was created
@@ -563,9 +550,9 @@ async def career_guidance(
         db.add(task)
         await db.commit()
 
-        result = await GuidanceAgent(db, str(user.id)).run(data.model_dump())
+        result = await dispatch_agent("guidance", str(user.id), data.model_dump(), db)
         task.status = TaskStatus.completed
-        task.output = result.output
+        task.output = result
         await db.commit()
         await create_notification(
             db,
@@ -574,7 +561,7 @@ async def career_guidance(
             body="Your career guidance has been generated",
             type="success",
         )
-        return result.output
+        return result
     except Exception as e:
         logger.error("Career guidance failed for user %s: %s", user.id, str(e))
         # Clean up task if it was created
@@ -606,9 +593,9 @@ async def networking_outreach(
         db.add(task)
         await db.commit()
 
-        result = await NetworkingAgent(db, str(user.id)).run(data.model_dump())
+        result = await dispatch_agent("networking", str(user.id), data.model_dump(), db)
         task.status = TaskStatus.completed
-        task.output = result.output
+        task.output = result
         await db.commit()
         await create_notification(
             db,
@@ -617,7 +604,7 @@ async def networking_outreach(
             body="Networking outreach templates have been generated",
             type="success",
         )
-        return result.output
+        return result
     except Exception as e:
         logger.error("Networking outreach failed for user %s: %s", user.id, str(e))
         # Clean up task if it was created
@@ -869,8 +856,8 @@ async def interview_feedback(
         raise HTTPException(status_code=422, detail="Role must be a non-empty string with at least 2 characters")
 
     try:
-        result = await InterviewAgent(db, str(user.id)).run({"action": "review", **data.model_dump()})
-        return result.output
+        result = await dispatch_agent("interview", str(user.id), {"action": "review", **data.model_dump()}, db)
+        return result
     except Exception as e:
         logger.error("Interview feedback failed for user %s: %s", user.id, str(e))
         raise HTTPException(status_code=500, detail=f"Interview feedback failed: {str(e)}")

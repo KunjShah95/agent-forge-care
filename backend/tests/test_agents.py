@@ -13,10 +13,10 @@ from tests.conftest import (
 
 
 @pytest.mark.asyncio
-@patch("app.agents.graph.run_planner_agent", new_callable=AsyncMock)
+@patch("app.agents.orchestrator.service.run_planner_agent", new_callable=AsyncMock)
 async def test_planner_run_success(mock_run, auth_client, mock_db):
     task_id = _uid()
-    mock_run.return_value = task_id
+    mock_run.return_value = (task_id, None)
 
     response = await auth_client.post(
         "/api/v1/agents/planner/run",
@@ -262,7 +262,7 @@ async def test_resume_tailor_success(mock_run, auth_client, mock_db):
 
 
 @pytest.mark.asyncio
-@patch("app.agents.graph.run_planner_agent", new_callable=AsyncMock)
+@patch("app.agents.orchestrator.service.run_planner_agent", new_callable=AsyncMock)
 async def test_retry_task_planner_success(mock_run, auth_client, mock_db):
     task = make_agent_task(
         agent_type=AgentType.planner, status=TaskStatus.failed, input={"goal": "Find ML internships"}

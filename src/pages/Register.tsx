@@ -93,7 +93,7 @@ export default function Register() {
           <div className="h-9 w-9 rounded-xl bg-gradient-1 flex items-center justify-center shadow-glow transition-transform duration-300 group-hover:scale-110">
             <Sparkles className="h-5 w-5 text-primary-foreground" />
           </div>
-          <span className="font-display font-bold text-lg tracking-tight">AgentForge Career OS</span>
+          <span className="font-display font-bold text-lg tracking-tight">CareerOS</span>
         </Link>
 
         <div className="bento-card rounded-2xl p-8 shadow-elevated">

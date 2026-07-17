@@ -1,11 +1,37 @@
 import asyncio
 import json
 import logging
+import os
 import re
 import time
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
+
+from app.config import settings
+
+# ── Sentry Error Tracking (must be initialised after config but before app creation) ──
+_sentry_enabled = False
+if settings.sentry_dsn:
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.fastapi import FastApiIntegration
+        from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+
+        sentry_sdk.init(
+            dsn=settings.sentry_dsn,
+            environment=settings.sentry_environment,
+            traces_sample_rate=settings.sentry_traces_sample_rate,
+            integrations=[
+                FastApiIntegration(transaction_style="endpoint"),
+                SqlalchemyIntegration(),
+            ],
+            send_default_pii=False,
+            before_send=lambda event, hint: event,
+        )
+        _sentry_enabled = True
+    except ImportError:
+        pass
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,14 +43,15 @@ from sqlalchemy import text
 from starlette.middleware.httpsredirect import HTTPSRedirectMiddleware
 
 from app.api.router import router as api_router
-from app.config import settings
 from app.database import close_db, get_db, init_db
 from app.dependencies import _get_rate_limit_config, _get_rate_limit_key, rate_limiter
 from app.memory.qdrant_client import get_qdrant_client, init_collections
 from app.middleware.audit import AuditLogMiddleware
 from app.middleware.auth import RequestLogMiddleware
+from app.middleware.request_id import RequestIDMiddleware
+from app.middleware.response_time import ResponseTimeMiddleware
 from app.tasks.hackathon_scanner import run_scheduled_hackathon_scan
-from app.tasks.memory_cleanup import cleanup_expired_memory
+from app.tasks.memory_cleanup import run_full_data_retention
 
 # ─── Log Sanitization ──────────────────────────────────────
 # Patterns that match sensitive data in log messages
@@ -108,21 +135,35 @@ logging.basicConfig(
     level=logging.INFO if settings.debug else logging.WARNING,
     handlers=[handler],
 )
-_raw_logger = logging.getLogger("agentforge")
+_raw_logger = logging.getLogger("careeros")
 # Wrap with sanitization to automatically redact sensitive data from logs
 logger = SanitizedLogger(_raw_logger)
+
+# ── LangSmith Tracing ──────────────────────────────────────
+# LangGraph automatically uses LangSmith for tracing when these
+# environment variables are set before any LangChain code runs.
+if settings.langchain_api_key:
+    os.environ["LANGCHAIN_API_KEY"] = settings.langchain_api_key
+    os.environ["LANGCHAIN_TRACING_V2"] = "true"
+    os.environ["LANGCHAIN_PROJECT"] = settings.langchain_project
+    logger.info("LangSmith tracing enabled — project: %s", settings.langchain_project)
+else:
+    logger.info("LangSmith tracing disabled — set LANGCHAIN_API_KEY to enable")
+    os.environ.pop("LANGCHAIN_TRACING_V2", None)
 
 
 _cleanup_task = None
 
 
 async def _run_memory_cleanup_loop():
-    """Run cleanup_expired_memory every hour."""
+    """Run data retention cleanup every hour."""
     while True:
         try:
-            await cleanup_expired_memory()
+            counts = await run_full_data_retention()
+            if sum(counts.values()):
+                logger.info("Data retention cycle complete: %s", counts)
         except Exception:
-            logger.exception("Memory cleanup cycle failed")
+            logger.exception("Data retention cycle failed")
         await asyncio.sleep(3600)
 
 
@@ -139,7 +180,7 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("Qdrant init skipped: %s", e)
     _cleanup_task = asyncio.create_task(_run_memory_cleanup_loop())
-    logger.info("Memory cleanup background task started")
+    logger.info("Data retention background task started (hourly cleanup)")
     _hackathon_scanner_task = asyncio.create_task(run_scheduled_hackathon_scan())
     logger.info("Hackathon scanner background task started")
     yield
@@ -147,13 +188,19 @@ async def lifespan(app: FastAPI):
         _cleanup_task.cancel()
     if _hackathon_scanner_task:
         _hackathon_scanner_task.cancel()
+    try:
+        from app.checkpointer import close_checkpointer
+
+        await close_checkpointer()
+    except Exception:
+        logger.debug("Checkpointer cleanup skipped")
     await close_db()
     logger.info("Shutdown complete")
 
 
 app = FastAPI(
     title=settings.app_name,
-    description="AI-powered personal career operating system",
+    description="CareerOS — Your AI-powered career operating system",
     version="1.0.0",
     lifespan=lifespan,
     docs_url="/docs",
@@ -193,6 +240,14 @@ async def global_exception_handler(request: Request, exc: Exception):
         exc_info=True,
     )
 
+    # Send to Sentry if enabled
+    if _sentry_enabled:
+        try:
+            import sentry_sdk
+            sentry_sdk.capture_exception(exc)
+        except Exception:
+            pass
+
     return JSONResponse(
         status_code=500,
         content={
@@ -229,6 +284,12 @@ app.add_middleware(
 
 # GZip compression
 app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+# Request ID middleware (generates correlation IDs for distributed tracing)
+app.add_middleware(RequestIDMiddleware)
+
+# Response time logging middleware
+app.add_middleware(ResponseTimeMiddleware)
 
 # Request logging middleware
 app.add_middleware(RequestLogMiddleware)
@@ -315,12 +376,23 @@ async def health_check():
     checks = {}
     healthy = True
 
-    # Database check
+    # Database check + pool stats
     try:
+        from app.database import engine
+
         async for session in get_db():
             await session.execute(text("SELECT 1"))
             break
-        checks["database"] = "ok"
+        pool = engine.pool
+        checks["database"] = {
+            "status": "ok",
+            "pool": {
+                "size": pool.size(),
+                "checked_in": pool.checkedin(),
+                "checked_out": pool.checkedout(),
+                "overflow": pool.overflow(),
+            },
+        }
     except Exception as e:
         checks["database"] = f"error: {e}"
         healthy = False

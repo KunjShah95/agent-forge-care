@@ -1,6 +1,6 @@
-# AgentForge — Career OS
+# CareerOS — Your AI Career Operating System
 
-AgentForge is an AI-powered career operating system that automates job search, interview preparation, resume optimization, and networking. It orchestrates **8 specialized agents** coordinated by a central planner to provide personalized career coaching at scale.
+CareerOS is an AI-powered career operating system that automates job search, interview preparation, resume optimization, and networking. It orchestrates **8 specialized agents** coordinated by a central planner to provide personalized career coaching at scale.
 
 ## Quick Start
 
@@ -11,9 +11,9 @@ npm run dev               # → http://localhost:8080
 
 # Backend
 cd backend
-python -m venv .venv && .venv\Scripts\activate && pip install -r requirements.txt
+pip install -r requirements.txt
 alembic upgrade head
-uvicorn app.main:app --reload --app-dir backend  # → http://localhost:8000
+uvicorn app.main:app --reload  # → http://localhost:8000
 ```
 
 Or use Docker: `docker compose up` (Postgres, Redis, Qdrant, backend).
@@ -34,7 +34,7 @@ Or use Docker: `docker compose up` (Postgres, Redis, Qdrant, backend).
 | **Search** | Tavily, Google CSE, Brave, SerpAPI, Exa, SearXNG (adapter chain) |
 | **Auth** | Firebase (email/password + Google SSO) with JWT |
 | **Container** | Docker Compose (4 services) |
-| **Deployment** | Vercel (frontend), Render / Railway (backend) |
+| **Deployment** | Vercel (frontend), Render (backend) |
 
 ## Architecture
 
@@ -61,41 +61,26 @@ A **memory layer** (Qdrant + PostgreSQL) stores user preferences, application hi
 ## Project Structure
 
 ```
-agent-forge-care/
 ├── src/                 # React frontend (Vite)
-│   ├── pages/           # 16 routed pages (Dashboard, Onboarding, ResumeStudio, etc.)
+│   ├── pages/           # 14+ routed pages
 │   ├── components/      # shadcn/ui + custom components
 │   └── lib/             # API client, auth, utilities
 ├── backend/
 │   ├── app/
 │   │   ├── main.py      # FastAPI entry point
-│   │   ├── api/v1/      # 35 REST routes (14 modules)
+│   │   ├── api/v1/      # REST routes (15+ modules)
 │   │   ├── agents/      # LangGraph agent implementations
 │   │   ├── models/      # SQLAlchemy ORM models
-│   │   ├── schemas/     # Pydantic request/response schemas
-│   │   ├── services/    # Business logic (auth, memory, matching, etc.)
+│   │   ├── services/    # Business logic
 │   │   ├── memory/      # Qdrant vector store client
 │   │   ├── search/      # Multi-provider search adapters
-│   │   ├── tasks/       # Background workers (RQ)
-│   │   └── middleware/  # Auth middleware
-│   ├── tests/           # 119 test functions (22 files, all passing)
-│   └── alembic/         # 5 database migrations
+│   │   └── tasks/       # Background workers
+│   ├── tests/           # 300+ test functions
+│   └── alembic/         # Database migrations
 ├── docker-compose.yml   # Local dev services
 ├── Dockerfile.frontend  # Frontend container
 └── backend/Dockerfile   # Backend container
 ```
-
-## Scripts
-
-| Command | Purpose |
-|---------|---------|
-| `npm run dev` | Frontend dev server (port 8080) |
-| `npm run build` | Production build → `dist/` |
-| `npm run test` | Vitest (frontend) |
-| `npm run lint` | ESLint |
-| `cd backend && pytest -q` | Backend tests (167 passing) |
-| `cd backend && alembic upgrade head` | Run migrations |
-| `python -m backend.app.worker` | Start background worker |
 
 ## Key Features
 
@@ -107,37 +92,11 @@ agent-forge-care/
 - **Career Analytics** — conversion tracking, skill demand insights
 - **Persistent Memory** — learns from every interaction across sessions
 
-## Environment
-
-Key variables (see `.env.example`):
-
-- `DATABASE_URL` — PostgreSQL connection string
-- `REDIS_URL` — Redis connection string
-- `QDRANT_URL` / `QDRANT_API_KEY` — Vector DB
-- `OPENAI_API_KEY` — Primary LLM provider
-- `FIREBASE_CREDENTIALS_JSON` — Auth credentials
-- `TAVILY_API_KEY` — Primary search provider
-
 ## Deployment
 
-- **Frontend:** `vercel.json` → Vercel (SPA rewrite)
-- **Backend:** `render.yaml` / `railway.json` → Render / Railway
+- **Frontend:** Deploy `dist/` to **Vercel** (SPA rewrite via `vercel.json`)
+- **Backend:** Deploy to **Render** using `render.yaml` (Python)
 - **Container:** `docker compose -f docker-compose.prod.yml up`
-
-## Testing
-
-```bash
-cd backend && pytest -q        # 167 backend tests
-npm run test                   # Frontend tests
-```
-
-## Docs
-
-- `docs/product-vision.md` — Full concept walkthrough
-- `docs/status.md` — Current state and known gaps
-- `docs/architecture.svg` — System architecture diagram
-- `frontend.md` — Frontend development guide
-- `backend.md` — Backend development guide
 
 ## License
 

@@ -131,12 +131,15 @@ describe("Login", () => {
     expect(googleBtn?.disabled).toBe(true);
   });
 
-  it("disables submit button when Firebase is not configured", () => {
+  it("shows firebase config error when Firebase is not configured", () => {
     firebaseMock.isFirebaseConfigured = false;
+    firebaseMock.firebaseConfigError = "Missing Firebase vars: apiKey";
 
     renderLogin();
+    expect(screen.getByText(/Missing Firebase vars/)).toBeDefined();
+    // Submit button remains enabled — it uses the backend API directly
     const submitBtn = screen.getByText("Sign in").closest("button");
-    expect(submitBtn?.disabled).toBe(true);
+    expect(submitBtn?.disabled).toBe(false);
   });
 
   it("hides config error when firebase is configured", () => {

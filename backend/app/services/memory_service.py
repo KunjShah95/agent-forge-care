@@ -29,7 +29,7 @@ class MemoryService:
             logger.error("Failed to get memory context for user %s: %s", user_id, str(e))
             raise
 
-    async def set_memory(self, user_id: str, key: str, value: Any, weight: float = 1.0):
+    async def set_memory(self, user_id: str, key: str, value: Any, weight: float = 1.0, ttl_days: int | None = None):
         """Set or update a memory entry."""
         try:
             if not key or not isinstance(key, str) or len(key.strip()) < 1:
@@ -45,12 +45,15 @@ class MemoryService:
             if entry:
                 entry.value = value
                 entry.weight = weight
+                if ttl_days is not None:
+                    entry.ttl_days = ttl_days
             else:
                 entry = MemoryEntry(
                     user_id=user_id,
                     key=key,
                     value=value,
                     weight=weight,
+                    ttl_days=ttl_days if ttl_days is not None else None,
                 )
                 self.db.add(entry)
             await self.db.flush()

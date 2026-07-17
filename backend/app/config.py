@@ -40,7 +40,7 @@ _KNOWN_INSECURE_SECRETS = {
 
 class Settings(BaseSettings):
     # App
-    app_name: str = "AgentForge Career OS"
+    app_name: str = "CareerOS"
     debug: bool = False
     port: int = 8000
     cors_origins: str = "http://localhost:5173,http://localhost:8080"
@@ -88,12 +88,14 @@ class Settings(BaseSettings):
     # ── Embeddings / Rerank ────────────────────────────────────
     cohere_api_key: str = ""
 
-    # ── Observability ──────────────────────────────────────────
+    # ── Observability (LangSmith) ─────────────────────────────
     langchain_api_key: str = ""
+    langchain_project: str = "careeros"
+    langchain_tracing_v2: bool = True
 
     # ── Email ──────────────────────────────────────────────────
     sendgrid_api_key: str = ""
-    from_email: str = "noreply@agentforge.ai"
+    from_email: str = "careers@careeros.app"
 
     # ── Search APIs ────────────────────────────────────────────
     google_cse_id: str = ""
@@ -108,12 +110,24 @@ class Settings(BaseSettings):
     match_profile_weight: float = 0.7
     match_external_weight: float = 0.3
 
+    # ── Data Retention (days before auto-cleanup) ──────────────
+    data_retention_opportunity_days: int = 90
+    data_retention_application_days: int = 365
+    data_retention_agent_task_days: int = 30
+    data_retention_notification_days: int = 30
+    data_retention_memory_days: int = 90
+
     # ── Security ───────────────────────────────────────────────
     github_token: str = ""
     secret_key: str = ""
     rate_limit_per_minute: int = 100
     # Stricter rate limit for auth endpoints (login/register) to prevent brute force
     auth_rate_limit_per_minute: int = 5
+
+    # ── Sentry (Error Tracking) ───────────────────────────────
+    sentry_dsn: str = ""
+    sentry_traces_sample_rate: float = 0.1  # 10% of transactions
+    sentry_environment: str = "production"
 
     model_config = {
         "env_file": str(_ENV_FILE),

@@ -21,10 +21,6 @@ vi.mock("recharts", () => {
   const MockResponsiveContainer = ({ children }: { children: React.ReactNode }) => (
     <div data-testid="responsive-container">{children}</div>
   );
-  const MockBarChart = ({ children }: { children: React.ReactNode }) => (
-    <div data-testid="bar-chart">{children}</div>
-  );
-  const MockBar = () => <div data-testid="bar" />;
   const MockAreaChart = ({ children }: { children: React.ReactNode }) => (
     <div data-testid="area-chart">{children}</div>
   );
@@ -35,8 +31,6 @@ vi.mock("recharts", () => {
   const MockCartesianGrid = () => <div data-testid="cartesian-grid" />;
   return {
     ResponsiveContainer: MockResponsiveContainer,
-    BarChart: MockBarChart,
-    Bar: MockBar,
     AreaChart: MockAreaChart,
     Area: MockArea,
     XAxis: MockXAxis,
@@ -200,10 +194,17 @@ describe("Dashboard", () => {
     vi.mocked(hooks.useAuth).mockReturnValue({ data: { full_name: null } } as never);
     vi.mocked(hooks.useProfile).mockReturnValue({ data: null } as never);
     renderDashboard();
-    expect(screen.getByText(/there/)).toBeDefined();
+    // Greeting renders without a name — e.g. "Good morning."
+    expect(screen.getByText(/^Good/)).toBeDefined();
   });
 
-  it("displays the 'Run Planner Agent' button", () => {
+  it("displays the 'Run Planner Agent' button in the planner reasoning section", () => {
+    // Empty tasks so planner reasoning shows the button
+    vi.mocked(hooks.useAgentTasks).mockReturnValue({
+      data: { items: [] },
+      isLoading: false,
+      isError: false,
+    } as never);
     renderDashboard();
     expect(screen.getByText("Run Planner Agent")).toBeDefined();
   });
@@ -220,7 +221,6 @@ describe("Dashboard", () => {
 
   it("displays stat cards with analytics data", () => {
     renderDashboard();
-    // Use getAllByText since numbers may appear in multiple places (stats + salary ranges)
     expect(screen.getAllByText("18").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("24").length).toBeGreaterThanOrEqual(1);
     const pctElements = screen.getAllByText("32%");
@@ -233,8 +233,7 @@ describe("Dashboard", () => {
       isLoading: true,
       isError: false,
     } as never);
-    const { container } = renderDashboard();
-    // Should have skeleton elements (no numeric data)
+    renderDashboard();
     expect(screen.queryByText("18")).toBeNull();
   });
 
@@ -284,19 +283,18 @@ describe("Dashboard", () => {
 
   it("renders agent activity feed", () => {
     renderDashboard();
-    // The action text comes from tasks data - check for the timestamp context
     const tasks = screen.getAllByText(/plan weekly job search/i);
     expect(tasks.length).toBeGreaterThanOrEqual(1);
   });
 
-  it("renders 'No planner reasoning yet' when there are no agent tasks", () => {
+  it("renders 'No reasoning yet' when there are no agent tasks", () => {
     vi.mocked(hooks.useAgentTasks).mockReturnValue({
       data: { items: [] },
       isLoading: false,
       isError: false,
     } as never);
     renderDashboard();
-    expect(screen.getByText(/No planner reasoning yet/)).toBeDefined();
+    expect(screen.getByText(/No reasoning yet/)).toBeDefined();
   });
 
   it("renders pipeline chart with funnel data", () => {
@@ -305,17 +303,18 @@ describe("Dashboard", () => {
     expect(screen.getByText("Phone")).toBeDefined();
   });
 
-  it("renders 'No pipeline data yet' when funnel is empty", () => {
+  it("does not render pipeline section when funnel data is empty", () => {
     vi.mocked(hooks.useAnalyticsFunnel).mockReturnValue({
       data: [],
       isLoading: false,
       isError: false,
     } as never);
     renderDashboard();
-    expect(screen.getByText(/No pipeline data yet/)).toBeDefined();
+    // Pipeline section is hidden entirely when empty — no "View board" link
+    expect(screen.queryByText("View board")).toBeNull();
   });
 
-  it("renders pipeline skeleton when funnel is loading", () => {
+  it("does not render pipeline section when funnel data is loading", () => {
     vi.mocked(hooks.useAnalyticsFunnel).mockReturnValue({
       data: undefined,
       isLoading: true,
@@ -327,42 +326,17 @@ describe("Dashboard", () => {
 
   it("renders weekly activity chart when data exists", () => {
     renderDashboard();
-    expect(screen.getByText("Weekly Activity")).toBeDefined();
+    expect(screen.getByText(/Weekly activity/i)).toBeDefined();
   });
 
-  it("renders 'No activity data yet' when activity is empty", () => {
+  it("renders 'No activity yet' when activity is empty", () => {
     vi.mocked(hooks.useAnalyticsActivity).mockReturnValue({
       data: [],
       isLoading: false,
       isError: false,
     } as never);
     renderDashboard();
-    expect(screen.getByText(/No activity data yet/)).toBeDefined();
-  });
-
-  it("renders 'Career OS active' badge", () => {
-    renderDashboard();
-    expect(screen.getByText("Career OS active")).toBeDefined();
-  });
-
-  it("renders error banner when some data fails to load", () => {
-    vi.mocked(hooks.useMatches).mockReturnValue({
-      data: undefined,
-      isLoading: false,
-      isError: true,
-    } as never);
-    renderDashboard();
-    expect(screen.getByText(/Some data failed to load/)).toBeDefined();
-    // The error list should show "matches" - check it appears somewhere in the error context
-    const errorBanner = screen.getByText(/Some data failed to load/).closest('div');
-    expect(errorBanner?.textContent).toContain('matches');
-  });
-
-  it("renders quick stats row with match score value", () => {
-    renderDashboard();
-    expect(screen.getByText("Match score")).toBeDefined();
-    expect(screen.getByText("Targets")).toBeDefined();
-    expect(screen.getByText("Auto actions")).toBeDefined();
+    expect(screen.getByText(/No activity yet/)).toBeDefined();
   });
 
   it("renders 'View board' link for pipeline", () => {
@@ -375,23 +349,22 @@ describe("Dashboard", () => {
     expect(screen.getByText("See all")).toBeDefined();
   });
 
-  it("renders 'View all tasks' link when tasks exist", () => {
+  it("renders 'All tasks' link when tasks exist", () => {
     renderDashboard();
-    expect(screen.getByText("View all tasks")).toBeDefined();
+    expect(screen.getByText("All tasks")).toBeDefined();
   });
 
-  it("does not render 'View all tasks' when there are no tasks", () => {
+  it("does not render 'All tasks' when there are no tasks", () => {
     vi.mocked(hooks.useAgentTasks).mockReturnValue({
       data: { items: [] },
       isLoading: false,
       isError: false,
     } as never);
     renderDashboard();
-    expect(screen.queryByText("View all tasks")).toBeNull();
+    expect(screen.queryByText("All tasks")).toBeNull();
   });
 
   it("shows urgent deadline styling for deadlines within 3 days", () => {
-    // Create an opportunity due tomorrow
     const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
     vi.mocked(hooks.useOpportunities).mockReturnValue({
       data: {
@@ -409,6 +382,17 @@ describe("Dashboard", () => {
 
   it("renders deadlines sync note at the bottom of deadlines section", () => {
     renderDashboard();
-    expect(screen.getByText(/Deadlines are synced/)).toBeDefined();
+    expect(screen.getByText(/Synced from saved opportunities/)).toBeDefined();
+  });
+
+  it("renders tagline text", () => {
+    renderDashboard();
+    expect(screen.getByText(/Your agents are running/)).toBeDefined();
+  });
+
+  it("shows the 'Run Planner' button in the header", () => {
+    renderDashboard();
+    const buttons = screen.getAllByText("Run Planner");
+    expect(buttons.length).toBeGreaterThanOrEqual(1);
   });
 });

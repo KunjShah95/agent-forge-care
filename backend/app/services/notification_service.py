@@ -4,6 +4,7 @@ from typing import Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.services.memory_service import MemoryService
 
 logger = logging.getLogger("agentforge.notifications")
@@ -20,7 +21,10 @@ async def create_notification(
     to_email: str | None = None,
 ) -> None:
     """Create an in-app notification for a user via the memory system.
-    Optionally delivers via email when to_email is provided."""
+    Optionally delivers via email when to_email is provided.
+
+    Notifications automatically expire after DATA_RETENTION_NOTIFICATION_DAYS.
+    """
     memory = MemoryService(db)
     await memory.set_memory(
         user_id,
@@ -32,8 +36,9 @@ async def create_notification(
             "read": False,
         },
         weight=1.0,
+        ttl_days=settings.data_retention_notification_days,
     )
-    logger.debug("Notification created for user %s: %s", user_id, title)
+    logger.debug("Notification created for user %s: %s (TTL: %d days)", user_id, title, settings.data_retention_notification_days)
 
     if to_email:
         from app.services.email_service import send_email

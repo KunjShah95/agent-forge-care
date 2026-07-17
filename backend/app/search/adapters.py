@@ -130,6 +130,123 @@ async def _safe_post(
     return await client.post(url, data=data, headers=headers, follow_redirects=follow_redirects, timeout=timeout)
 
 
+# ─── Circuit Breaker ───────────────────────────────────────
+# Protects downstream sources from being overwhelmed and avoids waiting
+# on known-unhealthy APIs. Each source gets its own breaker; after
+# FAILURE_THRESHOLD consecutive failures the circuit opens and the source
+# is skipped for COOLDOWN_SECONDS, then a single probe request is allowed.
+#
+# States: CLOSED (normal) → OPEN (tripped) → HALF_OPEN (probing) → CLOSED
+
+
+class CircuitState:
+    CLOSED = "closed"
+    OPEN = "open"
+    HALF_OPEN = "half_open"
+
+
+class CircuitBreaker:
+    """Per-source circuit breaker for fast failover on unhealthy endpoints."""
+
+    def __init__(
+        self,
+        name: str,
+        failure_threshold: int = 3,
+        cooldown_seconds: int = 60,
+    ):
+        self.name = name
+        self.failure_threshold = failure_threshold
+        self.cooldown_seconds = cooldown_seconds
+        self.failure_count = 0
+        self.last_failure_time = 0.0
+        self.state = CircuitState.CLOSED
+
+    @property
+    def is_available(self) -> bool:
+        """Check if the source can be called (CLOSED or HALF_OPEN after cooldown)."""
+        if self.state == CircuitState.CLOSED:
+            return True
+        if self.state == CircuitState.OPEN:
+            if time.time() - self.last_failure_time >= self.cooldown_seconds:
+                logger.info("Circuit breaker HALF_OPEN for '%s' — allowing probe request", self.name)
+                self.state = CircuitState.HALF_OPEN
+                return True
+            return False
+        # HALF_OPEN — allow exactly one request through
+        return True
+
+    def record_success(self):
+        """Reset after a successful call."""
+        if self.state == CircuitState.HALF_OPEN:
+            logger.info("Circuit breaker CLOSED for '%s' (half-open probe succeeded)", self.name)
+        self.failure_count = 0
+        self.state = CircuitState.CLOSED
+
+    def record_failure(self):
+        """Increment failure count; trip to OPEN if threshold reached."""
+        self.failure_count += 1
+        self.last_failure_time = time.time()
+        if self.failure_count >= self.failure_threshold:
+            self.state = CircuitState.OPEN
+            logger.warning(
+                "Circuit breaker OPEN for '%s' after %d failures (cooldown: %ds)",
+                self.name,
+                self.failure_count,
+                self.cooldown_seconds,
+            )
+        elif self.state == CircuitState.HALF_OPEN:
+            self.state = CircuitState.OPEN  # Probe failed → back to OPEN
+            logger.warning(
+                "Circuit breaker OPEN for '%s' (half-open probe failed, cooldown: %ds)",
+                self.name,
+                self.cooldown_seconds,
+            )
+
+    def to_dict(self) -> dict:
+        """Serialise state for the /status endpoint."""
+        remaining = 0.0
+        if self.state == CircuitState.OPEN:
+            remaining = max(0.0, self.cooldown_seconds - (time.time() - self.last_failure_time))
+        return {
+            "state": self.state,
+            "failure_count": self.failure_count,
+            "failure_threshold": self.failure_threshold,
+            "cooldown_remaining_sec": round(remaining, 1),
+            "available": self.is_available,
+        }
+
+
+class CircuitBreakerRegistry:
+    """Global registry of circuit breakers, keyed by source name."""
+
+    _breakers: dict[str, CircuitBreaker] = {}
+
+    @classmethod
+    def get(cls, name: str) -> CircuitBreaker:
+        if name not in cls._breakers:
+            cls._breakers[name] = CircuitBreaker(name)
+        return cls._breakers[name]
+
+    @classmethod
+    def get_all_states(cls) -> dict[str, dict]:
+        return {name: cb.to_dict() for name, cb in cls._breakers.items()}
+
+    @classmethod
+    def reset(cls, name: str) -> None:
+        """Manually reset a specific breaker (useful for admin/debug)."""
+        if name in cls._breakers:
+            cb = cls._breakers[name]
+            cb.failure_count = 0
+            cb.state = CircuitState.CLOSED
+            logger.info("Circuit breaker manually reset for '%s'", name)
+
+    @classmethod
+    def reset_all(cls) -> None:
+        """Reset all breakers (e.g. after connectivity restored)."""
+        for name in cls._breakers:
+            cls.reset(name)
+
+
 # ─── In-Memory Search Cache ─────────────────────────────────
 CACHE_TTL = 300  # 5 minutes
 _search_cache: dict[str, tuple[float, list[dict]]] = {}
@@ -185,6 +302,35 @@ class SearchAdapter:
     Tries real APIs first, then falls back to direct web scraping.
     """
 
+    async def _call_source(self, source_name: str, coro_factory, log_label: str = "") -> list:
+        """
+        Call a search source with circuit-breaker protection.
+
+        Args:
+            source_name: Circuit breaker key (e.g. "serpapi", "tavily")
+            coro_factory: Zero-arg callable that returns an awaitable
+            log_label: Human-readable label for log messages
+
+        Returns:
+            Source result (list) if call was made and succeeded, [] otherwise.
+            An empty list means either the circuit was open or the call failed.
+        """
+        breaker = CircuitBreakerRegistry.get(source_name)
+        if not breaker.is_available:
+            logger.debug("Circuit breaker OPEN for '%s' — skipping", source_name)
+            return []
+        try:
+            result = await coro_factory()
+            breaker.record_success()
+            label = log_label or source_name
+            logger.info("%s returned %d results", label, len(result) if isinstance(result, list) else 0)
+            return result if isinstance(result, list) else []
+        except Exception as e:
+            breaker.record_failure()
+            label = log_label or source_name
+            logger.warning("%s failed: %s", label, e)
+            return []
+
     async def search(
         self,
         query: str,
@@ -230,16 +376,12 @@ class SearchAdapter:
 
         # ── Source 1: SerpAPI Google Jobs (returns REAL structured job listings with company, location, salary) ──
         if settings.serpapi_key:
-            try:
-                serp_results = await self._search_serpapi(query, location, limit)
-                # Ensure every result has a company name
-                for r in serp_results:
-                    if not r.get("company"):
-                        r["company"] = self._extract_company(r.get("title", ""), r.get("description", ""))
-                results.extend(serp_results)
-                logger.info("SerpAPI returned %d results", len(serp_results))
-            except Exception as e:
-                logger.warning("SerpAPI search failed: %s", e)
+            serp_results = await self._call_source("serpapi", lambda: self._search_serpapi(query, location, limit))
+            # Ensure every result has a company name
+            for r in serp_results:
+                if not r.get("company"):
+                    r["company"] = self._extract_company(r.get("title", ""), r.get("description", ""))
+            results.extend(serp_results)
 
         # ── For job/internship searches: SerpAPI is the primary source. ──
         # Skip generic web search sources (Tavily, Exa, Brave, Google CSE, Mojeek, scrapes)
@@ -254,126 +396,97 @@ class SearchAdapter:
         else:
             # ── Source 2: Tavily (AI-native, best for agents) ──
             if settings.tavily_api_key:
-                try:
-                    tavily_results = await self._search_tavily(query, limit)
-                    # Enrich Tavily results (no native company/type/skills fields)
-                    for r in tavily_results:
-                        if not r.get("company"):
-                            r["company"] = self._extract_company(r.get("title", ""), r.get("snippet", ""))
-                        if not r.get("type"):
-                            r["type"] = self._extract_job_type(
-                                r.get("title", ""), r.get("description", "") or r.get("snippet", "")
-                            )
-                        if not r.get("skills"):
-                            r["skills"] = self._extract_skills(
-                                r.get("description", "") or r.get("snippet", "") or r.get("title", "")
-                            )
-                    results.extend(tavily_results)
-                    logger.info("Tavily returned %d results", len(tavily_results))
-                except Exception as e:
-                    logger.warning("Tavily search failed: %s", e)
+                tavily_results = await self._call_source("tavily", lambda: self._search_tavily(query, limit))
+                # Enrich Tavily results (no native company/type/skills fields)
+                for r in tavily_results:
+                    if not r.get("company"):
+                        r["company"] = self._extract_company(r.get("title", ""), r.get("snippet", ""))
+                    if not r.get("type"):
+                        r["type"] = self._extract_job_type(
+                            r.get("title", ""), r.get("description", "") or r.get("snippet", "")
+                        )
+                    if not r.get("skills"):
+                        r["skills"] = self._extract_skills(
+                            r.get("description", "") or r.get("snippet", "") or r.get("title", "")
+                        )
+                results.extend(tavily_results)
 
             # ── Source 3: Google Custom Search ──
             if settings.google_api_key and settings.google_cse_id:
-                try:
-                    google_results = await self._search_google(query, location, limit)
-                    results.extend(google_results)
-                    logger.info("Google returned %d results", len(google_results))
-                except Exception as e:
-                    logger.warning("Google search failed: %s", e)
+                google_results = await self._call_source("google_cse", lambda: self._search_google(query, location, limit))
+                results.extend(google_results)
 
             # ── Source 4: Brave Search (free tier: 2,000 queries/month) ──
             if settings.brave_api_key:
-                try:
-                    brave_results = await self._search_brave(query, limit)
-                    results.extend(brave_results)
-                    logger.info("Brave returned %d results", len(brave_results))
-                except Exception as e:
-                    logger.warning("Brave search failed: %s", e)
+                brave_results = await self._call_source("brave", lambda: self._search_brave(query, limit))
+                results.extend(brave_results)
 
             # ── Source 5: Exa (AI-native search) ──
             if settings.exa_api_key:
-                try:
-                    exa_results = await self._search_exa(query, limit)
-                    # Enrich Exa results (no native company/type/skills fields)
-                    for r in exa_results:
-                        if not r.get("company"):
-                            r["company"] = self._extract_company(r.get("title", ""), r.get("snippet", ""))
-                        if not r.get("type"):
-                            r["type"] = self._extract_job_type(
-                                r.get("title", ""), r.get("description", "") or r.get("snippet", "")
-                            )
-                        if not r.get("skills"):
-                            r["skills"] = self._extract_skills(
-                                r.get("description", "") or r.get("snippet", "") or r.get("title", "")
-                            )
-                    results.extend(exa_results)
-                    logger.info("Exa returned %d results", len(exa_results))
-                except Exception as e:
-                    logger.warning("Exa search failed: %s", e)
+                exa_results = await self._call_source("exa", lambda: self._search_exa(query, limit))
+                # Enrich Exa results (no native company/type/skills fields)
+                for r in exa_results:
+                    if not r.get("company"):
+                        r["company"] = self._extract_company(r.get("title", ""), r.get("snippet", ""))
+                    if not r.get("type"):
+                        r["type"] = self._extract_job_type(
+                            r.get("title", ""), r.get("description", "") or r.get("snippet", "")
+                        )
+                    if not r.get("skills"):
+                        r["skills"] = self._extract_skills(
+                            r.get("description", "") or r.get("snippet", "") or r.get("title", "")
+                        )
+                results.extend(exa_results)
 
             # ── Source 6: SearXNG (self-hosted meta search) ──
             if settings.searxng_base_url:
-                try:
-                    searxng_results = await self._search_searxng(query, limit)
-                    results.extend(searxng_results)
-                    logger.info("SearXNG returned %d results", len(searxng_results))
-                except Exception as e:
-                    logger.warning("SearXNG search failed: %s", e)
+                searxng_results = await self._call_source("searxng", lambda: self._search_searxng(query, limit))
+                results.extend(searxng_results)
 
             # ── Source 7: Mojeek (privacy-focused, free tier) ──
             if settings.mojeek_api_key:
-                try:
-                    mojeek_results = await self._search_mojeek_api(query, limit)
-                    results.extend(mojeek_results)
-                    logger.info("Mojeek API returned %d results", len(mojeek_results))
-                except Exception as e:
-                    logger.warning("Mojeek API search failed: %s", e)
+                mojeek_results = await self._call_source("mojeek_api", lambda: self._search_mojeek_api(query, limit))
+                results.extend(mojeek_results)
 
             # ── Source 8: Direct web scraping (always available, no API key) ──
             if not results or len(results) < limit:
-                try:
-                    scraped = await self._scrape_web(query, location, limit - len(results))
-                    results.extend(scraped)
-                    logger.info("Web scrape returned %d results", len(scraped))
-                except Exception as e:
-                    logger.warning("Web scrape failed: %s", e)
+                scraped = await self._call_source(
+                    "web_scrape",
+                    lambda: self._scrape_web(query, location, limit - len(results)),
+                )
+                results.extend(scraped)
 
             # ── Source 9: Mojeek Scrape Fallback ──
             if not results or len(results) < limit:
-                try:
-                    mojeek_scraped = await self._scrape_mojeek(query, location, limit - len(results))
-                    results.extend(mojeek_scraped)
-                    logger.info("Mojeek scrape returned %d results", len(mojeek_scraped))
-                except Exception as e:
-                    logger.warning("Mojeek scrape failed: %s", e)
+                mojeek_scraped = await self._call_source(
+                    "mojeek_scrape",
+                    lambda: self._scrape_mojeek(query, location, limit - len(results)),
+                )
+                results.extend(mojeek_scraped)
 
             # ── Source 10: DuckDuckGo Fallback ──
             if not results or len(results) < limit:
-                try:
-                    ddg_scraped = await self._scrape_duckduckgo(query, location, limit - len(results))
-                    results.extend(ddg_scraped)
-                    logger.info("DuckDuckGo scrape returned %d results", len(ddg_scraped))
-                except Exception as e:
-                    logger.warning("DuckDuckGo scrape failed: %s", e)
+                ddg_scraped = await self._call_source(
+                    "duckduckgo",
+                    lambda: self._scrape_duckduckgo(query, location, limit - len(results)),
+                )
+                results.extend(ddg_scraped)
 
         # ── Job board scraping for job/internship queries (tries to find real listings) ──
         if source_filter in ("job", "internship") and len(results) < limit:
-            try:
-                board_results = await self._scrape_job_boards(query, location, limit - len(results), source_filter)
-                results.extend(board_results)
-                logger.info("Job boards returned %d results", len(board_results))
-            except Exception as e:
-                logger.warning("Job board scrape failed: %s", e)
+            board_results = await self._call_source(
+                "job_board_scrape",
+                lambda: self._scrape_job_boards(query, location, limit - len(results), source_filter),
+            )
+            results.extend(board_results)
 
         # ── LinkedIn Direct Scraping ──
         if source_filter in ("job", "internship") and len(results) < limit:
-            try:
-                li_results = await self._scrape_linkedin_direct(query, location, limit - len(results))
-                results.extend(li_results)
-                logger.info("LinkedIn Direct returned %d results", len(li_results))
-            except Exception as e:
-                logger.warning("LinkedIn Direct scrape failed: %s", e)
+            li_results = await self._call_source(
+                "linkedin_direct",
+                lambda: self._scrape_linkedin_direct(query, location, limit - len(results)),
+            )
+            results.extend(li_results)
 
         # Log warning if ALL sources returned nothing
         if not results:
@@ -434,57 +547,33 @@ class SearchAdapter:
 
         # Try Tavily first (AI-native, best for research)
         if settings.tavily_api_key:
-            try:
-                tavily_results = await self._search_tavily(query, limit)
-                results.extend(tavily_results)
-                logger.info("Tavily returned %d results", len(tavily_results))
-            except Exception as e:
-                logger.warning("Tavily search failed: %s", e)
+            tavily_results = await self._call_source("tavily", lambda: self._search_tavily(query, limit))
+            results.extend(tavily_results)
 
         # Try Google second
         if not results and settings.google_api_key and settings.google_cse_id:
-            try:
-                google_results = await self._search_google(query, None, limit)
-                results.extend(google_results)
-                logger.info("Google returned %d results (research)", len(google_results))
-            except Exception as e:
-                logger.warning("Google research search failed: %s", e)
+            google_results = await self._call_source("google_cse", lambda: self._search_google(query, None, limit))
+            results.extend(google_results)
 
         # Try Brave (free tier)
         if not results and settings.brave_api_key:
-            try:
-                brave_results = await self._search_brave(query, limit)
-                results.extend(brave_results)
-                logger.info("Brave returned %d results (research)", len(brave_results))
-            except Exception as e:
-                logger.warning("Brave research search failed: %s", e)
+            brave_results = await self._call_source("brave", lambda: self._search_brave(query, limit))
+            results.extend(brave_results)
 
         # Try Exa (AI-native)
         if not results and settings.exa_api_key:
-            try:
-                exa_results = await self._search_exa(query, limit)
-                results.extend(exa_results)
-                logger.info("Exa returned %d results (research)", len(exa_results))
-            except Exception as e:
-                logger.warning("Exa research search failed: %s", e)
+            exa_results = await self._call_source("exa", lambda: self._search_exa(query, limit))
+            results.extend(exa_results)
 
         # Try Mojeek (privacy-first, free tier)
         if not results and settings.mojeek_api_key:
-            try:
-                mojeek_results = await self._search_mojeek_api(query, limit)
-                results.extend(mojeek_results)
-                logger.info("Mojeek returned %d results (research)", len(mojeek_results))
-            except Exception as e:
-                logger.warning("Mojeek research search failed: %s", e)
+            mojeek_results = await self._call_source("mojeek_api", lambda: self._search_mojeek_api(query, limit))
+            results.extend(mojeek_results)
 
         # Fallback: scrape search results
         if not results:
-            try:
-                scraped = await self._scrape_search_results(query, limit)
-                results.extend(scraped)
-                logger.info("Research scrape returned %d results", len(scraped))
-            except Exception as e:
-                logger.debug("Research scrape failed: %s", e)
+            scraped = await self._call_source("research_scrape", lambda: self._scrape_search_results(query, limit))
+            results.extend(scraped)
 
         if not results:
             logger.warning(

@@ -247,6 +247,7 @@ class TaskList(BaseModel):
 
 class PlannerRunResponse(BaseModel):
     task_id: UUID
+    trace_url: str | None = None
 
 
 # ─── Memory ─────────────────────────────────────────────────

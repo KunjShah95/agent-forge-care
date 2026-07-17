@@ -230,6 +230,13 @@ OTHER_SERVICES = [
         "env_var": "LANGCHAIN_API_KEY",
     },
     {
+        "name": "langgraph",
+        "display": "LangGraph (Agent Orchestration)",
+        "type": "framework",
+        "env_var": None,
+        "version": "1.0.0",
+    },
+    {
         "name": "github",
         "display": "GitHub API",
         "type": "api",
@@ -376,23 +383,14 @@ async def system_status():
 
     # ── Agent System ───────────────────────────────────────
     try:
-        from app.agents.graph import get_planner_graph
+        from app.agents.orchestrator.service import AGENT_REGISTRY
 
-        graph = get_planner_graph()
+        agents = sorted(AGENT_REGISTRY.keys())
         agent_system = {
-            "status": "ready" if graph is not None else "unhealthy",
-            "agent_count": 8,
-            "agents": [
-                "planner",
-                "internship",
-                "job",
-                "research",
-                "resume",
-                "interview",
-                "networking",
-                "monitor",
-            ],
-            "graph_compiled": graph is not None,
+            "status": "ready" if agents else "unhealthy",
+            "agent_count": len(agents),
+            "agents": agents,
+            "registry_ready": len(agents) > 0,
         }
     except Exception as e:
         agent_system = {

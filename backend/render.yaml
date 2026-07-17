@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: agentforge-api
+    name: careeros-api
     runtime: python
     plan: free
     buildCommand: pip install -r requirements.txt
@@ -10,11 +10,11 @@ services:
         value: "3.12"
       - key: DATABASE_URL
         fromDatabase:
-          name: agentforge-db
+          name: careeros-db
           property: connectionString
       - key: REDIS_URL
         fromRedis:
-          name: agentforge-redis
+          name: careeros-redis
           property: connectionString
       - key: FIREBASE_PROJECT_ID
         sync: false
@@ -28,8 +28,8 @@ services:
         value: "false"
 
 databases:
-  - name: agentforge-db
+  - name: careeros-db
     plan: free
-    databaseName: agentforge
-  - name: agentforge-redis
+    databaseName: careeros
+  - name: careeros-redis
     plan: free

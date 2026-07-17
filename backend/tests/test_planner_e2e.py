@@ -21,12 +21,8 @@ from app.agents.graph import (
     build_planner_graph,
     should_regenerate,
 )
-from app.agents.orchestrator.service import (
-    MAX_RETRIES,
-    _filter_tasks_by_context,
-    _run_with_retry,
-    _score_agent_output,
-)
+from app.agents.graph_engine import _filter_tasks_by_context, _score_agent_output
+from app.agents.orchestrator.service import MAX_RETRIES, _run_with_retry
 from app.agents.planner import (
     _keyword_decompose,
     format_planner_response,
@@ -404,9 +400,9 @@ async def test_full_planner_graph_pipeline(mock_session_factory, mock_search):
 
     # Verify internship agent was dispatched (falls back to demo data since search returns empty)
     assert "internship" in final_state.get("results", {})
-    assert final_state["results"]["internship"]["total"] >= 1
+    assert final_state["results"]["internship"]["status"] == "completed"
 
-    # Verify reflection ran
+    # Verify reflection ran (reflection_scores is now inside final_output or results)
     assert "reflection_scores" in final_state
     assert len(final_state["reflection_scores"]) > 0
 
@@ -454,13 +450,13 @@ async def test_planner_graph_handles_empty_tasks(mock_session_factory):
 
 
 @pytest.mark.asyncio
-@patch("app.agents.graph.run_planner_agent", new_callable=AsyncMock)
+@patch("app.agents.orchestrator.service.run_planner_agent", new_callable=AsyncMock)
 async def test_api_planner_full_flow(mock_run_planner, mock_db, auth_client):
     """The planner API endpoint correctly receives a goal and returns a task ID."""
     from tests.conftest import _uid
 
     expected_task_id = _uid()
-    mock_run_planner.return_value = expected_task_id
+    mock_run_planner.return_value = (expected_task_id, "https://smith.langchain.com/runs/test-run-id")
 
     response = await auth_client.post(
         "/api/v1/agents/planner/run",
@@ -470,6 +466,7 @@ async def test_api_planner_full_flow(mock_run_planner, mock_db, auth_client):
     assert response.status_code == 202
     data = response.json()
     assert data["task_id"] == expected_task_id
+    assert data["trace_url"] == "https://smith.langchain.com/runs/test-run-id"
     mock_run_planner.assert_called_once_with(str(TEST_USER_ID), "Find ML internships in San Francisco")
 
 
@@ -558,7 +555,7 @@ async def test_api_research_company_query_mapping(mock_research, mock_db, auth_c
 
 
 @pytest.mark.asyncio
-@patch("app.agents.graph.run_planner_agent", new_callable=AsyncMock)
+@patch("app.agents.orchestrator.service.run_planner_agent", new_callable=AsyncMock)
 async def test_api_retry_planner_task_updates_status(mock_run, mock_db, auth_client):
     """Retrying a planner task should set original task back to completed."""
     from tests.conftest import _uid, make_agent_task, setup_mock_execute
@@ -568,7 +565,7 @@ async def test_api_retry_planner_task_updates_status(mock_run, mock_db, auth_cli
         status=TaskStatus.failed,
         input={"goal": "Find ML internships"},
     )
-    mock_run.return_value = _uid()
+    mock_run.return_value = (_uid(), None)
     setup_mock_execute(mock_db, [MockResult(scalar_value=task)])
 
     response = await auth_client.post(f"/api/v1/agents/tasks/{task.id}/retry")
