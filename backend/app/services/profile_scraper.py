@@ -13,6 +13,7 @@ import asyncio
 import json
 import logging
 import re
+from datetime import UTC
 
 import httpx
 from bs4 import BeautifulSoup
@@ -413,9 +414,9 @@ async def scrape_github_commits(github_url: str, max_commits: int = 500) -> dict
                         return
 
                     try:
-                        from datetime import datetime, timezone
+                        from datetime import datetime
                         pushed_dt = datetime.fromisoformat(pushed_at.replace("Z", "+00:00"))
-                        now = datetime.now(timezone.utc)
+                        now = datetime.now(UTC)
                         days_since_push = (now - pushed_dt).days
                     except Exception:
                         days_since_push = 0
@@ -516,7 +517,7 @@ async def scrape_github_contributions(github_url: str) -> dict:
         "top_contribution_months": [],
     }
 
-    headers = _get_github_headers()
+    _get_github_headers()
 
     try:
         # Try GraphQL API first (requires GITHUB_TOKEN)

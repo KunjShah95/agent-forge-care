@@ -5,11 +5,10 @@ These endpoints allow users to exercise their right to data portability
 (Article 20) and right to erasure (Article 17) under GDPR.
 """
 
-import json
 import logging
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,7 +25,6 @@ from app.models.user import (
     Profile,
     User,
 )
-from app.schemas.user import UserOut
 
 logger = logging.getLogger("agentforge.gdpr")
 router = APIRouter()
@@ -92,77 +90,87 @@ async def export_user_data(
     # Opportunities (saved matches)
     opp_result = await db.execute(
         select(Opportunity).where(
-            Opportunity.id.in_(
-                select(Application.opportunity_id).where(Application.user_id == user.id)
-            )
+            Opportunity.id.in_(select(Application.opportunity_id).where(Application.user_id == user.id))
         )
     )
     for opp in opp_result.scalars().all():
-        export["opportunities"].append({
-            "id": str(opp.id),
-            "title": opp.title,
-            "company": opp.company,
-            "location": opp.location,
-            "type": opp.type,
-            "posted_date": opp.posted_date.isoformat() if opp.posted_date else None,
-        })
+        export["opportunities"].append(
+            {
+                "id": str(opp.id),
+                "title": opp.title,
+                "company": opp.company,
+                "location": opp.location,
+                "type": opp.type,
+                "posted_date": opp.posted_date.isoformat() if opp.posted_date else None,
+            }
+        )
 
     # Applications
     app_result = await db.execute(select(Application).where(Application.user_id == user.id))
     for app in app_result.scalars().all():
-        export["applications"].append({
-            "id": str(app.id),
-            "opportunity_id": str(app.opportunity_id),
-            "stage": app.stage,
-            "applied_date": app.applied_date.isoformat() if app.applied_date else None,
-            "notes": app.notes,
-            "created_at": app.created_at.isoformat() if app.created_at else None,
-        })
+        export["applications"].append(
+            {
+                "id": str(app.id),
+                "opportunity_id": str(app.opportunity_id),
+                "stage": app.stage,
+                "applied_date": app.applied_date.isoformat() if app.applied_date else None,
+                "notes": app.notes,
+                "created_at": app.created_at.isoformat() if app.created_at else None,
+            }
+        )
 
     # Contacts
     contact_result = await db.execute(select(Contact).where(Contact.user_id == user.id))
     for c in contact_result.scalars().all():
-        export["contacts"].append({
-            "id": str(c.id),
-            "name": c.name,
-            "role": c.role,
-            "company": c.company,
-            "email": c.email,
-            "linkedin_url": c.linkedin_url,
-            "status": c.status,
-            "notes": c.notes,
-        })
+        export["contacts"].append(
+            {
+                "id": str(c.id),
+                "name": c.name,
+                "role": c.role,
+                "company": c.company,
+                "email": c.email,
+                "linkedin_url": c.linkedin_url,
+                "status": c.status,
+                "notes": c.notes,
+            }
+        )
 
     # Agent tasks
     task_result = await db.execute(select(AgentTask).where(AgentTask.user_id == user.id))
     for t in task_result.scalars().all():
-        export["agent_tasks"].append({
-            "id": str(t.id),
-            "agent_type": t.agent_type.value if hasattr(t.agent_type, "value") else str(t.agent_type),
-            "status": t.status.value if hasattr(t.status, "value") else str(t.status),
-            "created_at": t.created_at.isoformat() if t.created_at else None,
-        })
+        export["agent_tasks"].append(
+            {
+                "id": str(t.id),
+                "agent_type": t.agent_type.value if hasattr(t.agent_type, "value") else str(t.agent_type),
+                "status": t.status.value if hasattr(t.status, "value") else str(t.status),
+                "created_at": t.created_at.isoformat() if t.created_at else None,
+            }
+        )
 
     # Notifications
     notif_result = await db.execute(select(Notification).where(Notification.user_id == user.id))
     for n in notif_result.scalars().all():
-        export["notifications"].append({
-            "id": str(n.id),
-            "title": n.title,
-            "type": n.type,
-            "read": n.read,
-            "created_at": n.created_at.isoformat() if n.created_at else None,
-        })
+        export["notifications"].append(
+            {
+                "id": str(n.id),
+                "title": n.title,
+                "type": n.type,
+                "read": n.read,
+                "created_at": n.created_at.isoformat() if n.created_at else None,
+            }
+        )
 
     # Memory entries
     mem_result = await db.execute(select(MemoryEntry).where(MemoryEntry.user_id == user.id))
     for m in mem_result.scalars().all():
-        export["memory_entries"].append({
-            "id": str(m.id),
-            "key": m.key,
-            "created_at": m.created_at.isoformat() if m.created_at else None,
-            "updated_at": m.updated_at.isoformat() if m.updated_at else None,
-        })
+        export["memory_entries"].append(
+            {
+                "id": str(m.id),
+                "key": m.key,
+                "created_at": m.created_at.isoformat() if m.created_at else None,
+                "updated_at": m.updated_at.isoformat() if m.updated_at else None,
+            }
+        )
 
     logger.info("GDPR data export completed for user %s", user.id)
 

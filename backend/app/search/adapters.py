@@ -413,7 +413,9 @@ class SearchAdapter:
 
             # ── Source 3: Google Custom Search ──
             if settings.google_api_key and settings.google_cse_id:
-                google_results = await self._call_source("google_cse", lambda: self._search_google(query, location, limit))
+                google_results = await self._call_source(
+                    "google_cse", lambda: self._search_google(query, location, limit)
+                )
                 results.extend(google_results)
 
             # ── Source 4: Brave Search (free tier: 2,000 queries/month) ──

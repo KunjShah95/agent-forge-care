@@ -423,9 +423,7 @@ async def discover_profiles_from_name(
     # Optionally scrape found profiles
     enrichment = {}
     if scrape_found:
-        enrichment = await _scrape_discovered_profiles(
-            flat_profiles, db, user_id
-        )
+        enrichment = await _scrape_discovered_profiles(flat_profiles, db, user_id)
 
     return {
         "status": "completed",
@@ -433,10 +431,7 @@ async def discover_profiles_from_name(
         "profiles_text": profiles_text,
         "confidence": llm_results.get("confidence", "low"),
         "name_found": llm_results.get("name_found"),
-        "summary": llm_results.get(
-            "summary",
-            f"Discovered {len(flat_profiles)} profile(s) for {name}."
-        ),
+        "summary": llm_results.get("summary", f"Discovered {len(flat_profiles)} profile(s) for {name}."),
         "verification": verification,
         "enrichment": enrichment,
         "total_results_scanned": len(all_results),
@@ -473,8 +468,8 @@ async def discover_profiles_from_email(
     # Also add email-specific queries
     email_local = email.split("@")[0]
     queries.append(f"{email} profile site:github.com OR site:linkedin.com OR site:twitter.com")
-    queries.append(f"\"{email_local}\" developer engineer")
-    queries.append(f"email \"{email}\" portfolio OR \"about me\" OR resume")
+    queries.append(f'"{email_local}" developer engineer')
+    queries.append(f'email "{email}" portfolio OR "about me" OR resume')
 
     # Reuse the name discovery logic with email context
     all_results: list[dict] = []
@@ -549,10 +544,7 @@ async def discover_profiles_from_email(
         "profiles": flat_profiles,
         "profiles_text": llm_results.get("profiles_text", ""),
         "confidence": llm_results.get("confidence", "low"),
-        "summary": llm_results.get(
-            "summary",
-            f"Discovered {len(flat_profiles)} profile(s) from email {email}."
-        ),
+        "summary": llm_results.get("summary", f"Discovered {len(flat_profiles)} profile(s) from email {email}."),
         "verification": verification,
         "enrichment": enrichment,
         "total_results_scanned": len(all_results),

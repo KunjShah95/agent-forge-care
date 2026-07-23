@@ -58,7 +58,7 @@ services:
       # ── Other Services ────────────────────────────────
       - COHERE_API_KEY=${COHERE_API_KEY:-}
       - SENDGRID_API_KEY=${SENDGRID_API_KEY:-}
-      - FROM_EMAIL=${FROM_EMAIL:-staging@agentforge.ai}
+      - FROM_EMAIL=${FROM_EMAIL:-staging@careeros.app}
       - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY:-}
       - LANGCHAIN_TRACING_V2=${LANGCHAIN_TRACING_V2:-true}
       - LANGCHAIN_PROJECT=${LANGCHAIN_PROJECT:-careeros-staging}

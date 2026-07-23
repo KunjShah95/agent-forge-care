@@ -55,7 +55,7 @@ class Settings(BaseSettings):
         return origins
 
     # Database
-    database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/agentforge"
+    database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/careeros"
 
     # JWT — auto-generated cryptographically random key if not set
     jwt_secret: str = ""

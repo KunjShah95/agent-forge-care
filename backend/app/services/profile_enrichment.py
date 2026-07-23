@@ -9,8 +9,6 @@ All results are stored in MemoryService for consumption by all agents.
 """
 
 import logging
-import re
-from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -405,13 +403,14 @@ async def build_developer_profile(
     Returns a flat dict matching the DeveloperProfile schema.
     """
     import asyncio
+
     from app.services.profile_scraper import (
-        scrape_github_profile,
+        analyze_commit_history,
         analyze_github_for_skills,
         scrape_github_commits,
         scrape_github_contributions,
         scrape_github_oss_contributions,
-        analyze_commit_history,
+        scrape_github_profile,
     )
 
     base = {

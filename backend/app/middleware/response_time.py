@@ -28,6 +28,7 @@ class ResponseTimeMiddleware(BaseHTTPMiddleware):
         # Only log slow requests (>500ms) or errors (>=400) to avoid log noise
         if duration_ms > 500 or response.status_code >= 400:
             from app.middleware.request_id import request_id_var
+
             logger.info(
                 "%s %s -> %d (%sms) [rid=%s]",
                 request.method,

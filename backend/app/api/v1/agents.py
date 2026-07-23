@@ -793,10 +793,10 @@ async def create_interview_session(
     ):
         raise HTTPException(status_code=422, detail="Type must be one of: behavioral, technical, system, mixed")
 
-    if not isinstance(data.score, (int, float)) or data.score < 0 or data.score > 100:
+    if not isinstance(data.score, int | float) or data.score < 0 or data.score > 100:
         raise HTTPException(status_code=422, detail="Score must be a number between 0 and 100")
 
-    if not isinstance(data.duration, (int, float)) or data.duration < 0:
+    if not isinstance(data.duration, int | float) or data.duration < 0:
         raise HTTPException(status_code=422, detail="Duration must be a non-negative number")
 
     try:

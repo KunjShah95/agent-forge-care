@@ -21,23 +21,12 @@ Usage:
 
 import logging
 import uuid
-import warnings
 from typing import Any
 
 from app.agents.graph_engine import (
     PlannerState,
-    _filter_tasks_by_context,
-    _score_agent_output,
     _get_compiled_graph,
     run_planner_graph,
-)
-from app.agents.orchestrator.service import (
-    OrchestratorAgent,
-    _run_with_retry,
-    dispatch_agent,
-    run_opportunity_scan,
-    run_planner_agent,
-    run_resume_tailoring,
 )
 from app.database import async_session_factory
 
@@ -204,7 +193,7 @@ class PlannerGraphWrapper:
         """Convert ``run_planner_graph`` output to legacy ``PlannerGraphState`` format."""
         results = output.get("results", {})
         reflection_scores = output.get("reflection_scores", {})
-        detail = output.get("detail", {})
+        output.get("detail", {})
 
         return {
             "user_id": initial_state.get("user_id", ""),

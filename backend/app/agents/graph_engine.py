@@ -27,11 +27,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 # Per-run DB session — avoids putting non-serializable AsyncSession into state.
 _db_var: contextvars.ContextVar[AsyncSession] = contextvars.ContextVar("_db_var")
 
-from app.agents.orchestrator.schemas import TaskDef
-from app.agents.planner import decompose_goal_with_llm
-from app.agents.schemas import AgentResult, AgentStatus
-from app.services.memory_service import MemoryService
-from app.services.profile_service import ProfileService
+from app.agents.orchestrator.schemas import TaskDef  # noqa: E402
+from app.agents.planner import decompose_goal_with_llm  # noqa: E402
+from app.agents.schemas import AgentResult, AgentStatus  # noqa: E402
+from app.services.memory_service import MemoryService  # noqa: E402
+from app.services.profile_service import ProfileService  # noqa: E402
 
 logger = logging.getLogger("agentforge.graph_engine")
 
@@ -66,7 +66,6 @@ class PlannerState(TypedDict):
     reflection_iterations: int
     final_output: dict
     error: str | None
-
 
 
 # ── Scoring Helper ──────────────────────────────────────────
@@ -141,9 +140,7 @@ async def _score_agent_output(
 
     scores["total"] = sum(v for k, v in scores.items() if k != "total")
     weaknesses = [
-        f"{dim} is low ({sc}/10)"
-        for dim, sc in scores.items()
-        if dim not in ("total", "feedback") and sc < 5
+        f"{dim} is low ({sc}/10)" for dim, sc in scores.items() if dim not in ("total", "feedback") and sc < 5
     ]
     scores["feedback"] = "; ".join(weaknesses) if weaknesses else f"{agent_type}: Output quality acceptable"
     return scores
@@ -327,20 +324,18 @@ async def _reflect(state: PlannerState) -> dict:
 
     reflection_scores: dict[str, dict] = {}
     for agent_key, agent_res in agent_results.items():
-        result_dict = (
-            agent_res.output or {"error": agent_res.error}
-            if agent_res.error
-            else (agent_res.output or {})
-        )
+        result_dict = agent_res.output or {"error": agent_res.error} if agent_res.error else (agent_res.output or {})
         reflection_scores[agent_key] = await _score_agent_output(
-            agent_key, result_dict, goal, profile_skills,
+            agent_key,
+            result_dict,
+            goal,
+            profile_skills,
         )
 
     new_iteration = iteration + 1
 
     low_scorers = [
-        k for k, v in reflection_scores.items()
-        if isinstance(v, dict) and v.get("total", 0) < QUALITY_THRESHOLD
+        k for k, v in reflection_scores.items() if isinstance(v, dict) and v.get("total", 0) < QUALITY_THRESHOLD
     ]
 
     if low_scorers and new_iteration < MAX_REFLECTION_ITERATIONS:
@@ -358,7 +353,7 @@ async def _reflect(state: PlannerState) -> dict:
 
 async def _format_output(state: PlannerState) -> dict:
     """Build the final output dict from agent results."""
-    goal = state["goal"]
+    state["goal"]
     agent_results = state.get("agent_results", {})
     reflection_scores = state.get("reflection_scores", {})
 
@@ -368,9 +363,7 @@ async def _format_output(state: PlannerState) -> dict:
         flat[agent_type] = {
             "status": result.status,
             "message": (
-                (result.output or {}).get("message", str(result.output)[:200])
-                if result.output
-                else result.error
+                (result.output or {}).get("message", str(result.output)[:200]) if result.output else result.error
             ),
             "duration_ms": result.duration_ms,
         }
@@ -399,8 +392,7 @@ def _should_regenerate(state: PlannerState) -> str:
         return "format_output"
 
     low_scorers = [
-        k for k, v in reflection_scores.items()
-        if isinstance(v, dict) and v.get("total", 0) < QUALITY_THRESHOLD
+        k for k, v in reflection_scores.items() if isinstance(v, dict) and v.get("total", 0) < QUALITY_THRESHOLD
     ]
 
     if low_scorers:
@@ -463,6 +455,7 @@ async def _get_compiled_graph():
         builder = _build_graph()
 
         from app.checkpointer import get_checkpointer
+
         checkpointer = await get_checkpointer()
 
         _graph = builder.compile(checkpointer=checkpointer)
@@ -480,7 +473,7 @@ def _get_langsmith_trace_url(run_id: str) -> str | None:
     """
     import os
 
-    project = os.environ.get("LANGCHAIN_PROJECT", "agentforge-career-os")
+    os.environ.get("LANGCHAIN_PROJECT", "agentforge-career-os")
 
     # Try the official SDK first — it handles org/project resolution.
     try:

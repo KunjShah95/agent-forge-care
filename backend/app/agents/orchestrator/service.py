@@ -9,14 +9,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.base import BaseAgent
+from app.agents.discovery_agent import DiscoveryAgent
 from app.agents.guidance_agent import GuidanceAgent
 from app.agents.internship_agent import InternshipAgent
 from app.agents.interview_agent import InterviewAgent
 from app.agents.job_agent import JobAgent
 from app.agents.monitor_agent import MonitorAgent
 from app.agents.networking_agent import NetworkingAgent
-from app.agents.orchestrator.schemas import TaskDef
-from app.agents.discovery_agent import DiscoveryAgent
 from app.agents.research_agent import ResearchAgent
 from app.agents.resume_agent import ResumeAgent
 from app.agents.schemas import AgentResult, AgentStatus
@@ -113,9 +112,7 @@ class OrchestratorAgent(BaseAgent):
         trace_url = output.get("trace_url")
 
         for agent_type, res in results.items():
-            status = (
-                AgentStatus.COMPLETED if res.get("status") == AgentStatus.COMPLETED else AgentStatus.FAILED
-            )
+            status = AgentStatus.COMPLETED if res.get("status") == AgentStatus.COMPLETED else AgentStatus.FAILED
             self.results[agent_type] = AgentResult(
                 agent_type=agent_type,
                 status=status,

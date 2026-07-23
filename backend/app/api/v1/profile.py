@@ -11,16 +11,16 @@ from sqlalchemy.orm import selectinload
 from app.config import settings
 from app.database import get_db
 from app.dependencies import get_current_user
-from app.services.profile_enrichment import build_developer_profile, enrich_all
 from app.models.user import AgentTask, AgentType, Profile, ProfileSkill, Skill, TaskStatus, User
 from app.schemas.user import (
     AddSkillRequest,
+    EnrichRequest,
+    EnrichResult,
     ProfileOut,
     ProfileSkillOut,
     ProfileUpdate,
-    EnrichRequest,
-    EnrichResult,
 )
+from app.services.profile_enrichment import build_developer_profile, enrich_all
 
 logger = logging.getLogger("agentforge.profile")
 
@@ -346,27 +346,22 @@ async def enrich_profile(
     discovered_skills = result.get("discovered_skills", [])
     if discovered_skills:
         try:
+            from sqlalchemy import select
+
             from app.models.user import (
-                AgentTask,
                 AgentType,
                 Profile,
                 ProfileSkill,
                 Skill,
-                TaskStatus,
             )
-            from sqlalchemy import select
 
-            profile_result = await db.execute(
-                select(Profile).where(Profile.user_id == user.id)
-            )
+            profile_result = await db.execute(select(Profile).where(Profile.user_id == user.id))
             profile = profile_result.scalar_one_or_none()
             if profile:
                 for skill_name in discovered_skills:
                     if not skill_name or not isinstance(skill_name, str):
                         continue
-                    skill_result = await db.execute(
-                        select(Skill).where(Skill.name == skill_name)
-                    )
+                    skill_result = await db.execute(select(Skill).where(Skill.name == skill_name))
                     skill = skill_result.scalar_one_or_none()
                     if not skill:
                         skill = Skill(name=skill_name)
@@ -396,8 +391,8 @@ async def enrich_profile(
         from redis import Redis
         from rq import Queue
 
-        from app.models.user import AgentType
         from app.models.user import AgentTask as AgentTaskModel
+        from app.models.user import AgentType
         from app.models.user import TaskStatus as TaskStatusEnum
         from app.tasks.agent_tasks import process_github_scrape, process_portfolio_scrape
 
@@ -445,9 +440,7 @@ async def get_developer_profile(
     Each data source has graceful degradation — if one fails, the others still contribute.
     """
     # Get the user's GitHub URL from their profile
-    result = await db.execute(
-        select(Profile).where(Profile.user_id == user.id)
-    )
+    result = await db.execute(select(Profile).where(Profile.user_id == user.id))
     profile = result.scalar_one_or_none()
 
     github_url = getattr(profile, "github_url", None) if profile else None

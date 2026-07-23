@@ -60,7 +60,9 @@ async def conduct_research(
         search_keys = []
 
         if focus in ("company", "all") or (query and not focus):
-            search_tasks.append(_raw_search(f"{query} company overview funding culture tech stack hiring", search_adapter))
+            search_tasks.append(
+                _raw_search(f"{query} company overview funding culture tech stack hiring", search_adapter)
+            )
             search_keys.append("company")
             search_tasks.append(_fetch_github_org_data(query))
             search_keys.append("github")
@@ -73,7 +75,11 @@ async def conduct_research(
             search_keys.append("interview")
 
         if focus == "market" or "trend" in query.lower():
-            mq = f"{' '.join(topics[:3])} job market demand trends 2026" if topics else "market trends tech hiring demand"
+            mq = (
+                f"{' '.join(topics[:3])} job market demand trends 2026"
+                if topics
+                else "market trends tech hiring demand"
+            )
             search_tasks.append(_raw_search(mq, search_adapter))
             search_keys.append("market")
 
@@ -98,7 +104,8 @@ async def conduct_research(
             weight=MEMORY_WEIGHT_HIGH,
         )
         await memory_service.set_memory(
-            user_id, "research_topics",
+            user_id,
+            "research_topics",
             {"topics": topics, "last_query": query},
             weight=MEMORY_WEIGHT_MEDIUM,
         )
@@ -136,7 +143,9 @@ async def _raw_search(query: str, search_adapter: SearchAdapter) -> str:
         results = await search_adapter.search_research(query, limit=5)
         if not results:
             return ""
-        return " ".join(r.get("snippet", "") + " " + r.get("title", "") for r in results if r.get("snippet") or r.get("title"))
+        return " ".join(
+            r.get("snippet", "") + " " + r.get("title", "") for r in results if r.get("snippet") or r.get("title")
+        )
     except Exception as e:
         logger.debug("Search failed for '%s': %s", query, e)
         return ""
@@ -165,13 +174,21 @@ async def _synthesize_all(query: str, topics: list, focus: str, gathered: dict) 
 
     sections_needed = []
     if company_snippets or github_str:
-        sections_needed.append('"company_info": {name, industry, stage, funding, culture, tech_stack (list), hiring_trend, interview_process (list), summary}')
+        sections_needed.append(
+            '"company_info": {name, industry, stage, funding, culture, tech_stack (list), hiring_trend, interview_process (list), summary}'
+        )
     if interview_snippets:
-        sections_needed.append('"interview_insights": {focus_areas (list), common_questions (list of 5), tips, recommended_prep (list of 3)}')
+        sections_needed.append(
+            '"interview_insights": {focus_areas (list), common_questions (list of 5), tips, recommended_prep (list of 3)}'
+        )
     if market_snippets:
-        sections_needed.append('"market_trends": {outlook, trending_roles (list of 3), salary_range, growth_areas (list), suggestions (list of 3)}')
+        sections_needed.append(
+            '"market_trends": {outlook, trending_roles (list of 3), salary_range, growth_areas (list), suggestions (list of 3)}'
+        )
     if skills_snippets:
-        sections_needed.append('"skill_analysis": {insight, skill_demand_map (dict skill→level), recommended_skills (list of 3), learning_resources (list of 3)}')
+        sections_needed.append(
+            '"skill_analysis": {insight, skill_demand_map (dict skill→level), recommended_skills (list of 3), learning_resources (list of 3)}'
+        )
 
     if not sections_needed:
         return _fallback_all(query, topics, focus, gathered)
@@ -188,10 +205,11 @@ async def _synthesize_all(query: str, topics: list, focus: str, gathered: dict) 
         prompt += f"MARKET SEARCH DATA:\n{market_snippets[:800]}\n\n"
     if skills_snippets:
         prompt += f"SKILLS SEARCH DATA:\n{skills_snippets[:800]}\n\n"
-    prompt += f"Return a JSON object with these keys:\n" + "\n".join(f"- {s}" for s in sections_needed)
+    prompt += "Return a JSON object with these keys:\n" + "\n".join(f"- {s}" for s in sections_needed)
 
     try:
         from langchain_core.messages import HumanMessage
+
         response = await llm.ainvoke([HumanMessage(content=prompt)])
         data = json.loads(strip_json_fences(response.content))
         return data
@@ -220,11 +238,13 @@ async def _fetch_github_org_data(company_name: str) -> dict | None:
         return None
     org_name = re.sub(r"[^a-zA-Z0-9-]", "", company_name.lower().replace(" ", ""))
     from app.config import settings
+
     headers = {"User-Agent": "AgentForge-CareerOS"}
     if settings.github_token:
         headers["Authorization"] = f"token {settings.github_token}"
     try:
         import httpx
+
         async with httpx.AsyncClient(timeout=5.0) as client:
             org_res = await client.get(f"https://api.github.com/orgs/{org_name}", headers=headers)
             if org_res.status_code != 200:
@@ -252,8 +272,10 @@ async def _fetch_github_org_data(company_name: str) -> dict | None:
                         lang = repo.get("language")
                         if lang:
                             languages[lang] = languages.get(lang, 0) + 1
-                        repos.append({"name": repo.get("name"), "stars": repo.get("stargazers_count", 0), "language": lang})
-                sorted_langs = [l for l, _ in sorted(languages.items(), key=lambda x: x[1], reverse=True)]
+                        repos.append(
+                            {"name": repo.get("name"), "stars": repo.get("stargazers_count", 0), "language": lang}
+                        )
+                sorted_langs = [lang for lang, _ in sorted(languages.items(), key=lambda x: x[1], reverse=True)]
                 return {
                     "login": org_data.get("login"),
                     "name": org_data.get("name"),
@@ -276,7 +298,9 @@ def _fallback_company_info(company: str, combined: str = "", github_data: dict |
             industry = kw.title()
             break
     funding = "Information not available"
-    fm = re.search(r"(\$[\d,.]+[BMK]?[\s]*(?:million|billion|m|b)?[\s]*(?:raised|funding|series|round))", combined, re.IGNORECASE)
+    fm = re.search(
+        r"(\$[\d,.]+[BMK]?[\s]*(?:million|billion|m|b)?[\s]*(?:raised|funding|series|round))", combined, re.IGNORECASE
+    )
     if fm:
         funding = fm.group(1)
     tech_stack = ["Python", "TypeScript", "React", "AWS", "PostgreSQL"]
@@ -289,7 +313,9 @@ def _fallback_company_info(company: str, combined: str = "", github_data: dict |
         "funding": funding,
         "culture": "Fast-paced, innovation-driven",
         "tech_stack": tech_stack,
-        "hiring_trend": "Actively hiring" if re.search(r"(hiring|jobs|careers)", combined_lower) else "Information not available",
+        "hiring_trend": "Actively hiring"
+        if re.search(r"(hiring|jobs|careers)", combined_lower)
+        else "Information not available",
         "interview_process": ["Recruiter screen", "Technical screen", "On-site / final round", "Offer"],
         "summary": combined[:400] or f"{company} is actively building its engineering team.",
     }
@@ -316,7 +342,12 @@ def _fallback_interview_insights(role: str, skills: list, snippets: str = "") ->
 
 def _fallback_market_intelligence(skills: list, snippets: str = "") -> dict:
     return {
-        "outlook": snippets[:200] or (f"Strong demand for {' and '.join(skills[:2])} skills." if skills else "Strong demand for engineering talent."),
+        "outlook": snippets[:200]
+        or (
+            f"Strong demand for {' and '.join(skills[:2])} skills."
+            if skills
+            else "Strong demand for engineering talent."
+        ),
         "trending_roles": ["AI/ML Engineer", "Full-stack Developer", "Developer Experience Engineer"],
         "salary_range": "$120K - $200K+ (depending on location and experience)",
         "growth_areas": ["AI safety", "Developer tools", "Fintech", "Climate tech"],
@@ -326,10 +357,19 @@ def _fallback_market_intelligence(skills: list, snippets: str = "") -> dict:
 
 def _fallback_skill_insights(skills: list, snippets: str = "") -> dict:
     return {
-        "insight": snippets[:200] or (f"Your skills in {', '.join(skills[:3])} are in high demand." if skills else "Current market shows strong tech demand."),
+        "insight": snippets[:200]
+        or (
+            f"Your skills in {', '.join(skills[:3])} are in high demand."
+            if skills
+            else "Current market shows strong tech demand."
+        ),
         "skill_demand_map": {s: "high" for s in skills},
         "recommended_skills": ["System Design", "Cloud Architecture", "AI/ML Integration"],
-        "learning_resources": ["System Design Interview — Alex Xu", "CS231n (Stanford)", "Building LLM Applications (DeepLearning.AI)"],
+        "learning_resources": [
+            "System Design Interview — Alex Xu",
+            "CS231n (Stanford)",
+            "Building LLM Applications (DeepLearning.AI)",
+        ],
     }
 
 
@@ -338,7 +378,9 @@ async def _store_research_embedding(user_id: str, agent_memory: AgentMemory, top
         text = f"Research on {topic}: {str(results)[:2000]}"
         vector = await get_text_embedding(text)
         agent_memory.store_vector(
-            collection="research_notes", text=text, vector=vector,
+            collection="research_notes",
+            text=text,
+            vector=vector,
             metadata={"topic": topic, "user_id": user_id, "type": "research"},
         )
     except Exception as e:

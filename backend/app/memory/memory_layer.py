@@ -107,7 +107,9 @@ class AgentMemory:
         types = _get_point_types()
         if types[1]:
             filter_cls, field_condition_cls, match_value_cls = types[1], types[2], types[3]
-            query_filter = filter_cls(must=[field_condition_cls(key="user_id", match=match_value_cls(value=self.user_id))])
+            query_filter = filter_cls(
+                must=[field_condition_cls(key="user_id", match=match_value_cls(value=self.user_id))]
+            )
         else:
             query_filter = None
 
@@ -129,7 +131,9 @@ class AgentMemory:
             filter_cls, field_condition_cls, match_value_cls = types[1], types[2], types[3]
             self.client.delete(
                 collection_name=collection,
-                points_selector=filter_cls(must=[field_condition_cls(key="user_id", match=match_value_cls(value=self.user_id))]),
+                points_selector=filter_cls(
+                    must=[field_condition_cls(key="user_id", match=match_value_cls(value=self.user_id))]
+                ),
             )
 
     def search_vectors_reranked(

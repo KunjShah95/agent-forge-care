@@ -600,9 +600,9 @@ class TestDemoData:
             assert "title" in r
             assert "company" in r
             if "salary_min" in r:
-                assert isinstance(r["salary_min"], (int, float))
+                assert isinstance(r["salary_min"], int | float)
             if "salary_max" in r:
-                assert isinstance(r["salary_max"], (int, float))
+                assert isinstance(r["salary_max"], int | float)
 
     def test_demo_data_utility(self):
         results = generate_demo_opportunities(AgentType.internship, "ML", "Remote")

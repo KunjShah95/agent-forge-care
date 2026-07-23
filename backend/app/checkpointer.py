@@ -60,10 +60,7 @@ async def get_checkpointer() -> Any:
         try:
             from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
         except ImportError:
-            logger.warning(
-                "langgraph-checkpoint-postgres not installed — "
-                "falling back to in-memory checkpointer"
-            )
+            logger.warning("langgraph-checkpoint-postgres not installed — falling back to in-memory checkpointer")
             from langgraph.checkpoint.memory import MemorySaver
 
             _checkpointer = MemorySaver()

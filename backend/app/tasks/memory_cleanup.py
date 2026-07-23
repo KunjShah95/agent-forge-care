@@ -12,7 +12,7 @@ Cleans up stale records across all tables based on configurable TTLs:
 import logging
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import delete, select
+from sqlalchemy import select
 
 from app.config import settings
 from app.database import async_session_factory
@@ -61,7 +61,11 @@ async def cleanup_stale_opportunities() -> int:
         for opp in opportunities:
             await db.delete(opp)
         if count:
-            logger.info("Data retention: deleted %d stale opportunities (older than %d days)", count, settings.data_retention_opportunity_days)
+            logger.info(
+                "Data retention: deleted %d stale opportunities (older than %d days)",
+                count,
+                settings.data_retention_opportunity_days,
+            )
         await db.commit()
         return count
 
@@ -82,7 +86,11 @@ async def cleanup_stale_applications() -> int:
         for app in apps:
             await db.delete(app)
         if count:
-            logger.info("Data retention: deleted %d stale applications (older than %d days)", count, settings.data_retention_application_days)
+            logger.info(
+                "Data retention: deleted %d stale applications (older than %d days)",
+                count,
+                settings.data_retention_application_days,
+            )
         await db.commit()
         return count
 
@@ -103,7 +111,11 @@ async def cleanup_stale_agent_tasks() -> int:
         for task in tasks:
             await db.delete(task)
         if count:
-            logger.info("Data retention: deleted %d stale agent tasks (older than %d days)", count, settings.data_retention_agent_task_days)
+            logger.info(
+                "Data retention: deleted %d stale agent tasks (older than %d days)",
+                count,
+                settings.data_retention_agent_task_days,
+            )
         await db.commit()
         return count
 
@@ -123,7 +135,11 @@ async def cleanup_stale_notifications() -> int:
         for entry in entries:
             await db.delete(entry)
         if count:
-            logger.info("Data retention: deleted %d stale notifications (older than %d days)", count, settings.data_retention_notification_days)
+            logger.info(
+                "Data retention: deleted %d stale notifications (older than %d days)",
+                count,
+                settings.data_retention_notification_days,
+            )
         await db.commit()
         return count
 

@@ -22,6 +22,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # ─── Schemas ────────────────────────────────────────────────
 
+
 class RegisterRequest(BaseModel):
     email: EmailStr
     password: str
@@ -40,6 +41,7 @@ class TokenResponse(BaseModel):
 
 
 # ─── Helpers ────────────────────────────────────────────────
+
 
 def _hash_password(password: str) -> str:
     return pwd_context.hash(password)
@@ -63,6 +65,7 @@ def _create_token(user: User) -> str:
 
 
 # ─── Endpoints ──────────────────────────────────────────────
+
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
@@ -106,6 +109,7 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
 
 
 # ─── Existing endpoints ──────────────────────────────────────
+
 
 @router.get("/me", response_model=UserOut)
 async def get_me(user: User = Depends(get_current_user_unverified)):

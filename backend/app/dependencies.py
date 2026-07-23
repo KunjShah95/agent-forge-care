@@ -136,7 +136,7 @@ def _get_rate_limit_key(request: Request) -> str:
                 prefix = "auth_user" if _is_auth_route(request) else "user"
                 return f"{prefix}:{user_id}"
         except Exception:
-            pass
+            pass  # nosec — fallback to IP-based rate limiting
     client_host = request.client.host if request.client else "unknown"
     prefix = "auth_ip" if _is_auth_route(request) else "ip"
     return f"{prefix}:{client_host}"
@@ -221,7 +221,9 @@ def _in_memory_is_rate_limited(key: str, max_requests: int, window_seconds: int)
 
 def _verify_local_token(token: str) -> dict:
     """Verify a locally-issued HS256 JWT and return its payload."""
-    from jose import JWTError, jwt as jose_jwt
+    from jose import JWTError
+    from jose import jwt as jose_jwt
+
     try:
         payload = jose_jwt.decode(
             token,

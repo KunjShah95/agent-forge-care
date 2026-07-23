@@ -395,6 +395,7 @@ def to_markdown(
     elif hasattr(hdr_info, "get_header_id") and callable(hdr_info.get_header_id):
         get_header_id = hdr_info.get_header_id
     elif hdr_info is False:
+
         def get_header_id(s, page=None):
             return ""
     else:
@@ -961,8 +962,8 @@ def to_markdown(
             text_types = set([b[0] for b in page.get_bboxlog() if "text" in b[0]])
             if text_types == {"ignore-text"}:
                 return True
-        except:
-            pass
+        except Exception:
+            pass  # nosec - graceful degradation for OCR check
         return False
 
     def get_bg_color(page):

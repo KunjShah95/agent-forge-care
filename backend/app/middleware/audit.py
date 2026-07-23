@@ -38,9 +38,7 @@ class AuditLogMiddleware(BaseHTTPMiddleware):
         # Skip non-audited paths and safe read-only operations
         if path in _SKIP_PATHS:
             return await call_next(request)
-        if request.method in _READ_ONLY_METHODS and not any(
-            path.startswith(s) for s in _SENSITIVE_PATHS
-        ):
+        if request.method in _READ_ONLY_METHODS and not any(path.startswith(s) for s in _SENSITIVE_PATHS):
             return await call_next(request)
 
         # Extract actor (user or IP)
@@ -49,6 +47,7 @@ class AuditLogMiddleware(BaseHTTPMiddleware):
         if auth.startswith("Bearer "):
             try:
                 from jose import jwt as jose_jwt
+
                 payload = jose_jwt.get_unverified_claims(auth.split(" ", 1)[1])
                 actor = payload.get("sub") or actor
             except Exception:

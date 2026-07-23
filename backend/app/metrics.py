@@ -6,8 +6,6 @@ infrastructure gauges.  Uses the ``prometheus_client`` library (lightweight,
 no external dependencies beyond the package itself).
 """
 
-import time
-
 from fastapi import APIRouter, Response
 
 router = APIRouter(tags=["metrics"])
@@ -60,7 +58,7 @@ async def metrics_endpoint():
     """Return Prometheus-format metrics."""
     _ensure_metrics()
 
-    from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+    from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
     body = generate_latest()
     return Response(content=body, media_type=CONTENT_TYPE_LATEST)

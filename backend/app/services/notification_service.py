@@ -38,7 +38,9 @@ async def create_notification(
         weight=1.0,
         ttl_days=settings.data_retention_notification_days,
     )
-    logger.debug("Notification created for user %s: %s (TTL: %d days)", user_id, title, settings.data_retention_notification_days)
+    logger.debug(
+        "Notification created for user %s: %s (TTL: %d days)", user_id, title, settings.data_retention_notification_days
+    )
 
     if to_email:
         from app.services.email_service import send_email

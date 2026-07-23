@@ -33,25 +33,25 @@ if settings.sentry_dsn:
     except ImportError:
         pass
 
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
-from sqlalchemy import text
-from starlette.middleware.httpsredirect import HTTPSRedirectMiddleware
+from fastapi import FastAPI, HTTPException, Request  # noqa: E402
+from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
+from fastapi.middleware.gzip import GZipMiddleware  # noqa: E402
+from fastapi.middleware.trustedhost import TrustedHostMiddleware  # noqa: E402
+from fastapi.responses import JSONResponse  # noqa: E402
+from fastapi.staticfiles import StaticFiles  # noqa: E402
+from sqlalchemy import text  # noqa: E402
+from starlette.middleware.httpsredirect import HTTPSRedirectMiddleware  # noqa: E402
 
-from app.api.router import router as api_router
-from app.database import close_db, get_db, init_db
-from app.dependencies import _get_rate_limit_config, _get_rate_limit_key, rate_limiter
-from app.memory.qdrant_client import get_qdrant_client, init_collections
-from app.middleware.audit import AuditLogMiddleware
-from app.middleware.auth import RequestLogMiddleware
-from app.middleware.request_id import RequestIDMiddleware
-from app.middleware.response_time import ResponseTimeMiddleware
-from app.tasks.hackathon_scanner import run_scheduled_hackathon_scan
-from app.tasks.memory_cleanup import run_full_data_retention
+from app.api.router import router as api_router  # noqa: E402
+from app.database import close_db, get_db, init_db  # noqa: E402
+from app.dependencies import _get_rate_limit_config, _get_rate_limit_key, rate_limiter  # noqa: E402
+from app.memory.qdrant_client import get_qdrant_client, init_collections  # noqa: E402
+from app.middleware.audit import AuditLogMiddleware  # noqa: E402
+from app.middleware.auth import RequestLogMiddleware  # noqa: E402
+from app.middleware.request_id import RequestIDMiddleware  # noqa: E402
+from app.middleware.response_time import ResponseTimeMiddleware  # noqa: E402
+from app.tasks.hackathon_scanner import run_scheduled_hackathon_scan  # noqa: E402
+from app.tasks.memory_cleanup import run_full_data_retention  # noqa: E402
 
 # ─── Log Sanitization ──────────────────────────────────────
 # Patterns that match sensitive data in log messages
@@ -244,6 +244,7 @@ async def global_exception_handler(request: Request, exc: Exception):
     if _sentry_enabled:
         try:
             import sentry_sdk
+
             sentry_sdk.capture_exception(exc)
         except Exception:
             pass
@@ -260,7 +261,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 # Security middleware
 if not settings.debug:
-    app.add_middleware(TrustedHostMiddleware, allowed_hosts=["agentforge.ai", "www.agentforge.ai"])
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=["careeros.app", "*.careeros.app", "careeros-api.onrender.com"])
     app.add_middleware(HTTPSRedirectMiddleware)
 
 # CORS middleware with stricter settings

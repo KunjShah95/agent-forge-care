@@ -5,7 +5,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/agentforge
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/careeros
       - QDRANT_URL=http://qdrant:6333
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}

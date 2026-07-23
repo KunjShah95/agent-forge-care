@@ -563,6 +563,7 @@ class SkillAnalysis(BaseModel):
 
 class DeveloperProfile(BaseModel):
     """Complete composite developer profile — merges all GitHub data sources."""
+
     username: str
     profile_url: str
     avatar_url: str | None = None
@@ -586,4 +587,3 @@ class DeveloperProfile(BaseModel):
     commit_analysis: CommitAnalysis | None = None
     data_completeness: int = 0  # 0-100: how many data sources loaded
     errors: list[str] = []
-
