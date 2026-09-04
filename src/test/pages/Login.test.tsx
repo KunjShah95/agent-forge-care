@@ -119,9 +119,9 @@ describe("Login", () => {
     expect(screen.getByText("Forgot password?")).toBeDefined();
   });
 
-  it("renders the AgentForge logo", () => {
+  it("renders the CareerOS logo", () => {
     renderLogin();
-    expect(screen.getByText("AgentForge Career OS")).toBeDefined();
+    expect(screen.getByText("CareerOS")).toBeDefined();
   });
 
   it("disables Google button while submitting", () => {

@@ -395,7 +395,7 @@ async def health_check():
             },
         }
     except Exception as e:
-        checks["database"] = f"error: {e}"
+        checks["database"] = {"status": "error"} if not settings.debug else {"status": "error", "error": str(e)[:100]}
         healthy = False
 
     # Qdrant check
@@ -404,7 +404,9 @@ async def health_check():
         qdrant.get_collections()
         checks["qdrant"] = "ok"
     except Exception as e:
-        checks["qdrant"] = f"unavailable: {e}"
+        checks["qdrant"] = "ok" if settings.debug else "unavailable"
+        if settings.debug:
+            checks["qdrant"] = f"unavailable: {e}"
 
     # Redis check
     try:
@@ -412,8 +414,8 @@ async def health_check():
         r = await limiter._get_redis()
         await r.ping()
         checks["redis"] = "ok"
-    except Exception as e:
-        checks["redis"] = f"unavailable: {e}"
+    except Exception:
+        checks["redis"] = "unavailable"
 
     status = "healthy" if healthy else "degraded"
     return {

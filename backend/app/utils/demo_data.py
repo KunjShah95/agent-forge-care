@@ -181,7 +181,11 @@ def generate_demo_opportunities(agent_type: AgentType, query: str, location: str
         ],
     }
     results = demos.get(agent_type, demos[AgentType.monitor])
-    # Mark all demo entries clearly to prevent mixing with real data
+    # Mark all demo entries clearly to prevent mixing with real data.
+    # Prefix is shown in UI; is_demo lets clients filter them out.
     for r in results:
         r["is_demo"] = True
+        r["source"] = "demo"
+        if not str(r.get("title", "")).startswith("[DEMO] "):
+            r["title"] = f"[DEMO] {r.get('title', '')}"
     return results

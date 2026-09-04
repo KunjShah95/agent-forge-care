@@ -14,6 +14,7 @@ def register_routes():
         contacts,
         gdpr,
         hiring_agent,
+        insights,
         memory,
         monitor,
         notifications,
@@ -35,6 +36,7 @@ def register_routes():
     router.include_router(chat.router, prefix="/chat", tags=["Chat"])
     router.include_router(resume.router, prefix="/resume", tags=["Resume"])
     router.include_router(notifications.router, prefix="/notifications", tags=["Notifications"])
+    router.include_router(insights.router, prefix="/insights", tags=["Insights"])
     router.include_router(gdpr.router, prefix="/gdpr", tags=["GDPR"])
     router.include_router(status.router, tags=["Status"])
     router.include_router(hiring_agent.router, prefix="/hiring-agent", tags=["Hiring Agent"])

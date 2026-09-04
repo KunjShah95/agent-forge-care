@@ -39,6 +39,7 @@ export default function Onboarding() {
     portfolio_data?: Record<string, unknown>;
   } | null>(null);
   const [enrichError, setEnrichError] = useState<string | null>(null);
+  const [isCompleting, setIsCompleting] = useState(false);
 
   const runningTasks = tasksData?.items?.filter((t) => t.status === "running" || t.status === "queued") || [];
   const [careerGoal, setCareerGoal] = useState("");
@@ -46,6 +47,8 @@ export default function Onboarding() {
   const updateProfile = useUpdateProfile();
 
   const handleComplete = () => {
+    if (isCompleting) return;
+    setIsCompleting(true);
     // Step 1: Run enrichment (scrape GitHub/portfolio/LinkedIn)
     if (github || portfolio || linkedin) {
       setEnrichProgress("Scanning your GitHub, portfolio, and social profiles...");
@@ -69,6 +72,7 @@ export default function Onboarding() {
           onError: (err: Error) => {
             setEnrichError(err.message || "Profile enrichment failed. You can retry later.");
             setEnrichProgress("");
+            setIsCompleting(false);
             // Still finish onboarding even if enrichment fails
             finishOnboarding(skills);
           },
@@ -119,7 +123,10 @@ export default function Onboarding() {
             toast.success("Profile saved!");
             navigate("/app");
           },
-          onError: () => toast.error("Failed to save profile. Please try again."),
+          onError: () => {
+            toast.error("Failed to save profile. Please try again.");
+            setIsCompleting(false);
+          },
         },
       );
     };
@@ -151,33 +158,33 @@ export default function Onboarding() {
   const addSkill = () => { if (skillInput.trim()) { setSkills([...skills, skillInput.trim()]); setSkillInput(""); } };
 
   return (
-    <div className="min-h-screen mesh-bg flex items-center justify-center p-4">
-      <div className="w-full max-w-2xl">
-        <div className="flex items-center gap-2 mb-8 justify-center">
+    <div className="min-h-screen mesh-bg flex items-start sm:items-center justify-center p-2 sm:p-4 pt-8 sm:pt-4">
+      <div className="w-full max-w-xl lg:max-w-2xl">
+        <div className="flex items-center gap-2 mb-4 sm:mb-8 justify-center">
           <div className="h-9 w-9 rounded-xl bg-gradient-1 flex items-center justify-center shadow-glow">
             <Sparkles className="h-5 w-5 text-primary-foreground" />
           </div>
           <span className="font-display font-bold text-lg">AgentForge Career OS</span>
         </div>
 
-        <div className="bento-card p-8">
+        <div className="bento-card p-4 sm:p-6 lg:p-8">
           <div className="flex items-center justify-between mb-2 text-xs text-muted-foreground">
             <span>Step {step + 1} of {steps.length}</span>
             <span>{steps[step]}</span>
           </div>
-          <Progress value={((step + 1) / steps.length) * 100} className="h-1.5 mb-8" />
+          <Progress value={((step + 1) / steps.length) * 100} className="h-1.5 mb-6 sm:mb-8" />
 
           {step === 0 && (
             <div className="text-center py-8 animate-fade-in">
-              <h1 className="font-display text-3xl font-bold">Welcome to your career OS.</h1>
+              <h1 className="font-display text-2xl sm:text-3xl font-bold">Welcome to your career OS.</h1>
               <p className="mt-3 text-muted-foreground">In 3 minutes, your agents will be working for you.</p>
             </div>
           )}
 
           {step === 1 && (
             <div className="space-y-4 animate-fade-in">
-              <h2 className="font-display text-2xl font-bold">Tell us about you</h2>
-              <div className="grid grid-cols-2 gap-4">
+              <h2 className="font-display text-xl sm:text-2xl font-bold">Tell us about you</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div><Label>Full name</Label><Input value={fullName} onChange={(e) => setFullName(e.target.value)} className="mt-1.5" /></div>
                 <div><Label>School</Label><Input value={school} onChange={(e) => setSchool(e.target.value)} className="mt-1.5" /></div>
                 <div><Label>Graduation</Label><Input value={graduation} onChange={(e) => setGraduation(e.target.value)} className="mt-1.5" placeholder="e.g., 2026-06-15" /></div>
@@ -188,7 +195,7 @@ export default function Onboarding() {
 
           {step === 2 && (
             <div className="space-y-4 animate-fade-in">
-              <h2 className="font-display text-2xl font-bold">Your skills</h2>
+              <h2 className="font-display text-xl sm:text-2xl font-bold">Your skills</h2>
               <p className="text-sm text-muted-foreground">We use these to match you to opportunities.</p>
               <div className="flex flex-wrap gap-2 min-h-[2.5rem] p-3 rounded-lg border bg-muted/30">
                 {skills.map((s) => (
@@ -212,8 +219,8 @@ export default function Onboarding() {
 
           {step === 3 && (
             <div className="space-y-4 animate-fade-in">
-              <h2 className="font-display text-2xl font-bold">What are you looking for?</h2>
-              <div className="grid grid-cols-2 gap-4">
+              <h2 className="font-display text-xl sm:text-2xl font-bold">What are you looking for?</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div><Label>Preferred locations</Label><Input value={locations} onChange={(e) => setLocations(e.target.value)} className="mt-1.5" /></div>
                 <div><Label>Salary expectation</Label><Input value={salary} onChange={(e) => setSalary(e.target.value)} className="mt-1.5" /></div>
                 <div><Label>Role types</Label><Input value={roleTypes} onChange={(e) => setRoleTypes(e.target.value)} className="mt-1.5" /></div>
@@ -236,7 +243,7 @@ export default function Onboarding() {
 
           {step === 4 && (
             <div className="space-y-4 animate-fade-in">
-              <h2 className="font-display text-2xl font-bold">Your career goal</h2>
+              <h2 className="font-display text-xl sm:text-2xl font-bold">Your career goal</h2>
               <p className="text-sm text-muted-foreground">Your Planner Agent uses this to prioritize work.</p>
               <Textarea
                 rows={5}
@@ -248,11 +255,11 @@ export default function Onboarding() {
           )}
 
           {step === 5 && (
-            <div className="text-center py-4 animate-fade-in">
-              <div className="h-16 w-16 rounded-2xl bg-gradient-1 mx-auto flex items-center justify-center shadow-glow animate-pulse-glow">
-                <Sparkles className="h-8 w-8 text-primary-foreground" />
+            <div className="text-center py-2 sm:py-4 animate-fade-in">
+              <div className="h-12 w-12 sm:h-16 sm:w-16 rounded-2xl bg-gradient-1 mx-auto flex items-center justify-center shadow-glow animate-pulse-glow">
+                <Sparkles className="h-6 w-6 sm:h-8 sm:w-8 text-primary-foreground" />
               </div>
-              <h2 className="font-display text-3xl font-bold mt-6">You're ready{fullName ? `, ${fullName}` : ""}.</h2>
+              <h2 className="font-display text-2xl sm:text-3xl font-bold mt-6">You're ready{fullName ? `, ${fullName}` : ""}.</h2>
               <p className="mt-3 text-muted-foreground">Your agents are spinning up now.</p>
 
               {/* Enrichment progress */}
@@ -346,12 +353,12 @@ export default function Onboarding() {
             </div>
           )}
 
-          <div className="flex justify-between mt-8 pt-6 border-t border-border/50">
+          <div className="flex justify-between mt-6 sm:mt-8 pt-4 sm:pt-6 border-t border-border/50">
             <Button variant="ghost" onClick={prev} disabled={step === 0} className="gap-2">
               <ArrowLeft className="h-4 w-4" /> Back
             </Button>
-            <Button onClick={next} className="bg-gradient-1 shadow-glow gap-2" disabled={step === steps.length - 1 && updateProfile.isPending}>
-              {step === steps.length - 1 ? (updateProfile.isPending ? "Saving…" : "Enter dashboard") : "Continue"}
+            <Button onClick={next} className="bg-gradient-1 shadow-glow gap-2" disabled={step === steps.length - 1 && (updateProfile.isPending || isCompleting)}>
+              {step === steps.length - 1 ? (updateProfile.isPending || isCompleting ? "Saving…" : "Enter dashboard") : "Continue"}
               <ArrowRight className="h-4 w-4" />
             </Button>
           </div>

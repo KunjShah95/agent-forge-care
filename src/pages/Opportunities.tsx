@@ -1090,6 +1090,9 @@ export default function Opportunities() {
                           <div className="min-w-0">
                             <div className="font-display font-semibold leading-tight group-hover:text-primary transition flex items-center gap-1.5">
                               {o.title}
+                              {o.title.startsWith("[DEMO]") && (
+                                <Badge variant="outline" className="text-[10px] border-amber-500/40 text-amber-400">DEMO</Badge>
+                              )}
                               {isHighMatch && <Sparkles className="h-3.5 w-3.5 text-amber-400 shrink-0" />}
                             </div>
                             <div className="text-xs text-muted-foreground">{o.company}</div>

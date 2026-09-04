@@ -21,6 +21,21 @@ logger = logging.getLogger("agentforge.opportunities")
 router = APIRouter()
 
 
+def _escape_like(value: str) -> str:
+    """Escape LIKE wildcards so user input can't alter query semantics."""
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _parse_uuid(value: str) -> str:
+    """Validate path ID is a UUID; raises 422 otherwise (no DB hit on garbage)."""
+    import uuid as _uuid
+
+    try:
+        return str(_uuid.UUID(str(value)))
+    except (ValueError, AttributeError, TypeError):
+        raise HTTPException(status_code=422, detail="ID must be a valid UUID")
+
+
 def _extract_company_from_title(title: str) -> str:
     """Extract a company/organization name from a hackathon title."""
     m = re.search(r"\b(at|by|hosted by|presented by)\s+([A-Z][A-Za-z0-9\s&.]+)", title, re.I)
@@ -69,19 +84,19 @@ async def list_opportunities(
     if work_type:
         query = query.where(Opportunity.work_type == work_type)
     if city:
-        query = query.where(Opportunity.city.ilike(f"%{city}%"))
+        query = query.where(Opportunity.city.ilike(f"%{_escape_like(city)}%", escape="\\"))
     if state:
-        query = query.where(Opportunity.state.ilike(f"%{state}%"))
+        query = query.where(Opportunity.state.ilike(f"%{_escape_like(state)}%", escape="\\"))
     if country:
-        query = query.where(Opportunity.country.ilike(f"%{country}%"))
+        query = query.where(Opportunity.country.ilike(f"%{_escape_like(country)}%", escape="\\"))
     if industry:
-        query = query.where(Opportunity.industry.ilike(f"%{industry}%"))
+        query = query.where(Opportunity.industry.ilike(f"%{_escape_like(industry)}%", escape="\\"))
     if search:
-        search_term = f"%{search}%"
+        search_term = f"%{_escape_like(search)}%"
         query = query.where(
-            Opportunity.title.ilike(search_term)
-            | Opportunity.company.ilike(search_term)
-            | Opportunity.description.ilike(search_term)
+            Opportunity.title.ilike(search_term, escape="\\")
+            | Opportunity.company.ilike(search_term, escape="\\")
+            | Opportunity.description.ilike(search_term, escape="\\")
         )
 
     # Count total
@@ -368,11 +383,10 @@ async def get_opportunity(
     db: AsyncSession = Depends(get_db),
 ):
     """Get a single opportunity by ID."""
-    if not id or not isinstance(id, str) or len(id.strip()) < 1:
-        raise HTTPException(status_code=422, detail="ID must be a non-empty string")
+    oid = _parse_uuid(id)
 
     try:
-        result = await db.execute(select(Opportunity).where(Opportunity.id == id, Opportunity.user_id == user.id))
+        result = await db.execute(select(Opportunity).where(Opportunity.id == oid, Opportunity.user_id == user.id))
         opp = result.scalar_one_or_none()
         if not opp:
             raise HTTPException(status_code=404, detail="Opportunity not found")

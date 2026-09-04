@@ -186,6 +186,38 @@ export const opportunities = {
     }>("/opportunities/locations"),
 };
 
+// Career insights (differentiators: salary bands, skill gaps, deadlines)
+export const insights = {
+  salary: (title?: string) =>
+    request<{
+      count: number;
+      min?: number | null;
+      median_mid?: number | null;
+      max?: number | null;
+      currency?: string;
+      negotiation_tip?: string;
+      message?: string;
+    }>("/insights/salary-insights", { params: title ? { title } : undefined }),
+
+  skillGap: (opportunity_id: string) =>
+    request<{
+      opportunity: { id: string; title: string; company: string };
+      matched: string[];
+      missing: string[];
+      coverage_pct: number;
+      match_score?: number | null;
+      match_reasons: string[];
+      learn_next: string[];
+    }>(`/insights/skill-gap/${opportunity_id}`),
+
+  deadlines: (limit = 10) =>
+    request<{
+      items: { kind: string; id: string; title: string; company: string; date: string; overdue: boolean }[];
+      total: number;
+      today: string;
+    }>("/insights/upcoming-deadlines", { params: { limit } }),
+};
+
 // Applications
 export const applications = {
   list: () => request<{ items: Application[] }>("/applications"),

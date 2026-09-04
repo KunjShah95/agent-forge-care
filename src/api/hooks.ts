@@ -27,7 +27,8 @@ export function useUpdateProfile() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: api.profile.update,
-    onSuccess: () => {
+    onSuccess: (data) => {
+      qc.setQueryData(["profile"], data);
       qc.invalidateQueries({ queryKey: ["profile"] });
       qc.invalidateQueries({ queryKey: ["auth", "me"] });
     },
@@ -395,6 +396,33 @@ export function useFilterOptions() {
     queryFn: api.opportunities.filters,
     enabled: !!api.getAuthToken(),
     staleTime: 10 * 60 * 1000,
+  });
+}
+
+export function useSalaryInsights(title?: string) {
+  return useQuery({
+    queryKey: ["insights", "salary", title ?? "all"],
+    queryFn: () => api.insights.salary(title),
+    enabled: !!api.getAuthToken(),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useSkillGap(opportunityId: string | null) {
+  return useQuery({
+    queryKey: ["insights", "skill-gap", opportunityId],
+    queryFn: () => api.insights.skillGap(opportunityId as string),
+    enabled: !!api.getAuthToken() && !!opportunityId,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useUpcomingDeadlines(limit = 10) {
+  return useQuery({
+    queryKey: ["insights", "deadlines", limit],
+    queryFn: () => api.insights.deadlines(limit),
+    enabled: !!api.getAuthToken(),
+    staleTime: 60 * 1000,
   });
 }
 

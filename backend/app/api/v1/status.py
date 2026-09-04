@@ -360,7 +360,9 @@ async def system_status():
             break
         databases["postgresql"] = {"status": "connected"}
     except Exception as e:
-        databases["postgresql"] = {"status": "error", "error": str(e)[:100]}
+        databases["postgresql"] = (
+            {"status": "error", "error": str(e)[:100]} if settings.debug else {"status": "error"}
+        )
 
     # Qdrant
     try:
@@ -368,9 +370,11 @@ async def system_status():
         collections = qdrant.get_collections()
         collection_names = [c.name for c in collections.collections]
         qdrant.close()
-        databases["qdrant"] = {"status": "connected", "collections": collection_names}
+        databases["qdrant"] = {"status": "connected", "collections": collection_names} if settings.debug else {"status": "connected"}
     except Exception as e:
-        databases["qdrant"] = {"status": "unavailable", "error": str(e)[:100]}
+        databases["qdrant"] = (
+            {"status": "unavailable", "error": str(e)[:100]} if settings.debug else {"status": "unavailable"}
+        )
 
     # Redis
     try:
@@ -379,7 +383,9 @@ async def system_status():
         await r.ping()
         databases["redis"] = {"status": "connected"}
     except Exception as e:
-        databases["redis"] = {"status": "unavailable", "error": str(e)[:100]}
+        databases["redis"] = (
+            {"status": "unavailable", "error": str(e)[:100]} if settings.debug else {"status": "unavailable"}
+        )
 
     # ── Agent System ───────────────────────────────────────
     try:
