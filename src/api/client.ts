@@ -296,6 +296,29 @@ export const agents = {
     request<void>("/agents/tasks/clear", { method: "DELETE" }),
 };
 
+// Hireability (HR talent report: GitHub + portfolio + Medium/blog signals)
+export interface HireabilityDimension {
+  name: string;
+  score: number;
+  max: number;
+  evidence: string[];
+}
+export interface HireabilityReport {
+  score: number;
+  band: string;
+  recommendation: string;
+  confidence: number;
+  sources_loaded: number;
+  dimensions: HireabilityDimension[];
+  generated_at: string;
+  fairness_note: string;
+  signals: { github: boolean; portfolio: boolean; medium: boolean; blog: boolean; resume: boolean };
+}
+export const hireability = {
+  report: (data: { github_url?: string; portfolio_url?: string; medium_handle?: string; blog_url?: string; resume_text?: string; position_type?: string }) =>
+    request<HireabilityReport>("/hireability/report", { method: "POST", body: data }),
+};
+
 // Memory
 export const memory = {
   list: () => request<{ items: MemoryEntry[] }>("/memory"),

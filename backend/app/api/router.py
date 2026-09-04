@@ -13,6 +13,7 @@ def register_routes():
         chat,
         contacts,
         gdpr,
+        hireability,
         hiring_agent,
         insights,
         memory,
@@ -40,6 +41,7 @@ def register_routes():
     router.include_router(gdpr.router, prefix="/gdpr", tags=["GDPR"])
     router.include_router(status.router, tags=["Status"])
     router.include_router(hiring_agent.router, prefix="/hiring-agent", tags=["Hiring Agent"])
+    router.include_router(hireability.router, prefix="/hireability", tags=["Hireability"])
     from app.agents.orchestrator.router import router as orchestrator_router
 
     router.include_router(orchestrator_router, prefix="/orchestrator", tags=["Orchestrator"])

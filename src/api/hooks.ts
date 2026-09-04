@@ -310,6 +310,14 @@ export function useResearch() {
   });
 }
 
+// ─── Hireability Report ───────────────────────────────────
+
+export function useHireabilityReport() {
+  return useMutation({
+    mutationFn: api.hireability.report,
+  });
+}
+
 // ─── Cover Letter ───────────────────────────────────────
 
 export function useCoverLetter() {

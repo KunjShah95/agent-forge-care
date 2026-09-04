@@ -5,8 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Building2, TrendingUp, BookOpen, FileText, Search, Loader2, Save, Code, Lightbulb, DollarSign, Users, Target } from "lucide-react";
-import { useResearch, useCreateMemory, useMemory } from "@/api/hooks";
+import { Building2, TrendingUp, BookOpen, FileText, Search, Loader2, Save, Code, Lightbulb, DollarSign, Users, Target, Award } from "lucide-react";
+import { useResearch, useCreateMemory, useMemory, useHireabilityReport } from "@/api/hooks";
+import type { HireabilityReport } from "@/api/client";
+import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 
 export default function ResearchCenter() {
@@ -23,6 +25,34 @@ export default function ResearchCenter() {
   const research = useResearch();
   const researchInsights = useResearch();
   const researchTrends = useResearch();
+  const hireability = useHireabilityReport();
+  const [ghUrl, setGhUrl] = useState("");
+  const [pfUrl, setPfUrl] = useState("");
+  const [medHandle, setMedHandle] = useState("");
+  const [blogUrl, setBlogUrl] = useState("");
+  const [talentReport, setTalentReport] = useState<HireabilityReport | null>(null);
+
+  const handleTalentReport = async () => {
+    if (!ghUrl && !pfUrl && !medHandle && !blogUrl) {
+      toast.error("Enter at least one profile: GitHub, portfolio, Medium, or blog");
+      return;
+    }
+    try {
+      const result = await hireability.mutateAsync({
+        github_url: ghUrl || undefined,
+        portfolio_url: pfUrl || undefined,
+        medium_handle: medHandle || undefined,
+        blog_url: blogUrl || undefined,
+      });
+      setTalentReport(result);
+      toast.success(`Talent report ready — ${result.score}/100 (${result.band})`);
+    } catch {
+      toast.error("Talent report failed. Please try again.");
+    }
+  };
+
+  const bandColor = (band: string) =>
+    band === "strong_hire" ? "text-emerald-400" : band === "hire" ? "text-primary" : band === "consider" ? "text-amber-400" : "text-muted-foreground";
   const createMemory = useCreateMemory();
   const { data: memoriesData } = useMemory();
 
@@ -140,6 +170,7 @@ export default function ResearchCenter() {
           <TabsTrigger value="companies"><Building2 className="h-3 w-3 mr-1" /> Companies</TabsTrigger>
           <TabsTrigger value="insights"><BookOpen className="h-3 w-3 mr-1" /> Interview Insights</TabsTrigger>
           <TabsTrigger value="trends"><TrendingUp className="h-3 w-3 mr-1" /> Industry Trends</TabsTrigger>
+          <TabsTrigger value="talent"><Award className="h-3 w-3 mr-1" /> Talent Report</TabsTrigger>
           <TabsTrigger value="notes"><FileText className="h-3 w-3 mr-1" /> Notes</TabsTrigger>
         </TabsList>
 
@@ -345,6 +376,62 @@ export default function ResearchCenter() {
               </div>
             </Card>
           ))}
+        </TabsContent>
+
+        <TabsContent value="talent" className="mt-4 space-y-4">
+          <Card className="bento-card p-5">
+            <h3 className="font-display font-semibold mb-1">Candidate hireability report</h3>
+            <p className="text-xs text-muted-foreground mb-4">GitHub activity, portfolio, and Medium/blog writing scored into one HR-readable verdict. Skills and public activity only.</p>
+            <div className="grid sm:grid-cols-2 gap-2">
+              <Input placeholder="GitHub URL (https://github.com/...)" value={ghUrl} onChange={(e) => setGhUrl(e.target.value)} />
+              <Input placeholder="Portfolio URL" value={pfUrl} onChange={(e) => setPfUrl(e.target.value)} />
+              <Input placeholder="Medium handle (@alice or alice)" value={medHandle} onChange={(e) => setMedHandle(e.target.value)} />
+              <Input placeholder="Blog URL" value={blogUrl} onChange={(e) => setBlogUrl(e.target.value)} />
+            </div>
+            <Button className="bg-gradient-1 shadow-glow gap-2 mt-3" onClick={handleTalentReport} disabled={hireability.isPending}>
+              {hireability.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Award className="h-4 w-4" />}
+              {hireability.isPending ? "Scoring…" : "Generate report"}
+            </Button>
+          </Card>
+
+          {talentReport && (
+            <Card className="bento-card p-5 border-primary/30">
+              <div className="flex flex-wrap items-center gap-4 mb-5">
+                <div className={`font-display font-bold text-4xl ${bandColor(talentReport.band)}`}>{talentReport.score}<span className="text-lg text-muted-foreground">/100</span></div>
+                <div>
+                  <Badge variant="secondary" className="capitalize">{talentReport.band.replace("_", " ")}</Badge>
+                  <p className="text-sm text-muted-foreground mt-1">{talentReport.recommendation}</p>
+                </div>
+                <span className="ml-auto text-xs text-muted-foreground font-mono">confidence {Math.round(talentReport.confidence * 100)}% · {talentReport.sources_loaded}/4 sources</span>
+              </div>
+              <div className="space-y-4">
+                {talentReport.dimensions.map((d) => (
+                  <div key={d.name}>
+                    <div className="flex items-center justify-between text-sm mb-1.5">
+                      <span className="capitalize font-medium">{d.name.replace("_", " ")}</span>
+                      <span className="font-mono text-xs text-muted-foreground">{d.score}/{d.max}</span>
+                    </div>
+                    <Progress value={(d.score / d.max) * 100} className="h-1.5 bg-muted/40" />
+                    {d.evidence.length > 0 && (
+                      <ul className="mt-1.5 space-y-1">
+                        {d.evidence.map((e, i) => (
+                          <li key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
+                            <span className="mt-1.5 h-1 w-1 rounded-full bg-primary flex-shrink-0" />{e}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-1.5 mt-5">
+                {Object.entries(talentReport.signals).map(([k, v]) => (
+                  <Badge key={k} variant={v ? "default" : "outline"} className="text-[11px] capitalize">{k}{v ? " ✓" : " —"}</Badge>
+                ))}
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-4">{talentReport.fairness_note}</p>
+            </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="notes" className="mt-4">
