@@ -193,7 +193,7 @@ export default function Settings() {
               </div>
             </div>
             {isLoading ? (
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {Array.from({ length: 6 }).map((_, i) => (
                   <div key={i} className="space-y-2">
                     <Skeleton className="h-4 w-16" />
@@ -203,8 +203,8 @@ export default function Settings() {
               </div>
             ) : (
               <form onSubmit={handleSubmit(onSubmit)}>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="col-span-2"><Label>Full Name</Label><Input {...register("full_name")} className="mt-1.5" /></div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="sm:col-span-2"><Label>Full Name</Label><Input {...register("full_name")} className="mt-1.5" /></div>
                   <div><Label>School</Label><Input {...register("school")} className="mt-1.5" /></div>
                   <div><Label>Graduation Date</Label><Input {...register("graduation_date")} className="mt-1.5" placeholder="e.g., 2026-06-15" /></div>
                   <div><Label>Portfolio URL</Label><Input {...register("portfolio_url")} className="mt-1.5" /></div>

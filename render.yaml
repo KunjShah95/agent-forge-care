@@ -1,9 +1,67 @@
+# Resource names (keep wiring references in sync):
+#   web:   careeros-api
+#   db:    careeros-db
+#   cache: careeros-redis
+
 services:
   - type: web
     name: careeros-api
-    env: python
+    runtime: python
+    plan: free
     rootDir: backend
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
-    autoDeploy: true
     healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12"
+      - key: DEBUG
+        value: "false"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: careeros-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: careeros-redis
+          type: keyvalue
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: SECRET_KEY
+        generateValue: true
+      - key: JWT_ALGORITHM
+        value: "HS256"
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: QDRANT_URL
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: TAVILY_API_KEY
+        sync: false
+      - key: SERPAPI_KEY
+        sync: false
+      - key: SENDGRID_API_KEY
+        sync: false
+
+  # Redis-compatible Key Value store (NOT a database — must live here,
+  # with type keyvalue, and be wired via fromService).
+  - type: keyvalue
+    name: careeros-redis
+    plan: free
+    ipAllowList: []
+
+databases:
+  - name: careeros-db
+    plan: free
+    databaseName: careeros

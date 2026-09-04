@@ -147,7 +147,7 @@ function StageColumn({
   const visibleApps = showAll ? stageApps : stageApps.slice(0, MAX_VISIBLE);
 
   return (
-    <div className="flex flex-col min-h-[400px]">
+    <div className="flex flex-col min-h-[400px] min-w-[240px] snap-start lg:min-w-0">
       <div className="flex items-center justify-between mb-3 px-1">
         <div className="flex items-center gap-2">
           <span className="font-display font-semibold text-sm">{stage}</span>
@@ -302,7 +302,7 @@ export default function Applications() {
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
-          <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
+          <div className="flex gap-4 overflow-x-auto snap-x snap-mandatory pb-4 -mx-1 px-1 lg:grid lg:grid-cols-6 lg:overflow-visible lg:snap-none lg:pb-0 lg:mx-0 lg:px-0">
             {stages.map((stage) => (
               <StageColumn
                 key={stage}

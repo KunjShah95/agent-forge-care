@@ -37,7 +37,7 @@ Alternatively, use the **Blueprint** method:
 1. Click **"New +" → "Blueprint"**
 2. Connect your GitHub repository
 3. Select the `agent-forge-care` repository
-4. Render will read `render.yaml` and `backend/render.yaml`
+4. Render will read the root `render.yaml` Blueprint (API + Postgres + Key Value)
 
 ### 1.3 Add PostgreSQL Database
 1. Click **"New +" → "PostgreSQL"**

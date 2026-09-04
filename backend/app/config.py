@@ -179,6 +179,13 @@ class Settings(BaseSettings):
             raise ValueError("database_url cannot be empty")
         if "://" not in v:
             raise ValueError("database_url must contain protocol (e.g., postgresql://)")
+        # Normalize to the asyncpg driver: Render/Heroku-style URLs arrive as
+        # postgres:// or postgresql://, but every consumer (engine, alembic,
+        # checkpointer) uses SQLAlchemy asyncio which requires +asyncpg.
+        if v.startswith("postgres://"):
+            v = "postgresql+asyncpg://" + v[len("postgres://") :]
+        elif v.startswith("postgresql://"):
+            v = "postgresql+asyncpg://" + v[len("postgresql://") :]
         return v
 
     @field_validator(
