@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
 import { setAuthToken } from "@/api/client";
 import { auth as authApi } from "@/api/client";

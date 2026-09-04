@@ -15,7 +15,6 @@ export type AgentTypeInfo = {
   label: string;
 };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const T = (k: AgentTypeKey, n: string, i: LucideIcon, l: string): AgentTypeInfo => ({ key: k, name: n, icon: i, label: l });
 
 export const AGENT_TYPES: AgentTypeInfo[] = [

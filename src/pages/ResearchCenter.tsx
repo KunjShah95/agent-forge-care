@@ -77,7 +77,7 @@ export default function ResearchCenter() {
         const questions = interviewData?.common_questions as string[] | undefined;
         if (questions && questions.length > 0) {
           setInsights(questions.map((q, i) => ({
-            company: typeof researchInput === "string" && researchInput ? researchInput : "Tech",
+            company: "Tech",
             text: q,
             date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" }),
           })));
@@ -90,7 +90,7 @@ export default function ResearchCenter() {
       }
     };
     fetchInsights();
-  }, []);
+  }, [researchInsights]);
 
   useEffect(() => {
     const fetchTrends = async () => {
@@ -122,7 +122,7 @@ export default function ResearchCenter() {
       }
     };
     fetchTrends();
-  }, []);
+  }, [researchTrends]);
 
   const handleResearch = async (companyName?: string) => {
     const target = companyName || researchInput;

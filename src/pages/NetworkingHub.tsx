@@ -104,7 +104,7 @@ export default function NetworkingHub() {
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
-  }, [contacts.length, totalPages]);
+  }, [page, contacts.length, totalPages]);
 
   return (
     <div className="space-y-6 max-w-[1400px]">

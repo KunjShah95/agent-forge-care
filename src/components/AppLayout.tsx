@@ -64,6 +64,7 @@ export default function AppLayout() {
             }}
           >
             <SidebarTrigger
+              title="Toggle sidebar (Ctrl+B)"
               className="text-white/40 hover:text-white transition-colors"
               style={{ color: MUTED }}
             />
@@ -81,7 +82,7 @@ export default function AppLayout() {
               <Search className="h-3.5 w-3.5" />
               <span>Search…</span>
               <kbd
-                className="ml-6 font-mono text-[10px] px-1.5 py-0.5 rounded"
+                className="ml-6 hidden sm:inline-block font-mono text-[10px] px-1.5 py-0.5 rounded"
                 style={{
                   background: "rgba(255,255,255,0.06)",
                   color: MUTED,
