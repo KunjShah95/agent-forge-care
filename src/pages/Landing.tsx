@@ -1,505 +1,443 @@
-import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import {
+  ArrowRight,
+  BellRing,
+  FileText,
+  MessagesSquare,
+  Mic,
+  Search,
+  Users,
+} from "lucide-react";
 
-const VIDEO_URL =
-  "https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260314_131748_f2ca2a28-fed7-44c8-b9a9-bd9acdd5ec31.mp4";
+/* CareerOS landing. Dark theme locked. Single accent: emerald. */
 
 const NAV_LINKS = [
-  { label: "Home",     href: "#",        active: true },
-  { label: "Studio",   href: "#tools" },
-  { label: "About",    href: "#mission" },
-  { label: "Journal",  href: "#process" },
-  { label: "Reach Us", href: "#cta" },
+  { label: "Product", href: "#agents" },
+  { label: "How it works", href: "#process" },
+  { label: "Pricing", href: "#pricing" },
+  { label: "FAQ", href: "#faq" },
 ];
 
-const TOOLS = [
+const SOURCES = [
+  { name: "LinkedIn", slug: "linkedin" },
+  { name: "Indeed", slug: "indeed" },
+  { name: "Glassdoor", slug: "glassdoor" },
+  { name: "Y Combinator", slug: "ycombinator" },
+  { name: "Stack Overflow", slug: "stackoverflow" },
+  { name: "GitHub", slug: "github" },
+];
+
+const AGENTS = [
   {
-    num: "01",
-    name: "Resume Studio",
-    tagline: "Rewritten with purpose",
-    desc: "Each resume tailored to the role — keyword-matched, voice-preserved, ATS-ready. Not polished. Positioned.",
-  },
-  {
-    num: "02",
-    name: "Interview Prep",
-    tagline: "Walk in ready",
-    desc: "Mock sessions shaped around your background. Real feedback, model answers, and no generic scripts.",
-  },
-  {
-    num: "03",
-    name: "Research Agent",
-    tagline: "Know before you go",
-    desc: "Deep company briefs — culture signals, recent news, interview patterns, and the things Glassdoor won't say.",
-  },
-  {
-    num: "04",
+    icon: BellRing,
     name: "Opportunity Monitor",
-    tagline: "Never miss a signal",
-    desc: "Agents scan 50+ sources around the clock and surface roles that fit before the window closes.",
+    desc: "Scans 50+ sources around the clock. High matches land in your inbox before the window closes.",
+    tint: true,
   },
   {
-    num: "05",
+    icon: FileText,
+    name: "Resume Studio",
+    desc: "ATS analysis plus tailored rewrites. Pass through rates up 40% on average.",
+    tint: false,
+  },
+  {
+    icon: Mic,
+    name: "Interview Prep",
+    desc: "Mock sessions with real feedback. Behavioral, technical, and company specific.",
+    tint: false,
+  },
+  {
+    icon: Search,
+    name: "Research Agent",
+    desc: "Company briefs with culture signals, recent news, and interview patterns.",
+    tint: true,
+  },
+  {
+    icon: Users,
     name: "Networking Hub",
-    tagline: "Warm introductions",
-    desc: "Outreach drafts, relationship tracking, follow-up timing — the infrastructure for connections that actually land.",
+    desc: "Find the right people, draft outreach that lands, track every follow up.",
+    tint: false,
   },
   {
-    num: "06",
+    icon: MessagesSquare,
     name: "Career Coach",
-    tagline: "Strategy over hustle",
-    desc: "Honest, data-backed guidance built on your actual situation — not a motivational template.",
+    desc: "Strategy built on your profile and market data. No motivational templates.",
+    tint: false,
   },
 ];
 
 const STEPS = [
   {
     num: "01",
-    title: "Share your vision",
-    desc: "Tell the system where you want to go and what you've built so far. That's all it needs to begin.",
+    title: "Tell us where you want to go",
+    desc: "Upload a resume, add skills, set preferences. Five minutes and your agents have what they need.",
   },
   {
     num: "02",
-    title: "Agents get to work",
-    desc: "Eight specialists discover roles, research companies, optimize materials, and track every deadline — without being asked twice.",
+    title: "Agents work while you live",
+    desc: "Discovery, tailoring, prep, and follow ups run in the background. You return to results, not tasks.",
   },
   {
     num: "03",
     title: "You make the moves",
-    desc: "With full intelligence in hand, not guesswork. The work is done. You choose what matters.",
+    desc: "Every application ships with intelligence attached. The groundwork is done. You choose.",
   },
 ];
 
 const STATS = [
-  { value: "24/7", label: "Opportunity monitoring" },
-  { value: "8",    label: "Specialist agents" },
-  { value: "50+",  label: "Sources scanned daily" },
-  { value: "78%",  label: "Match accuracy" },
+  { value: "24/7", label: "Monitoring" },
+  { value: "8", label: "Specialist agents" },
+  { value: "50+", label: "Sources scanned" },
+  { value: "78%", label: "Match accuracy" },
 ];
 
-const MARQUEE_ITEMS = [
-  "Discover", "Build", "Connect", "Thrive",
-  "Discover", "Build", "Connect", "Thrive",
+const QUOTES = [
+  {
+    body: "Applied to eleven roles in a week. Every one felt hand written. Three callbacks.",
+    name: "Priya N.",
+    role: "New grad, frontend",
+  },
+  {
+    body: "The interview prep called out the exact system design round I walked into.",
+    name: "Marcus T.",
+    role: "Career switcher, backend",
+  },
+  {
+    body: "It found a fellowship I had never heard of. Deadline in four days. I made it.",
+    name: "Sofia R.",
+    role: "Student, ML",
+  },
 ];
 
-const MUTED = "hsl(240, 4%, 66%)";
-const BORDER = "rgba(255,255,255,0.08)";
-const CARD_BG = "rgba(255,255,255,0.03)";
+const PLANS = [
+  {
+    name: "Free",
+    price: "$0",
+    per: "forever",
+    points: ["50 scans / month", "3 resume analyses", "2 mock interviews", "3 agents"],
+    featured: false,
+  },
+  {
+    name: "Pro",
+    price: "$29",
+    per: "per month, billed annually",
+    points: ["Unlimited everything", "All 8 agents", "24/7 monitoring + alerts", "Offer coaching"],
+    featured: true,
+  },
+  {
+    name: "Team",
+    price: "$79",
+    per: "per user / month",
+    points: ["Shared workspace", "API access", "Coach overview", "Priority support"],
+    featured: false,
+  },
+];
 
-function useReveal<T extends HTMLElement>() {
-  const ref = useRef<T>(null);
-  const [visible, setVisible] = useState(false);
+const FAQS = [
+  {
+    q: "How is this different from a job board?",
+    a: "Boards list roles. CareerOS runs the search for you: discovery, tailoring, prep, outreach, and tracking across eight agents with shared memory.",
+  },
+  {
+    q: "Do I need to pay to start?",
+    a: "No. The free plan covers light usage with no credit card. Pro unlocks unlimited scans and all eight agents.",
+  },
+  {
+    q: "Which industries are covered?",
+    a: "Tech and tech enabled roles have the deepest coverage: engineering, data, design, and product across full time, contract, and internships.",
+  },
+  {
+    q: "Is my data used for training?",
+    a: "No. Personal data is never used for general model training. Full export and deletion are available on request.",
+  },
+];
 
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const obs = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setVisible(true);
-          obs.disconnect();
-        }
-      },
-      { threshold: 0.1 }
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, []);
-
-  return { ref, visible };
-}
-
-function Reveal({
-  children,
-  delay = 0,
-  className = "",
-}: {
-  children: React.ReactNode;
-  delay?: number;
-  className?: string;
-}) {
-  const { ref, visible } = useReveal<HTMLDivElement>();
-  return (
-    <div
-      ref={ref}
-      className={className}
-      style={{
-        opacity: visible ? 1 : 0,
-        transform: visible ? "translateY(0)" : "translateY(28px)",
-        transition: `opacity 0.75s ease-out ${delay}s, transform 0.75s ease-out ${delay}s`,
-      }}
-    >
-      {children}
-    </div>
-  );
-}
+const INK = "#0B1220";
+const PAPER = "#F4F2EC";
+const MUTED = "rgba(244,242,236,0.62)";
+const FAINT = "rgba(244,242,236,0.38)";
+const LINE = "rgba(244,242,236,0.12)";
+const ACCENT = "#34D399";
 
 export default function Landing() {
   return (
-    <div
-      style={{
-        background: "hsl(201, 100%, 13%)",
-        fontFamily: "var(--font-body)",
-        color: "white",
-      }}
-    >
-      {/* ── Hero ── */}
-      <section className="min-h-screen relative overflow-hidden">
-        <video
-          autoPlay
-          loop
-          muted
-          playsInline
-          className="absolute inset-0 w-full h-full object-cover z-0"
-        >
-          <source src={VIDEO_URL} type="video/mp4" />
-        </video>
-
-        <div className="relative z-10 flex flex-col min-h-screen">
-          {/* Nav */}
-          <nav className="px-8 py-6">
-            <div className="max-w-7xl mx-auto flex items-center justify-between">
-              <Link
-                to="/"
-                className="text-3xl tracking-tight text-white"
-                style={{ fontFamily: "var(--font-display)" }}
-              >
-                Velorah<sup className="text-xs">®</sup>
-              </Link>
-
-              <ul className="hidden md:flex items-center gap-8">
-                {NAV_LINKS.map(({ label, href, active }) => (
-                  <li key={label}>
-                    <a
-                      href={href}
-                      style={{ color: active ? "white" : MUTED }}
-                      className="text-sm transition-colors duration-200 hover:text-white"
-                    >
-                      {label}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-
-              <a href="#cta">
-                <button className="liquid-glass rounded-full px-6 py-2.5 text-sm text-white transition-transform duration-200 hover:scale-[1.03] cursor-pointer">
-                  Begin Journey
-                </button>
-              </a>
-            </div>
-          </nav>
-
-          {/* Hero content */}
-          <div className="flex flex-col items-center text-center px-6 pt-32 pb-40">
-            <h1
-              className="animate-fade-rise text-5xl sm:text-7xl md:text-8xl font-normal max-w-7xl"
-              style={{
-                fontFamily: "var(--font-display)",
-                lineHeight: 0.95,
-                letterSpacing: "-2.46px",
-              }}
-            >
-              Where{" "}
-              <em className="not-italic" style={{ color: MUTED }}>
-                dreams
-              </em>{" "}
-              rise{" "}
-              <em className="not-italic" style={{ color: MUTED }}>
-                through the silence.
-              </em>
-            </h1>
-
-            <p
-              className="animate-fade-rise-delay mt-8 max-w-2xl text-base sm:text-lg leading-relaxed"
-              style={{ color: MUTED }}
-            >
-              We're designing tools for deep thinkers, bold creators, and quiet
-              rebels. Amid the chaos, we build digital spaces for sharp focus
-              and inspired work.
-            </p>
-
-            <a href="#cta" className="animate-fade-rise-delay-2 mt-12">
-              <button className="liquid-glass rounded-full px-14 py-5 text-base text-white transition-transform duration-200 hover:scale-[1.03] cursor-pointer">
-                Begin Journey
-              </button>
-            </a>
-          </div>
-        </div>
-      </section>
-
-      {/* ── Marquee strip ── */}
-      <div
-        className="overflow-hidden py-6"
-        style={{ borderTop: `1px solid ${BORDER}`, borderBottom: `1px solid ${BORDER}` }}
-      >
-        <div className="flex w-max animate-marquee select-none">
-          {[...MARQUEE_ITEMS, ...MARQUEE_ITEMS].map((item, i) => (
-            <span
-              key={i}
-              className="px-10 text-sm tracking-[0.2em] uppercase"
-              style={{ color: MUTED }}
-            >
-              {item}
-              <span className="mx-10 opacity-30">·</span>
-            </span>
-          ))}
-        </div>
-      </div>
-
-      {/* ── Mission ── */}
-      <section
-        id="mission"
-        className="px-8 py-32"
-        style={{ borderBottom: `1px solid ${BORDER}` }}
-      >
-        <div className="max-w-7xl mx-auto grid md:grid-cols-2 gap-16 items-start">
-          <Reveal>
-            <p
-              className="text-4xl sm:text-5xl leading-tight"
-              style={{ fontFamily: "var(--font-display)", lineHeight: 1.1 }}
-            >
-              <em className="not-italic" style={{ color: MUTED }}>
-                The best career moves
-              </em>{" "}
-              aren't made in a rush.
-            </p>
-          </Reveal>
-
-          <Reveal delay={0.15}>
-            <p
-              className="text-base sm:text-lg leading-relaxed mb-8"
-              style={{ color: MUTED }}
-            >
-              They're made with clarity, the right intelligence, and time to
-              think. Velorah gives you an eight-agent system that handles the
-              search, the prep, and the research — so you can focus on what only
-              you can do.
-            </p>
-            <ul className="space-y-4">
-              {[
-                "Eight specialists. One shared memory. Zero repetition.",
-                "Runs continuously — you come back to results, not tasks.",
-              ].map((point) => (
-                <li
-                  key={point}
-                  className="flex items-start gap-3 text-sm"
-                  style={{ color: MUTED }}
-                >
-                  <span className="mt-1.5 h-1 w-1 rounded-full flex-shrink-0 bg-white opacity-40" />
-                  {point}
-                </li>
-              ))}
-            </ul>
-          </Reveal>
-        </div>
-      </section>
-
-      {/* ── Tools ── */}
-      <section id="tools" className="px-8 py-32" style={{ borderBottom: `1px solid ${BORDER}` }}>
-        <div className="max-w-7xl mx-auto">
-          <Reveal className="mb-16">
-            <span
-              className="text-xs tracking-[0.2em] uppercase"
-              style={{ color: MUTED }}
-            >
-              What we build
-            </span>
-            <h2
-              className="mt-4 text-4xl sm:text-5xl font-normal"
-              style={{ fontFamily: "var(--font-display)", lineHeight: 1.05 }}
-            >
-              Six tools. One direction.
-            </h2>
-          </Reveal>
-
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-px"
-            style={{ border: `1px solid ${BORDER}` }}>
-            {TOOLS.map((tool, i) => (
-              <Reveal key={tool.num} delay={i * 0.07}>
-                <div
-                  className="p-8 h-full flex flex-col gap-4 transition-colors duration-300"
-                  style={{ background: CARD_BG, borderRight: `1px solid ${BORDER}`, borderBottom: `1px solid ${BORDER}` }}
-                  onMouseEnter={(e) =>
-                    ((e.currentTarget as HTMLDivElement).style.background =
-                      "rgba(255,255,255,0.06)")
-                  }
-                  onMouseLeave={(e) =>
-                    ((e.currentTarget as HTMLDivElement).style.background = CARD_BG)
-                  }
-                >
-                  <span
-                    className="text-xs tracking-widest font-mono"
-                    style={{ color: MUTED }}
-                  >
-                    {tool.num}
-                  </span>
-                  <div>
-                    <h3
-                      className="text-xl font-normal mb-1"
-                      style={{ fontFamily: "var(--font-display)" }}
-                    >
-                      {tool.name}
-                    </h3>
-                    <p className="text-sm italic" style={{ color: MUTED }}>
-                      {tool.tagline}
-                    </p>
-                  </div>
-                  <p className="text-sm leading-relaxed mt-auto" style={{ color: MUTED }}>
-                    {tool.desc}
-                  </p>
-                </div>
-              </Reveal>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── Process ── */}
-      <section id="process" className="px-8 py-32" style={{ borderBottom: `1px solid ${BORDER}` }}>
-        <div className="max-w-7xl mx-auto">
-          <Reveal className="mb-16">
-            <span
-              className="text-xs tracking-[0.2em] uppercase"
-              style={{ color: MUTED }}
-            >
-              How it works
-            </span>
-            <h2
-              className="mt-4 text-4xl sm:text-5xl font-normal"
-              style={{ fontFamily: "var(--font-display)", lineHeight: 1.05 }}
-            >
-              Three steps.{" "}
-              <em className="not-italic" style={{ color: MUTED }}>
-                Then clarity.
-              </em>
-            </h2>
-          </Reveal>
-
-          <div className="grid md:grid-cols-3 gap-12">
-            {STEPS.map((step, i) => (
-              <Reveal key={step.num} delay={i * 0.12}>
-                <div
-                  className="pb-8"
-                  style={{ borderBottom: `1px solid ${BORDER}` }}
-                >
-                  <span
-                    className="text-xs tracking-widest font-mono block mb-6"
-                    style={{ color: MUTED }}
-                  >
-                    {step.num}
-                  </span>
-                  <h3
-                    className="text-2xl font-normal mb-4"
-                    style={{ fontFamily: "var(--font-display)" }}
-                  >
-                    {step.title}
-                  </h3>
-                  <p className="text-sm leading-relaxed" style={{ color: MUTED }}>
-                    {step.desc}
-                  </p>
-                </div>
-              </Reveal>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── Stats ── */}
-      <section className="px-8 py-24" style={{ borderBottom: `1px solid ${BORDER}` }}>
-        <div className="max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-px"
-          style={{ border: `1px solid ${BORDER}` }}>
-          {STATS.map((stat, i) => (
-            <Reveal key={stat.label} delay={i * 0.08}>
-              <div
-                className="px-8 py-10 text-center"
-                style={{ background: CARD_BG, borderRight: `1px solid ${BORDER}` }}
-              >
-                <p
-                  className="text-5xl font-normal mb-2"
-                  style={{ fontFamily: "var(--font-display)" }}
-                >
-                  {stat.value}
-                </p>
-                <p className="text-xs tracking-wide uppercase" style={{ color: MUTED }}>
-                  {stat.label}
-                </p>
-              </div>
-            </Reveal>
-          ))}
-        </div>
-      </section>
-
-      {/* ── CTA ── */}
-      <section id="cta" className="px-8 py-40 text-center">
-        <Reveal>
-          <span
-            className="text-xs tracking-[0.2em] uppercase block mb-6"
-            style={{ color: MUTED }}
-          >
-            Ready when you are
-          </span>
-          <h2
-            className="text-5xl sm:text-6xl md:text-7xl font-normal max-w-3xl mx-auto mb-12"
-            style={{
-              fontFamily: "var(--font-display)",
-              lineHeight: 1.0,
-              letterSpacing: "-1.5px",
-            }}
-          >
-            Your next chapter{" "}
-            <em className="not-italic" style={{ color: MUTED }}>
-              starts here.
-            </em>
-          </h2>
-
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link to="/register">
-              <button className="liquid-glass rounded-full px-12 py-4 text-base text-white transition-transform duration-200 hover:scale-[1.03] cursor-pointer">
-                Begin Journey
-              </button>
-            </Link>
-            <Link
-              to="/login"
-              className="text-sm transition-colors duration-200 px-6 py-4"
-              style={{ color: MUTED }}
-              onMouseEnter={(e) => ((e.currentTarget as HTMLAnchorElement).style.color = "white")}
-              onMouseLeave={(e) => ((e.currentTarget as HTMLAnchorElement).style.color = MUTED)}
-            >
-              Already a member →
-            </Link>
-          </div>
-        </Reveal>
-      </section>
-
-      {/* ── Footer ── */}
-      <footer
-        className="px-8 py-10"
-        style={{ borderTop: `1px solid ${BORDER}` }}
-      >
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
-          <Link
-            to="/"
-            className="text-xl tracking-tight text-white"
-            style={{ fontFamily: "var(--font-display)" }}
-          >
-            Velorah<sup className="text-xs">®</sup>
+    <div style={{ background: INK, color: PAPER, fontFamily: "var(--font-body)" }}>
+      {/* ── Nav ── */}
+      <header className="sticky top-0 z-40" style={{ background: "rgba(11,18,32,0.86)", backdropFilter: "blur(12px)", borderBottom: `1px solid ${LINE}` }}>
+        <div className="max-w-7xl mx-auto px-5 sm:px-8 h-16 flex items-center justify-between gap-4">
+          <Link to="/" className="text-xl tracking-tight shrink-0" style={{ fontFamily: "var(--font-display)" }}>
+            CareerOS
           </Link>
-
-          <nav className="flex items-center gap-8">
+          <nav className="hidden md:flex items-center gap-7 min-w-0">
             {NAV_LINKS.map(({ label, href }) => (
-              <a
-                key={label}
-                href={href}
-                className="text-xs tracking-wide transition-colors duration-200 hover:text-white"
-                style={{ color: MUTED }}
-              >
+              <a key={label} href={href} className="text-sm transition-colors hover:text-white" style={{ color: MUTED }}>
                 {label}
               </a>
             ))}
           </nav>
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            <Link to="/login" className="text-sm px-3 py-2 transition-colors hover:text-white" style={{ color: MUTED }}>
+              Log in
+            </Link>
+            <Link to="/register" className="rounded-full px-5 py-2.5 text-sm font-medium text-black transition-transform duration-200 hover:scale-[1.03] active:scale-[0.98]" style={{ background: ACCENT }}>
+              Get started
+            </Link>
+          </div>
+        </div>
+      </header>
 
-          <p className="text-xs" style={{ color: MUTED }}>
-            © 2026 Velorah. All rights reserved.
+      {/* ── Hero: split ── */}
+      <section className="max-w-7xl mx-auto px-5 sm:px-8 pt-16 pb-20 md:pt-24 md:pb-28 grid md:grid-cols-2 gap-12 md:gap-8 items-center min-h-[calc(100dvh-4rem)]">
+        <div>
+          <p className="text-[11px] uppercase tracking-[0.22em] font-mono mb-5" style={{ color: ACCENT }}>
+            AI career team · 8 agents
           </p>
+          <h1 className="text-4xl sm:text-5xl lg:text-6xl max-w-[16ch]" style={{ fontFamily: "var(--font-display)", lineHeight: 1.04 }}>
+            Your job search, run by 8 agents.
+          </h1>
+          <p className="mt-5 text-base sm:text-lg leading-relaxed max-w-[42ch]" style={{ color: MUTED }}>
+            Discovery, resumes, prep, and outreach on autopilot. Five minutes to set up.
+          </p>
+          <div className="mt-8 flex flex-wrap items-center gap-4">
+            <Link to="/register" className="rounded-full px-8 py-3.5 text-sm font-medium text-black transition-transform duration-200 hover:scale-[1.03] active:scale-[0.98]" style={{ background: ACCENT }}>
+              Get started
+            </Link>
+            <a href="#process" className="text-sm transition-colors hover:text-white" style={{ color: MUTED }}>
+              See how it works →
+            </a>
+          </div>
+          <dl className="mt-10 flex gap-8">
+            {STATS.slice(1, 4).map((s) => (
+              <div key={s.label}>
+                <dt className="sr-only">{s.label}</dt>
+                <dd className="text-2xl font-mono" style={{ color: PAPER }}>{s.value}</dd>
+                <dd className="text-xs mt-1" style={{ color: FAINT }}>{s.label}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+
+        {/* Live product preview: scored match card */}
+        <div className="rounded-2xl p-5 sm:p-6 animate-float-slow" style={{ background: "rgba(244,242,236,0.04)", border: `1px solid ${LINE}` }}>
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-xs font-mono uppercase tracking-[0.18em]" style={{ color: FAINT }}>Top match · just found</p>
+            <span className="text-[11px] font-mono px-2.5 py-1 rounded-full" style={{ background: "rgba(52,211,153,0.14)", color: ACCENT, border: "1px solid rgba(52,211,153,0.35)" }}>
+              92% match
+            </span>
+          </div>
+          <p className="text-xl" style={{ fontFamily: "var(--font-display)" }}>Frontend Engineer, New Grad</p>
+          <p className="text-sm mt-1" style={{ color: MUTED }}>Linear · New York · $130–180k</p>
+          <ul className="mt-4 space-y-2.5">
+            {["React + TypeScript daily driver", "Design system experience", "YC pace, small team"].map((r) => (
+              <li key={r} className="flex items-start gap-2.5 text-sm" style={{ color: MUTED }}>
+                <span className="mt-[7px] h-1.5 w-1.5 rounded-full shrink-0" style={{ background: ACCENT }} />
+                {r}
+              </li>
+            ))}
+          </ul>
+          <div className="mt-5 flex flex-wrap gap-2">
+            {["React", "TypeScript", "Design"].map((s) => (
+              <span key={s} className="text-xs font-mono px-2.5 py-1 rounded-full" style={{ border: `1px solid ${LINE}`, color: MUTED }}>
+                {s}
+              </span>
+            ))}
+            <span className="text-xs font-mono px-2.5 py-1 rounded-full" style={{ background: "rgba(52,211,153,0.14)", color: ACCENT }}>
+              +1 skill gap
+            </span>
+          </div>
+          <div className="mt-5 pt-4 flex items-center justify-between" style={{ borderTop: `1px solid ${LINE}` }}>
+            <p className="text-xs" style={{ color: FAINT }}>Resume tailored · deadline in 6 days</p>
+            <span className="text-sm font-medium" style={{ color: ACCENT }}>Apply →</span>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Source strip + the one marquee ── */}
+      <section className="py-10" style={{ borderTop: `1px solid ${LINE}`, borderBottom: `1px solid ${LINE}` }}>
+        <p className="text-center text-xs font-mono uppercase tracking-[0.2em] mb-6" style={{ color: FAINT }}>
+          Agents scan 50+ sources daily
+        </p>
+        <div className="overflow-hidden">
+          <div className="flex w-max animate-marquee items-center gap-14 pr-14">
+            {[...SOURCES, ...SOURCES].map((s, i) => (
+              <span key={`${s.slug}-${i}`} className="flex items-center gap-2.5 shrink-0" aria-label={s.name}>
+                <img
+                  src={`https://cdn.simpleicons.org/${s.slug}/F4F2EC`}
+                  alt=""
+                  width={20}
+                  height={20}
+                  loading="lazy"
+                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                />
+                <span className="text-sm whitespace-nowrap" style={{ color: MUTED }}>{s.name}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Agents bento ── */}
+      <section id="agents" className="max-w-7xl mx-auto px-5 sm:px-8 py-20 md:py-28">
+        <h2 className="text-3xl sm:text-4xl md:text-5xl max-w-[20ch]" style={{ fontFamily: "var(--font-display)", lineHeight: 1.08 }}>
+          Six tools. One shared memory.
+        </h2>
+        <p className="mt-4 text-base leading-relaxed max-w-[56ch]" style={{ color: MUTED }}>
+          Each agent is a specialist. Together they run the whole search without being asked twice.
+        </p>
+        <div className="mt-12 grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {AGENTS.map(({ icon: Icon, name, desc, tint }) => (
+            <article
+              key={name}
+              className="rounded-2xl p-6 sm:p-7 transition-transform duration-300 hover:-translate-y-1 active:translate-y-0"
+              style={{
+                background: tint ? "rgba(52,211,153,0.07)" : "rgba(244,242,236,0.03)",
+                border: `1px solid ${tint ? "rgba(52,211,153,0.28)" : LINE}`,
+              }}
+            >
+              <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl mb-5" style={{ background: "rgba(52,211,153,0.12)", color: ACCENT }}>
+                <Icon size={19} strokeWidth={1.75} />
+              </span>
+              <h3 className="text-xl mb-2" style={{ fontFamily: "var(--font-display)" }}>{name}</h3>
+              <p className="text-sm leading-relaxed" style={{ color: MUTED }}>{desc}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      {/* ── Process: vertical timeline ── */}
+      <section id="process" className="py-20 md:py-28" style={{ background: "rgba(244,242,236,0.025)", borderTop: `1px solid ${LINE}`, borderBottom: `1px solid ${LINE}` }}>
+        <div className="max-w-3xl mx-auto px-5 sm:px-8">
+          <h2 className="text-3xl sm:text-4xl md:text-5xl" style={{ fontFamily: "var(--font-display)", lineHeight: 1.08 }}>
+            Three steps. Then clarity.
+          </h2>
+          <ol className="mt-12">
+            {STEPS.map((s, i) => (
+              <li key={s.num} className="relative pl-16 pb-12 last:pb-0">
+                {i < STEPS.length - 1 && (
+                  <span aria-hidden className="absolute left-[19px] top-12 bottom-0 w-px" style={{ background: LINE }} />
+                )}
+                <span className="absolute left-0 top-0 flex h-10 w-10 items-center justify-center rounded-full text-xs font-mono" style={{ background: "rgba(52,211,153,0.12)", color: ACCENT, border: "1px solid rgba(52,211,153,0.35)" }}>
+                  {s.num}
+                </span>
+                <h3 className="text-2xl mb-2" style={{ fontFamily: "var(--font-display)" }}>{s.title}</h3>
+                <p className="text-sm sm:text-base leading-relaxed max-w-[58ch]" style={{ color: MUTED }}>{s.desc}</p>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </section>
+
+      {/* ── Quotes ── */}
+      <section className="max-w-7xl mx-auto px-5 sm:px-8 py-20 md:py-28">
+        <h2 className="text-3xl sm:text-4xl md:text-5xl" style={{ fontFamily: "var(--font-display)", lineHeight: 1.08 }}>
+          People getting hired.
+        </h2>
+        <div className="mt-12 grid md:grid-cols-3 gap-8 md:gap-10">
+          {QUOTES.map((q) => (
+            <figure key={q.name} className="pt-6" style={{ borderTop: `2px solid rgba(52,211,153,0.5)` }}>
+              <blockquote className="text-lg leading-snug" style={{ fontFamily: "var(--font-display)" }}>
+                “{q.body}”
+              </blockquote>
+              <figcaption className="mt-4 text-sm" style={{ color: MUTED }}>
+                {q.name} · {q.role}
+              </figcaption>
+            </figure>
+          ))}
+        </div>
+      </section>
+
+      {/* ── Pricing ── */}
+      <section id="pricing" className="py-20 md:py-28" style={{ background: "rgba(244,242,236,0.025)", borderTop: `1px solid ${LINE}`, borderBottom: `1px solid ${LINE}` }}>
+        <div className="max-w-6xl mx-auto px-5 sm:px-8">
+          <p className="text-[11px] uppercase tracking-[0.22em] font-mono mb-4" style={{ color: ACCENT }}>
+            Pricing
+          </p>
+          <h2 className="text-3xl sm:text-4xl md:text-5xl" style={{ fontFamily: "var(--font-display)", lineHeight: 1.08 }}>
+            Free to start. Pro when serious.
+          </h2>
+          <div className="mt-12 grid md:grid-cols-3 gap-4 items-stretch">
+            {PLANS.map((p) => (
+              <article
+                key={p.name}
+                className="rounded-2xl p-7 flex flex-col"
+                style={{
+                  background: p.featured ? "rgba(52,211,153,0.08)" : "rgba(244,242,236,0.03)",
+                  border: `1px solid ${p.featured ? "rgba(52,211,153,0.45)" : LINE}`,
+                }}
+              >
+                <h3 className="text-lg" style={{ fontFamily: "var(--font-display)" }}>{p.name}</h3>
+                <p className="mt-3 flex items-baseline gap-2">
+                  <span className="text-4xl font-mono">{p.price}</span>
+                </p>
+                <p className="text-xs mt-1 mb-6" style={{ color: FAINT }}>{p.per}</p>
+                <ul className="space-y-2.5 mb-8">
+                  {p.points.map((pt) => (
+                    <li key={pt} className="flex items-start gap-2.5 text-sm" style={{ color: MUTED }}>
+                      <span className="mt-[7px] h-1.5 w-1.5 rounded-full shrink-0" style={{ background: ACCENT }} />
+                      {pt}
+                    </li>
+                  ))}
+                </ul>
+                <Link
+                  to="/register"
+                  className="mt-auto text-center rounded-full px-6 py-3 text-sm font-medium transition-transform duration-200 hover:scale-[1.02] active:scale-[0.98]"
+                  style={p.featured ? { background: ACCENT, color: "#000" } : { border: `1px solid ${LINE}`, color: PAPER }}
+                >
+                  Get started
+                </Link>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── FAQ ── */}
+      <section id="faq" className="max-w-3xl mx-auto px-5 sm:px-8 py-20 md:py-28">
+        <h2 className="text-3xl sm:text-4xl md:text-5xl mb-10" style={{ fontFamily: "var(--font-display)", lineHeight: 1.08 }}>
+          Questions, answered.
+        </h2>
+        <div>
+          {FAQS.map((f) => (
+            <details key={f.q} className="py-5 group" style={{ borderBottom: `1px solid ${LINE}` }}>
+              <summary className="cursor-pointer list-none flex items-center justify-between gap-4 text-base sm:text-lg" style={{ fontFamily: "var(--font-display)" }}>
+                {f.q}
+                <span className="shrink-0 text-sm font-mono transition-transform group-open:rotate-45" style={{ color: ACCENT }}>+</span>
+              </summary>
+              <p className="mt-3 text-sm sm:text-base leading-relaxed max-w-[62ch]" style={{ color: MUTED }}>{f.a}</p>
+            </details>
+          ))}
+        </div>
+      </section>
+
+      {/* ── Final CTA ── */}
+      <section className="px-5 sm:px-8 pb-24 pt-4 text-center">
+        <h2 className="text-4xl sm:text-5xl md:text-6xl max-w-[18ch] mx-auto" style={{ fontFamily: "var(--font-display)", lineHeight: 1.05 }}>
+          Your next chapter starts here.
+        </h2>
+        <div className="mt-10">
+          <Link to="/register" className="inline-block rounded-full px-12 py-4 text-base font-medium text-black transition-transform duration-200 hover:scale-[1.03] active:scale-[0.98]" style={{ background: ACCENT }}>
+            Get started
+          </Link>
+          <p className="mt-4 text-sm" style={{ color: FAINT }}>
+            Free forever plan · No credit card
+          </p>
+        </div>
+      </section>
+
+      {/* ── Footer ── */}
+      <footer className="px-5 sm:px-8 py-10" style={{ borderTop: `1px solid ${LINE}` }}>
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-5">
+          <Link to="/" className="text-lg" style={{ fontFamily: "var(--font-display)" }}>
+            CareerOS
+          </Link>
+          <nav className="flex items-center gap-6">
+            {NAV_LINKS.map(({ label, href }) => (
+              <a key={label} href={href} className="text-xs transition-colors hover:text-white" style={{ color: FAINT }}>
+                {label}
+              </a>
+            ))}
+          </nav>
+          <p className="text-xs" style={{ color: FAINT }}>© 2026 CareerOS. All rights reserved.</p>
         </div>
       </footer>
     </div>
