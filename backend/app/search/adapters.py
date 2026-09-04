@@ -394,6 +394,18 @@ class SearchAdapter:
                 len(results),
             )
         else:
+            # ── Source 2a: Keyless JSON job APIs (parallel, no API key needed) ──
+            # RemoteOK / Remotive / ArbeitNow serve structured tech listings.
+            # Gated to job searches — they are job feeds, not general web search.
+            if is_job_search:
+                api_results = await asyncio.gather(
+                    self._call_source("remoteok", lambda: self._search_remoteok(query, limit)),
+                    self._call_source("remotive", lambda: self._search_remotive(query, limit)),
+                    self._call_source("arbeitnow", lambda: self._search_arbeitnow(query, limit)),
+                )
+                for batch in api_results:
+                    results.extend(batch)
+
             # ── Source 2: Tavily (AI-native, best for agents) ──
             if settings.tavily_api_key:
                 tavily_results = await self._call_source("tavily", lambda: self._search_tavily(query, limit))
@@ -450,29 +462,26 @@ class SearchAdapter:
                 mojeek_results = await self._call_source("mojeek_api", lambda: self._search_mojeek_api(query, limit))
                 results.extend(mojeek_results)
 
-            # ── Source 8: Direct web scraping (always available, no API key) ──
+            # ── Sources 8-10: HTML scraping tier (parallel — one slow source
+            # must not block the others) ──
             if not results or len(results) < limit:
-                scraped = await self._call_source(
-                    "web_scrape",
-                    lambda: self._scrape_web(query, location, limit - len(results)),
+                remaining = limit - len(results)
+                scrape_batches = await asyncio.gather(
+                    self._call_source(
+                        "web_scrape",
+                        lambda: self._scrape_web(query, location, remaining),
+                    ),
+                    self._call_source(
+                        "mojeek_scrape",
+                        lambda: self._scrape_mojeek(query, location, remaining),
+                    ),
+                    self._call_source(
+                        "duckduckgo",
+                        lambda: self._scrape_duckduckgo(query, location, remaining),
+                    ),
                 )
-                results.extend(scraped)
-
-            # ── Source 9: Mojeek Scrape Fallback ──
-            if not results or len(results) < limit:
-                mojeek_scraped = await self._call_source(
-                    "mojeek_scrape",
-                    lambda: self._scrape_mojeek(query, location, limit - len(results)),
-                )
-                results.extend(mojeek_scraped)
-
-            # ── Source 10: DuckDuckGo Fallback ──
-            if not results or len(results) < limit:
-                ddg_scraped = await self._call_source(
-                    "duckduckgo",
-                    lambda: self._scrape_duckduckgo(query, location, limit - len(results)),
-                )
-                results.extend(ddg_scraped)
+                for batch in scrape_batches:
+                    results.extend(batch)
 
         # ── Job board scraping for job/internship queries (tries to find real listings) ──
         if source_filter in ("job", "internship") and len(results) < limit:
@@ -861,19 +870,25 @@ class SearchAdapter:
             board_queries.append(f"https://www.google.com/search?q={quote_plus(f'site:{site} {q} {loc}')}&num=10")
 
         results = []
-        for url in board_queries:
-            if len(results) >= limit:
-                break
+
+        async def _fetch_board(url: str) -> list[dict]:
             resp, error = await _scrape_with_retry(
-                lambda u=url, h=_make_headers(): _safe_get(u, h, follow_redirects=True, timeout=10)
+                lambda: _safe_get(url, _make_headers(), follow_redirects=True, timeout=10)
             )
             if resp and resp.status_code == 200:
                 soup = BeautifulSoup(resp.text, "html.parser")
-                results.extend(self._parse_serp_results(soup, limit - len(results), source="job_board_scrape"))
-            else:
-                logger.debug("Board scrape failed for %s: %s", url, error)
+                if "indeed.com/jobs" in url:
+                    return self._parse_indeed_results(soup, limit)
+                return self._parse_serp_results(soup, limit, source="job_board_scrape")
+            logger.debug("Board scrape failed for %s: %s", url, error)
+            return []
 
-        return results
+        for batch in await asyncio.gather(*[_fetch_board(u) for u in board_queries]):
+            results.extend(batch)
+            if len(results) >= limit:
+                break
+
+        return results[:limit]
 
     async def _scrape_search_results(
         self,
@@ -960,7 +975,7 @@ class SearchAdapter:
         headers = _make_headers()
 
         resp, error = await _scrape_with_retry(
-            lambda: _safe_get(url, headers, follow_redirects=True, timeout=15),
+            lambda: _safe_get(f"{url}?keywords={quote_plus(query)}{'&location=' + quote_plus(location) if location else ''}", headers, follow_redirects=True, timeout=15),
             max_retries=1,
         )
         if resp and resp.status_code == 200:
@@ -995,6 +1010,201 @@ class SearchAdapter:
 
         logger.debug("LinkedIn direct scrape failed: %s", error)
         return []
+
+    def _parse_indeed_results(self, soup, limit: int = 5) -> list[dict]:
+        """Parse Indeed job-search HTML (div.job_seen_beacon cards)."""
+        results = []
+        for card in soup.select("div.job_seen_beacon, div.jobsearch-ResultsList > div"):
+            if len(results) >= limit:
+                break
+            title_el = card.select_one("h2.jobTitle a, a.jcs-JobTitle")
+            if not title_el:
+                continue
+            title = title_el.get_text(strip=True)
+            link = title_el.get("href", "")
+            if link.startswith("/"):
+                link = f"https://www.indeed.com{link}"
+            company_el = card.select_one("[data-testid='company-name'], span.companyName")
+            loc_el = card.select_one("[data-testid='text-location'], div.companyLocation")
+            snippet_el = card.select_one("div.job-snippet, ul.job-snippet")
+            company = company_el.get_text(strip=True) if company_el else "Tech Company"
+            loc = loc_el.get_text(strip=True) if loc_el else ""
+            snippet = snippet_el.get_text(" ", strip=True) if snippet_el else ""
+            if not title:
+                continue
+            results.append(
+                {
+                    "title": title,
+                    "company": company,
+                    "location": loc,
+                    "description": snippet[:500],
+                    "apply_url": link.split("?")[0],
+                    "source": "indeed_scrape",
+                    "type": self._extract_job_type(title, snippet),
+                    "skills": self._extract_skills(f"{title} {snippet}"),
+                    "remote": "remote" in f"{title} {loc}".lower(),
+                }
+            )
+        return results
+
+    # ─── Keyless JSON Job APIs (no API key needed) ───────────
+    # RemoteOK, Remotive, ArbeitNow all serve free JSON feeds of real,
+    # current tech listings. These run before HTML scraping because they
+    # are structured, fast, and rarely blocked.
+
+    def _matches_query(self, query: str, *texts: str) -> bool:
+        """Client-side relevance: all hard tech tokens must appear.
+
+        Generic role words (developer, engineer, …) are soft — they must not
+        veto a match, since feeds describe the same role many ways
+        ("Python Engineer" vs "Python Developer").
+        """
+        stopwords = {"job", "jobs", "role", "roles", "hiring", "remote", "full-time", "fulltime", "intern", "internship", "position"}
+        role_words = {
+            "developer", "developers", "dev", "engineer", "engineers", "engineering",
+            "designer", "designers", "manager", "managers", "analyst", "analysts",
+            "scientist", "scientists", "intern", "interns", "lead", "senior", "junior",
+            "staff", "principal", "architect", "consultant", "specialist",
+        }
+        tokens = [t for t in re.findall(r"[a-z0-9+#.]+", query.lower()) if t not in stopwords and len(t) > 1]
+        if not tokens:
+            return True
+        hard = [t for t in tokens if t not in role_words] or tokens
+        haystack = " ".join(t or "" for t in texts).lower()
+        return all(t in haystack for t in hard)
+
+    async def _search_remoteok(
+        self,
+        query: str,
+        limit: int = 10,
+    ) -> list[dict]:
+        """RemoteOK public API — remote tech jobs, no key (needs User-Agent)."""
+        client = await _get_client()
+        resp = await client.get(
+            "https://remoteok.com/api",
+            headers={"User-Agent": _get_user_agent(), "Accept": "application/json"},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        items = data[1:] if isinstance(data, list) and data and isinstance(data[0], dict) and data[0].get("legal") else data
+        results = []
+        for job in items:
+            if not isinstance(job, dict) or not job.get("position"):
+                continue
+            title = job.get("position", "")
+            company = job.get("company", "") or "Tech Company"
+            tags = job.get("tags", []) or []
+            desc = re.sub(r"<[^>]+>", " ", job.get("description", "") or "")[:500]
+            if not self._matches_query(query, title, company, desc, " ".join(tags)):
+                continue
+            salary_min = job.get("salary_min")
+            salary_max = job.get("salary_max")
+            loc = ", ".join(job.get("location", "") and [job["location"]] or []) or "Remote"
+            results.append(
+                {
+                    "title": title,
+                    "company": company,
+                    "location": loc,
+                    "description": desc,
+                    "apply_url": job.get("url") or f"https://remoteok.com{job.get('slug', '')}",
+                    "source": "remoteok",
+                    "type": self._extract_job_type(title, desc),
+                    "skills": list({s.lower() for s in tags if s}) or self._extract_skills(f"{title} {desc}"),
+                    "remote": True,
+                    "salary_min": salary_min,
+                    "salary_max": salary_max,
+                }
+            )
+            if len(results) >= limit:
+                break
+        return results
+
+    async def _search_remotive(
+        self,
+        query: str,
+        limit: int = 10,
+    ) -> list[dict]:
+        """Remotive public API — remote tech jobs, no key."""
+        client = await _get_client()
+        resp = await client.get(
+            "https://remotive.com/api/remote-jobs",
+            params={"search": query, "limit": 50},
+            headers={"User-Agent": _get_user_agent()},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        jobs = resp.json().get("jobs", [])
+        results = []
+        for job in jobs:
+            title = job.get("title", "")
+            company = job.get("company_name", "") or "Tech Company"
+            desc = re.sub(r"<[^>]+>", " ", job.get("description", "") or "")[:500]
+            tags = [job.get("category", "")]
+            if not self._matches_query(query, title, company, desc):
+                continue
+            salary = job.get("salary", "") or ""
+            sal_min = sal_max = None
+            m = re.search(r"\$?([\d,]+)\s*[-–]\s*\$?([\d,]+)", salary)
+            if m:
+                sal_min, sal_max = int(m.group(1).replace(",", "")), int(m.group(2).replace(",", ""))
+            results.append(
+                {
+                    "title": title,
+                    "company": company,
+                    "location": job.get("candidate_required_location", "") or "Remote",
+                    "description": desc,
+                    "apply_url": job.get("url", ""),
+                    "source": "remotive",
+                    "type": self._extract_job_type(title, desc),
+                    "skills": self._extract_skills(f"{title} {desc} {' '.join(tags)}"),
+                    "remote": True,
+                    "salary_min": sal_min,
+                    "salary_max": sal_max,
+                }
+            )
+            if len(results) >= limit:
+                break
+        return results
+
+    async def _search_arbeitnow(
+        self,
+        query: str,
+        limit: int = 10,
+    ) -> list[dict]:
+        """ArbeitNow public API — free job board feed, no key."""
+        client = await _get_client()
+        resp = await client.get(
+            "https://www.arbeitnow.com/api/job-board-api",
+            headers={"User-Agent": _get_user_agent()},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        jobs = resp.json().get("data", [])
+        results = []
+        for job in jobs:
+            title = job.get("title", "")
+            company = job.get("company_name", "") or "Tech Company"
+            tags = job.get("tags", []) or []
+            desc = job.get("description", "")[:500]
+            if not self._matches_query(query, title, company, desc, " ".join(tags)):
+                continue
+            results.append(
+                {
+                    "title": title,
+                    "company": company,
+                    "location": job.get("location", "") or "Remote",
+                    "description": desc,
+                    "apply_url": job.get("url", ""),
+                    "source": "arbeitnow",
+                    "type": self._extract_job_type(title, desc),
+                    "skills": self._extract_skills(f"{title} {desc} {' '.join(tags)}"),
+                    "remote": "remote" in (job.get("location", "") or "").lower(),
+                }
+            )
+            if len(results) >= limit:
+                break
+        return results
 
     # ─── Brave Search ───────────────────────────────────────
 
@@ -1168,7 +1378,7 @@ class SearchAdapter:
         if location:
             q += f" {location}"
 
-        url = "https://www.mojeek.com/search"
+        url = f"https://www.mojeek.com/search?q={quote_plus(q)}"
 
         resp, error = await _scrape_with_retry(
             lambda h=_make_headers(): _safe_get(url, h, follow_redirects=True, timeout=15),
